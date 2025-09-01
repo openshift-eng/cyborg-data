@@ -1,0 +1,126 @@
+{
+  "metadata": {
+    "total_employees": 3,
+    "total_teams": 2,
+    "total_orgs": 2,
+    "total_pillars": 1,
+    "total_team_groups": 1,
+    "generation_timestamp": "2024-01-01T00:00:00Z",
+    "data_version": "v1.0"
+  },
+  "lookups": {
+    "employees": {
+      "jsmith": {
+        "uid": "jsmith",
+        "full_name": "John Smith",
+        "email": "jsmith@example.com",
+        "job_title": "Software Engineer",
+        "slack_uid": "U12345678"
+      },
+      "adoe": {
+        "uid": "adoe",
+        "full_name": "Alice Doe", 
+        "email": "adoe@example.com",
+        "job_title": "Team Lead",
+        "slack_uid": "U87654321"
+      },
+      "bwilson": {
+        "uid": "bwilson",
+        "full_name": "Bob Wilson",
+        "email": "bwilson@example.com", 
+        "job_title": "Senior Engineer",
+        "slack_uid": "U98765432"
+      }
+    },
+    "teams": {
+      "test-team": {
+        "uid": "team1",
+        "name": "test-team",
+        "type": "team",
+        "group": {
+          "type": {
+            "name": "team"
+          },
+          "resolved_people_uid_list": ["jsmith", "adoe"]
+        },
+        "resolved_people_uid_list": ["jsmith", "adoe"]
+      },
+      "platform-team": {
+        "uid": "team2", 
+        "name": "platform-team",
+        "type": "team",
+        "group": {
+          "type": {
+            "name": "team"
+          },
+          "resolved_people_uid_list": ["bwilson"]
+        },
+        "resolved_people_uid_list": ["bwilson"]
+      }
+    },
+    "orgs": {
+      "test-org": {
+        "uid": "org1",
+        "name": "test-org",
+        "type": "organization",
+        "group": {
+          "resolved_people_uid_list": ["jsmith", "adoe", "bwilson"]
+        }
+      },
+      "platform-org": {
+        "uid": "org2", 
+        "name": "platform-org",
+        "type": "organization",
+        "group": {
+          "resolved_people_uid_list": ["bwilson"]
+        }
+      }
+    }
+  },
+  "indexes": {
+    "membership": {
+      "membership_index": {
+        "jsmith": [
+          {"name": "test-team", "type": "team"},
+          {"name": "test-org", "type": "org"}
+        ],
+        "adoe": [
+          {"name": "test-team", "type": "team"},
+          {"name": "test-org", "type": "org"}
+        ],
+        "bwilson": [
+          {"name": "platform-team", "type": "team"},
+          {"name": "platform-org", "type": "org"},
+          {"name": "test-org", "type": "org"}
+        ]
+      },
+      "relationship_index": {
+        "teams": {
+          "test-team": {
+            "ancestry": {
+              "orgs": ["test-org"],
+              "pillars": [],
+              "team_groups": [],
+              "teams": []
+            }
+          },
+          "platform-team": {
+            "ancestry": {
+              "orgs": ["platform-org", "test-org"],
+              "pillars": ["engineering"],
+              "team_groups": ["backend-teams"],
+              "teams": []
+            }
+          }
+        }
+      }
+    },
+    "slack_id_mappings": {
+      "slack_uid_to_uid": {
+        "U12345678": "jsmith",
+        "U87654321": "adoe", 
+        "U98765432": "bwilson"
+      }
+    }
+  }
+}
