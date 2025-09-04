@@ -53,7 +53,7 @@ func TestFileDataSource(t *testing.T) {
 					t.Error("Expected error but got none")
 				}
 				if reader != nil {
-					reader.Close()
+					_ = reader.Close() // Ignore error when testing error case
 					t.Error("Expected nil reader on error")
 				}
 				return
@@ -68,7 +68,11 @@ func TestFileDataSource(t *testing.T) {
 				t.Error("Expected reader but got nil")
 				return
 			}
-			defer reader.Close()
+			defer func() {
+				if err := reader.Close(); err != nil {
+					t.Logf("Warning: failed to close reader: %v", err)
+				}
+			}()
 
 			// Read some data to verify it's valid
 			data, err := io.ReadAll(reader)
@@ -154,7 +158,9 @@ func TestFileDataSourceWatch(t *testing.T) {
 	// Modify the file
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		os.WriteFile(tmpFile, []byte(`{"test": "modified"}`), 0644)
+		if err := os.WriteFile(tmpFile, []byte(`{"test": "modified"}`), 0644); err != nil {
+			t.Errorf("Failed to write test file: %v", err)
+		}
 	}()
 
 	// Wait for callback (with timeout)

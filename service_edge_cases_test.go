@@ -179,7 +179,9 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 		for j := 0; j < 5; j++ {
 			time.Sleep(50 * time.Millisecond)
-			service.LoadFromDataSource(context.Background(), fileSource)
+			if err := service.LoadFromDataSource(context.Background(), fileSource); err != nil {
+				t.Logf("LoadFromDataSource error (expected in stress test): %v", err)
+			}
 		}
 	}()
 
