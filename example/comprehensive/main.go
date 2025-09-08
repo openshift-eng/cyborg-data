@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(0)
 	fmt.Println("=== Organizational Data Core Package Demo ===")
 	fmt.Println()
 
@@ -23,7 +24,7 @@ func main() {
 
 	err := service.LoadFromDataSource(context.Background(), fileSource)
 	if err != nil {
-		log.Printf("    Could not load via DataSource: %v", err)
+		log.Printf("Could not load via DataSource: %v", err)
 	} else {
 		fmt.Printf("Loaded organizational data via DataSource: %s\n", fileSource.String())
 		demonstrateService(service)
@@ -36,12 +37,12 @@ func main() {
 
 	err = service.StartDataSourceWatcher(ctx, fileSource)
 	if err != nil {
-		log.Printf("    File watcher setup: %v", err)
+		log.Printf("File watcher setup failed: %v", err)
 	} else {
 		fmt.Println("File watcher started successfully (would monitor for changes)")
 	}
 
-	// Example 3: Advanced queries with Jira integration
+	// Example 3: Advanced queries
 	fmt.Println("\n--- Advanced Queries Example ---")
 	demonstrateAdvancedQueries(service)
 

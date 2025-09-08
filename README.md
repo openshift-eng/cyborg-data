@@ -242,6 +242,23 @@ Examples of custom sources you could implement:
 - Database queries
 - Redis/Memcached for caching layers
 
+## Logging
+
+The package uses structured logging via the `logr` interface, making it compatible with OpenShift and Kubernetes logging standards.
+
+**Default**: Uses `stdr` (standard library logger wrapper)
+**OpenShift Integration**: 
+```go
+import "k8s.io/klog/v2/klogr"
+import orgdatacore "github.com/openshift-eng/cyborg-data"
+
+func init() {
+    orgdatacore.SetLogger(klogr.New())
+}
+```
+
+Log events include data source changes, reload operations, and error conditions with structured key-value context.
+
 ## Dependencies
 
 - Go 1.19+

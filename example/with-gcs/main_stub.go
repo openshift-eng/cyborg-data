@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -42,7 +43,7 @@ func main() {
 
 	// Load data from GCS (will fail with stub)
 	if err := service.LoadFromDataSource(ctx, dataSource); err != nil {
-		fmt.Printf("Expected stub error: %v\n", err)
+		log.Printf("Expected stub error: %v", err)
 		fmt.Println()
 		fmt.Println("This is expected behavior in stub mode.")
 		fmt.Println("To use real GCS functionality:")

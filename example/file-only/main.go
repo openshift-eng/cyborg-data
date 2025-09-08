@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(0)
 	fmt.Println("=== File-Only Example (No GCS Dependencies) ===")
 	fmt.Println("This example demonstrates using cyborg-data with local files only.")
 	fmt.Println("No cloud dependencies are required - lightweight and simple!")

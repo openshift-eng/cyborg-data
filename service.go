@@ -97,7 +97,7 @@ func (s *Service) GetEmployeeBySlackID(slackID string) *Employee {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.data == nil || s.data.Indexes.SlackIDMappings.SlackUIDToUID == nil {
+	if s.data == nil || s.data.Indexes.SlackIDMappings.SlackUIDToUID == nil || s.data.Lookups.Employees == nil {
 		return nil
 	}
 
@@ -106,7 +106,10 @@ func (s *Service) GetEmployeeBySlackID(slackID string) *Employee {
 		return nil
 	}
 
-	return s.GetEmployeeByUID(uid)
+	if emp, exists := s.data.Lookups.Employees[uid]; exists {
+		return &emp
+	}
+	return nil
 }
 
 // GetTeamByName returns a team by name
@@ -189,8 +192,8 @@ func (s *Service) GetTeamMembers(teamName string) []Employee {
 	// Get employee objects for each UID
 	var members []Employee
 	for _, uid := range team.Group.ResolvedPeopleUIDList {
-		if emp := s.GetEmployeeByUID(uid); emp != nil {
-			members = append(members, *emp)
+		if emp, exists := s.data.Lookups.Employees[uid]; exists {
+			members = append(members, emp)
 		}
 	}
 
@@ -281,8 +284,7 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 	teamsIndex := relationshipIndex["teams"]
 
 	for _, membership := range memberships {
-		switch membership.Type {
-		case "org":
+		if membership.Type == MembershipTypeOrg {
 			// Direct organization membership
 			if !seenItems[membership.Name] {
 				orgs = append(orgs, OrgInfo{
@@ -291,7 +293,7 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 				})
 				seenItems[membership.Name] = true
 			}
-		case MembershipTypeTeam:
+		} else if membership.Type == MembershipTypeTeam {
 			// Add the team membership itself
 			if !seenItems[membership.Name] {
 				orgs = append(orgs, OrgInfo{

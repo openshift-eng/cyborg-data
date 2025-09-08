@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(0)
 	fmt.Println("=== GCS Example (With Cloud Dependencies) ===")
 	fmt.Println("This example demonstrates using cyborg-data with Google Cloud Storage.")
 	fmt.Println("Built with '-tags gcs' - using real GCS implementation")
@@ -49,7 +50,7 @@ func main() {
 
 	// Load data from GCS
 	if err := service.LoadFromDataSource(ctx, gcsSource); err != nil {
-		fmt.Printf("Failed to load from GCS: %v\n", err)
+		log.Printf("Failed to load from GCS: %v", err)
 		fmt.Println()
 		fmt.Println("This is expected if:")
 		fmt.Println("  - You don't have access to the resolved-org bucket")
