@@ -19,7 +19,7 @@ func main() {
 
 	// Example 1: Load data using DataSource interface (recommended approach)
 	fmt.Println("--- DataSource Interface Example ---")
-	fileSource := orgdatacore.NewFileDataSource("../testdata/test_org_data.json")
+	fileSource := orgdatacore.NewFileDataSource("../../testdata/test_org_data.json")
 
 	err := service.LoadFromDataSource(context.Background(), fileSource)
 	if err != nil {
@@ -111,9 +111,9 @@ func hasGCSConfig() bool {
 
 func demonstrateGCSDataSource(service *orgdatacore.Service) {
 	config := orgdatacore.GCSConfig{
-		Bucket:          getEnvDefault("GCS_BUCKET", "orgdata-sensitive"),
+		Bucket:          getEnvDefault("GCS_BUCKET", "resolved-org"),
 		ObjectPath:      getEnvDefault("GCS_OBJECT_PATH", "orgdata/comprehensive_index_dump.json"),
-		ProjectID:       getEnvDefault("GCS_PROJECT_ID", ""),
+		ProjectID:       getEnvDefault("GCS_PROJECT_ID", "openshift-crt-mce"),
 		CredentialsJSON: os.Getenv("GCS_CREDENTIALS_JSON"),
 		CheckInterval:   5 * time.Minute,
 	}
@@ -150,9 +150,9 @@ func demonstrateGCSDataSource(service *orgdatacore.Service) {
 
 func demonstrateGCSDataSourceStub() {
 	fmt.Println("GCS DataSource Configuration Example:")
-	fmt.Println("   export GCS_BUCKET=orgdata-sensitive")
+	fmt.Println("   export GCS_BUCKET=resolved-org")
 	fmt.Println("   export GCS_OBJECT_PATH=orgdata/comprehensive_index_dump.json")
-	fmt.Println("   export GCS_PROJECT_ID=your-project-id")
+	fmt.Println("   export GCS_PROJECT_ID=openshift-crt-mce")
 	fmt.Println("   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json")
 	fmt.Println("   # OR")
 	fmt.Println("   export GCS_CREDENTIALS_JSON='{\"type\":\"service_account\",...}'")
@@ -164,9 +164,9 @@ func demonstrateGCSDataSourceStub() {
 
 	// Show how it would work
 	config := orgdatacore.GCSConfig{
-		Bucket:        "orgdata-sensitive",
+		Bucket:        "resolved-org",
 		ObjectPath:    "orgdata/comprehensive_index_dump.json",
-		ProjectID:     "your-project-id",
+		ProjectID:     "openshift-crt-mce",
 		CheckInterval: 5 * time.Minute,
 	}
 
