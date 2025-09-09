@@ -14,14 +14,21 @@ go build .
 ./file-only
 ```
 
-### `with-gcs/` - Full-Featured with Google Cloud Storage  
-**Requires GCS SDK and build tags**
+### `with-gcs/` - Google Cloud Storage Integration
+**Full functionality requires GCS SDK and build tags**
 
-**Build & Run:**
+**Build & Run (Stub Mode - Always Works):**
+```bash
+cd with-gcs
+go build .              # Shows warning, demonstrates API
+./with-gcs
+```
+
+**Build & Run (Full GCS Mode):**
 ```bash
 go get cloud.google.com/go/storage
 cd with-gcs
-go build -tags gcs .
+go build -tags gcs .    # Real GCS implementation
 ./with-gcs
 ```
 
