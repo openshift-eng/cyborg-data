@@ -26,7 +26,7 @@ func main() {
 	gcsConfig := orgdatacore.GCSConfig{
 		Bucket:        getEnvOrDefault("GCS_BUCKET", "resolved-org"),
 		ObjectPath:    getEnvOrDefault("GCS_OBJECT_PATH", "orgdata/comprehensive_index_dump.json"),
-		ProjectID:     getEnvOrDefault("GCS_PROJECT_ID", "openshift-crt-mce"),
+		ProjectID:     getEnvOrDefault("GCS_PROJECT_ID", "openshift-crt"),
 		CheckInterval: 5 * time.Minute,
 		// Optional: Use service account credentials
 		// CredentialsJSON: os.Getenv("GCS_CREDENTIALS_JSON"),

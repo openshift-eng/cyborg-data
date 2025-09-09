@@ -113,7 +113,7 @@ func demonstrateGCSDataSource(service *orgdatacore.Service) {
 	config := orgdatacore.GCSConfig{
 		Bucket:          getEnvDefault("GCS_BUCKET", "resolved-org"),
 		ObjectPath:      getEnvDefault("GCS_OBJECT_PATH", "orgdata/comprehensive_index_dump.json"),
-		ProjectID:       getEnvDefault("GCS_PROJECT_ID", "openshift-crt-mce"),
+		ProjectID:       getEnvDefault("GCS_PROJECT_ID", "openshift-crt"),
 		CredentialsJSON: os.Getenv("GCS_CREDENTIALS_JSON"),
 		CheckInterval:   5 * time.Minute,
 	}
@@ -152,7 +152,7 @@ func demonstrateGCSDataSourceStub() {
 	fmt.Println("GCS DataSource Configuration Example:")
 	fmt.Println("   export GCS_BUCKET=resolved-org")
 	fmt.Println("   export GCS_OBJECT_PATH=orgdata/comprehensive_index_dump.json")
-	fmt.Println("   export GCS_PROJECT_ID=openshift-crt-mce")
+	fmt.Println("   export GCS_PROJECT_ID=openshift-crt")
 	fmt.Println("   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json")
 	fmt.Println("   # OR")
 	fmt.Println("   export GCS_CREDENTIALS_JSON='{\"type\":\"service_account\",...}'")
@@ -166,7 +166,7 @@ func demonstrateGCSDataSourceStub() {
 	config := orgdatacore.GCSConfig{
 		Bucket:        "resolved-org",
 		ObjectPath:    "orgdata/comprehensive_index_dump.json",
-		ProjectID:     "openshift-crt-mce",
+		ProjectID:     "openshift-crt",
 		CheckInterval: 5 * time.Minute,
 	}
 
