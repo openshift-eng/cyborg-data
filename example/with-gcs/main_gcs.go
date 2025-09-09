@@ -1,3 +1,6 @@
+//go:build gcs
+// +build gcs
+
 package main
 
 import (
@@ -13,7 +16,7 @@ import (
 func main() {
 	fmt.Println("=== GCS Example (With Cloud Dependencies) ===")
 	fmt.Println("This example demonstrates using cyborg-data with Google Cloud Storage.")
-	fmt.Println("Requires GCS SDK and build with '-tags gcs'")
+	fmt.Println("Built with '-tags gcs' - using real GCS implementation")
 	fmt.Println()
 
 	// Create a new service
@@ -31,12 +34,12 @@ func main() {
 
 	fmt.Printf("Using bucket: %s\n", gcsConfig.Bucket)
 	fmt.Printf("Using object: %s\n", gcsConfig.ObjectPath)
-	fmt.Println("(Set GCS_BUCKET and GCS_OBJECT_PATH env vars to override)")
+	fmt.Println("✓ Real GCS implementation enabled")
 	fmt.Println()
 
 	ctx := context.Background()
 
-	// Create GCS data source (only available with -tags gcs)
+	// Create GCS data source with full SDK support
 	fmt.Printf("Creating GCS data source: gs://%s/%s\n", gcsConfig.Bucket, gcsConfig.ObjectPath)
 
 	gcsSource, err := orgdatacore.NewGCSDataSourceWithSDK(ctx, gcsConfig)
@@ -50,14 +53,8 @@ func main() {
 		fmt.Println()
 		fmt.Println("This is expected if:")
 		fmt.Println("  - You don't have access to the resolved-org bucket")
-		fmt.Println("  - The bucket doesn't exist in your project")
 		fmt.Println("  - Authentication is not configured")
 		fmt.Println()
-		fmt.Println("To test with your own data:")
-		fmt.Println("  export GCS_BUCKET=your-test-bucket")
-		fmt.Println("  export GCS_OBJECT_PATH=path/to/your/data.json")
-		fmt.Println()
-		printBuildInstructions()
 		return
 	}
 
@@ -70,7 +67,6 @@ func main() {
 	fmt.Println("\n--- GCS Watching Demo ---")
 	fmt.Println("Starting GCS watcher (checks for updates every 5 minutes)...")
 
-	// In a real application, you'd run this in a goroutine and keep the program running
 	go func() {
 		if err := service.StartDataSourceWatcher(ctx, gcsSource); err != nil {
 			log.Printf("GCS watcher error: %v", err)
@@ -86,8 +82,6 @@ func main() {
 	fmt.Println("\n--- Watching for changes (demo: 10 seconds) ---")
 	time.Sleep(10 * time.Second)
 	fmt.Println("Demo complete!")
-
-	printBuildInstructions()
 }
 
 func demonstrateQueries(service *orgdatacore.Service) {
@@ -117,22 +111,4 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-}
-
-func printBuildInstructions() {
-	fmt.Println("\n=== Build Instructions ===")
-	fmt.Println("# 1. Add GCS SDK dependency:")
-	fmt.Println("go get cloud.google.com/go/storage")
-	fmt.Println()
-	fmt.Println("# 2. Build with GCS support:")
-	fmt.Println("go build -tags gcs example-with-gcs.go")
-	fmt.Println()
-	fmt.Println("# 3. Set environment variables:")
-	fmt.Println("export GCS_BUCKET=resolved-org")
-	fmt.Println("export GCS_OBJECT_PATH=orgdata/comprehensive_index_dump.json")
-	fmt.Println("export GCS_PROJECT_ID=openshift-crt-mce")
-	fmt.Println("export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json")
-	fmt.Println()
-	fmt.Println("# 4. Run:")
-	fmt.Println("./example-with-gcs")
 }
