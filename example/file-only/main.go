@@ -2,17 +2,22 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"os"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	orgdatacore "github.com/openshift-eng/cyborg-data"
 )
 
 func main() {
-	fmt.Println("=== File-Only Example (No GCS Dependencies) ===")
-	fmt.Println("This example demonstrates using cyborg-data with local files only.")
-	fmt.Println("No cloud dependencies are required - lightweight and simple!")
-	fmt.Println()
+	// Set up structured logging for the demo
+	logger := stdr.New(log.New(os.Stdout, "[FILE-DEMO] ", 0))
+	orgdatacore.SetLogger(logger)
+
+	logger.Info("=== File-Only Example (No GCS Dependencies) ===")
+	logger.Info("This example demonstrates using cyborg-data with local files only")
+	logger.Info("No cloud dependencies are required - lightweight and simple!")
 
 	// Create a new service
 	service := orgdatacore.NewService()
@@ -24,54 +29,57 @@ func main() {
 
 	// Load data from file
 	if err := service.LoadFromDataSource(ctx, fileSource); err != nil {
-		log.Fatalf("Failed to load organizational data: %v", err)
+		logger.Error(err, "Failed to load organizational data")
+		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully loaded data from: %s\n", fileSource.String())
+	logger.Info("Successfully loaded data", "source", fileSource.String())
 
 	// Demonstrate queries
-	demonstrateQueries(service)
+	demonstrateQueries(service, logger)
 
 	// Start file watcher for hot reload (optional)
-	fmt.Println("\n--- File Watching Demo ---")
-	fmt.Println("Starting file watcher (would detect changes automatically)...")
+	logger.Info("--- File Watching Demo ---")
+	logger.Info("Starting file watcher (would detect changes automatically)")
 
 	// In a real application, you'd run this in a goroutine and keep the program running
 	// go func() {
 	// 	if err := service.StartDataSourceWatcher(ctx, fileSource); err != nil {
-	// 		log.Printf("File watcher error: %v", err)
+	// 		logger.Error(err, "File watcher error")
 	// 	}
 	// }()
 
-	fmt.Println("File watcher setup complete (demo mode - not actually watching)")
+	logger.Info("File watcher setup complete (demo mode - not actually watching)")
 
-	fmt.Println("\n=== Build Instructions ===")
-	fmt.Println("go build example-file-only.go")
-	fmt.Println("# No special build tags or dependencies required!")
+	logger.Info("=== Build Instructions ===",
+		"command", "go build example-file-only.go",
+		"note", "No special build tags or dependencies required!")
 }
 
-func demonstrateQueries(service *orgdatacore.Service) {
-	fmt.Println("\n--- Query Examples ---")
+func demonstrateQueries(service *orgdatacore.Service, logger logr.Logger) {
+	logger.Info("--- Query Examples ---")
 
 	// Get version info
 	version := service.GetVersion()
-	fmt.Printf("Data version: %d employees, %d orgs (loaded at %s)\n",
-		version.EmployeeCount, version.OrgCount, version.LoadTime.Format("15:04:05"))
+	logger.Info("Data version",
+		"employeeCount", version.EmployeeCount,
+		"orgCount", version.OrgCount,
+		"loadTime", version.LoadTime.Format("15:04:05"))
 
 	// Employee lookups
 	if emp := service.GetEmployeeByUID("jsmith"); emp != nil {
-		fmt.Printf("Employee: %s (%s) - %s\n", emp.FullName, emp.UID, emp.JobTitle)
+		logger.Info("Employee lookup", "name", emp.FullName, "uid", emp.UID, "jobTitle", emp.JobTitle)
 	}
 
 	// Team membership
 	teams := service.GetTeamsForUID("jsmith")
 	if len(teams) > 0 {
-		fmt.Printf("Teams for jsmith: %v\n", teams)
+		logger.Info("Team membership", "uid", "jsmith", "teams", teams)
 	}
 
 	// Organization queries
 	orgs := service.GetUserOrganizations("U12345678")
 	if len(orgs) > 0 {
-		fmt.Printf("Organizations for Slack user: %d total\n", len(orgs))
+		logger.Info("Organization membership", "slackID", "U12345678", "orgCount", len(orgs))
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -82,7 +82,7 @@ func (f *FileDataSource) Watch(ctx context.Context, callback func() error) error
 
 				if changed {
 					if err := callback(); err != nil {
-						fmt.Printf("File watch callback failed: %v\n", err)
+						logError(err, "File watch callback failed", "paths", strings.Join(f.FilePaths, ","))
 					}
 				}
 			}
@@ -97,7 +97,7 @@ func (f *FileDataSource) String() string {
 	if len(f.FilePaths) == 1 {
 		return fmt.Sprintf("file:%s", f.FilePaths[0])
 	}
-	return fmt.Sprintf("files:%s", filepath.Join(f.FilePaths...))
+	return fmt.Sprintf("files:%s", strings.Join(f.FilePaths, ","))
 }
 
 // GCSDataSource is a placeholder for GCS support

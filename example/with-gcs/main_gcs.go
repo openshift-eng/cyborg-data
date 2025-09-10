@@ -5,19 +5,23 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	orgdatacore "github.com/openshift-eng/cyborg-data"
 )
 
 func main() {
-	fmt.Println("=== GCS Example (With Cloud Dependencies) ===")
-	fmt.Println("This example demonstrates using cyborg-data with Google Cloud Storage.")
-	fmt.Println("Built with '-tags gcs' - using real GCS implementation")
-	fmt.Println()
+	// Set up structured logging for the demo
+	logger := stdr.New(log.New(os.Stdout, "[GCS-REAL] ", 0))
+	orgdatacore.SetLogger(logger)
+
+	logger.Info("=== GCS Example (With Cloud Dependencies) ===")
+	logger.Info("This example demonstrates using cyborg-data with Google Cloud Storage")
+	logger.Info("Built with '-tags gcs' - using real GCS implementation")
 
 	// Create a new service
 	service := orgdatacore.NewService()
@@ -32,77 +36,78 @@ func main() {
 		// CredentialsJSON: os.Getenv("GCS_CREDENTIALS_JSON"),
 	}
 
-	fmt.Printf("Using bucket: %s\n", gcsConfig.Bucket)
-	fmt.Printf("Using object: %s\n", gcsConfig.ObjectPath)
-	fmt.Println("✓ Real GCS implementation enabled")
-	fmt.Println()
+	logger.Info("GCS Configuration",
+		"bucket", gcsConfig.Bucket,
+		"object", gcsConfig.ObjectPath,
+		"status", "Real GCS implementation enabled")
 
 	ctx := context.Background()
 
 	// Create GCS data source with full SDK support
-	fmt.Printf("Creating GCS data source: gs://%s/%s\n", gcsConfig.Bucket, gcsConfig.ObjectPath)
+	logger.Info("Creating GCS data source", "uri", "gs://"+gcsConfig.Bucket+"/"+gcsConfig.ObjectPath)
 
 	gcsSource, err := orgdatacore.NewGCSDataSourceWithSDK(ctx, gcsConfig)
 	if err != nil {
-		log.Fatalf("Failed to create GCS data source: %v", err)
+		logger.Error(err, "Failed to create GCS data source")
+		os.Exit(1)
 	}
 
 	// Load data from GCS
 	if err := service.LoadFromDataSource(ctx, gcsSource); err != nil {
-		fmt.Printf("Failed to load from GCS: %v\n", err)
-		fmt.Println()
-		fmt.Println("This is expected if:")
-		fmt.Println("  - You don't have access to the resolved-org bucket")
-		fmt.Println("  - Authentication is not configured")
-		fmt.Println()
+		logger.Error(err, "Failed to load from GCS")
+		logger.Info("This is expected if",
+			"reason1", "You don't have access to the resolved-org bucket",
+			"reason2", "Authentication is not configured")
 		return
 	}
 
-	fmt.Printf("Successfully loaded data from: %s\n", gcsSource.String())
+	logger.Info("Successfully loaded data", "source", gcsSource.String())
 
 	// Demonstrate queries
-	demonstrateQueries(service)
+	demonstrateQueries(service, logger)
 
 	// Start GCS watcher for hot reload
-	fmt.Println("\n--- GCS Watching Demo ---")
-	fmt.Println("Starting GCS watcher (checks for updates every 5 minutes)...")
+	logger.Info("--- GCS Watching Demo ---")
+	logger.Info("Starting GCS watcher (checks for updates every 5 minutes)")
 
 	go func() {
 		if err := service.StartDataSourceWatcher(ctx, gcsSource); err != nil {
-			log.Printf("GCS watcher error: %v", err)
+			logger.Error(err, "GCS watcher error")
 		}
 	}()
 
-	fmt.Println("GCS watcher started successfully")
-	fmt.Println("   - Polls GCS object metadata every 5 minutes")
-	fmt.Println("   - Automatically reloads when object is updated")
-	fmt.Println("   - Uses structured logging for observability")
+	logger.Info("GCS watcher started successfully",
+		"pollInterval", "5 minutes",
+		"feature", "Automatically reloads when object is updated",
+		"logging", "Uses structured logging for observability")
 
 	// Keep program running to demonstrate watcher (in real usage)
-	fmt.Println("\n--- Watching for changes (demo: 10 seconds) ---")
+	logger.Info("--- Watching for changes (demo: 10 seconds) ---")
 	time.Sleep(10 * time.Second)
-	fmt.Println("Demo complete!")
+	logger.Info("Demo complete!")
 }
 
-func demonstrateQueries(service *orgdatacore.Service) {
-	fmt.Println("\n--- Query Examples ---")
+func demonstrateQueries(service *orgdatacore.Service, logger logr.Logger) {
+	logger.Info("--- Query Examples ---")
 
 	// Get version info
 	version := service.GetVersion()
-	fmt.Printf("Data version: %d employees, %d orgs (loaded at %s)\n",
-		version.EmployeeCount, version.OrgCount, version.LoadTime.Format("15:04:05"))
+	logger.Info("Data version",
+		"employeeCount", version.EmployeeCount,
+		"orgCount", version.OrgCount,
+		"loadTime", version.LoadTime.Format("15:04:05"))
 
 	// Show that queries are identical regardless of data source
-	fmt.Println("Note: All queries work identically whether data comes from files or GCS!")
+	logger.Info("Note: All queries work identically whether data comes from files or GCS!")
 
 	// Example queries (same as file-only example)
 	if emp := service.GetEmployeeByUID("jsmith"); emp != nil {
-		fmt.Printf("Employee: %s (%s) - %s\n", emp.FullName, emp.UID, emp.JobTitle)
+		logger.Info("Employee lookup", "name", emp.FullName, "uid", emp.UID, "jobTitle", emp.JobTitle)
 	}
 
 	teams := service.GetTeamsForUID("jsmith")
 	if len(teams) > 0 {
-		fmt.Printf("Teams for jsmith: %v\n", teams)
+		logger.Info("Team membership", "uid", "jsmith", "teams", teams)
 	}
 }
 
