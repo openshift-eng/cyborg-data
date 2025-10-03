@@ -262,7 +262,7 @@ func TestGitHubIDMapping(t *testing.T) {
 				t.Fatalf("Employee %s not found", tt.uid)
 			}
 			if emp.GithubID != tt.githubID {
-				t.Errorf("Expected SlackUID %s, got %s", tt.githubID, emp.GithubID)
+				t.Errorf("Expected GitHubID %s, got %s", tt.githubID, emp.GithubID)
 			}
 
 			// Test GitHubId -> Employee -> UID

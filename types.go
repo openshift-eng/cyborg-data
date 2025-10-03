@@ -11,7 +11,7 @@ type Employee struct {
 	Email    string `json:"email"`
 	JobTitle string `json:"job_title"`
 	SlackUID string `json:"slack_uid"`
-	GithubID string `json:"github_uid"`
+	GithubID string `json:"github_id"`
 }
 
 // Team represents a team in the organizational data
@@ -81,7 +81,7 @@ type SlackIDMappings struct {
 
 // GitHubIDMappings contains GitHub ID to UID mappings
 type GitHubIDMappings struct {
-	GitHubUIDToUID map[string]string `json:"github_uid_to_uid"`
+	GitHubUIDToUID map[string]string `json:"github_id_to_uid"`
 }
 
 // MembershipIndex represents the membership index structure
