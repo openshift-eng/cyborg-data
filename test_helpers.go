@@ -136,6 +136,12 @@ func CreateTestData() *Data {
 					"U222222": "testuser2",
 				},
 			},
+			GitHubIDMappings: GitHubIDMappings{
+				GitHubUIDToUID: map[string]string{
+					"ghuser1": "testuser1",
+					"ghuser2": "testuser2",
+				},
+			},
 		},
 	}
 }
@@ -169,6 +175,9 @@ func CreateEmptyTestData() string {
 			},
 			SlackIDMappings: SlackIDMappings{
 				SlackUIDToUID: map[string]string{},
+			},
+			GitHubIDMappings: GitHubIDMappings{
+				GitHubUIDToUID: map[string]string{},
 			},
 		},
 	}

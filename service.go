@@ -112,6 +112,26 @@ func (s *Service) GetEmployeeBySlackID(slackID string) *Employee {
 	return nil
 }
 
+// GetEmployeeByGitHubID returns an employee by GitHub ID
+func (s *Service) GetEmployeeByGitHubID(githubID string) *Employee {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Employees == nil {
+		return nil
+	}
+
+	uid := s.data.Indexes.GitHubIDMappings.GitHubUIDToUID[githubID]
+	if uid == "" {
+		return nil
+	}
+
+	if emp, exists := s.data.Lookups.Employees[uid]; exists {
+		return &emp
+	}
+	return nil
+}
+
 // GetTeamByName returns a team by name
 func (s *Service) GetTeamByName(teamName string) *Team {
 	s.mu.RLock()

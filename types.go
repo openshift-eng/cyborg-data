@@ -11,7 +11,7 @@ type Employee struct {
 	Email    string `json:"email"`
 	JobTitle string `json:"job_title"`
 	SlackUID string `json:"slack_uid"`
-	GithubID string `json:"github_id"`
+	GithubID string `json:"github_uid"`
 }
 
 // Team represents a team in the organizational data
@@ -69,13 +69,19 @@ type Org struct {
 
 // Indexes contains pre-computed lookup tables
 type Indexes struct {
-	Membership      MembershipIndex `json:"membership"`
-	SlackIDMappings SlackIDMappings `json:"slack_id_mappings"`
+	Membership       MembershipIndex  `json:"membership"`
+	SlackIDMappings  SlackIDMappings  `json:"slack_id_mappings"`
+	GitHubIDMappings GitHubIDMappings `json:"github_id_mappings"`
 }
 
 // SlackIDMappings contains Slack ID to UID mappings
 type SlackIDMappings struct {
 	SlackUIDToUID map[string]string `json:"slack_uid_to_uid"`
+}
+
+// GitHubIDMappings contains GitHub ID to UID mappings
+type GitHubIDMappings struct {
+	GitHubUIDToUID map[string]string `json:"github_uid_to_uid"`
 }
 
 // MembershipIndex represents the membership index structure

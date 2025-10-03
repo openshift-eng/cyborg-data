@@ -15,21 +15,24 @@
         "full_name": "John Smith",
         "email": "jsmith@example.com",
         "job_title": "Software Engineer",
-        "slack_uid": "U12345678"
+        "slack_uid": "U12345678",
+        "github_uid": "jsmith"
       },
       "adoe": {
         "uid": "adoe",
         "full_name": "Alice Doe", 
         "email": "adoe@example.com",
         "job_title": "Team Lead",
-        "slack_uid": "U87654321"
+        "slack_uid": "U87654321",
+        "github_uid": "adeer"
       },
       "bwilson": {
         "uid": "bwilson",
         "full_name": "Bob Wilson",
         "email": "bwilson@example.com", 
         "job_title": "Senior Engineer",
-        "slack_uid": "U98765432"
+        "slack_uid": "U98765432",
+        "github_uid": "l33tCoder1"
       }
     },
     "teams": {
@@ -120,6 +123,13 @@
         "U12345678": "jsmith",
         "U87654321": "adoe", 
         "U98765432": "bwilson"
+      }
+    },
+    "github_id_mappings": {
+      "github_uid_to_uid": {
+        "jsmith": "jsmith",
+        "adeer": "adoe",
+        "l33tCoder1": "bwilson"
       }
     }
   }
