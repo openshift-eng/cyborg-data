@@ -21,6 +21,10 @@ func TestServiceWithNoData(t *testing.T) {
 		t.Error("GetEmployeeBySlackID should return nil with no data loaded")
 	}
 
+	if emp := service.GetEmployeeByGitHubID("U123"); emp != nil {
+		t.Error("GetEmployeeByGitHubID should return nil with no data loaded")
+	}
+
 	if team := service.GetTeamByName("test"); team != nil {
 		t.Error("GetTeamByName should return nil with no data loaded")
 	}
@@ -68,6 +72,10 @@ func TestServiceErrorHandling(t *testing.T) {
 
 				if emp := service.GetEmployeeBySlackID(""); emp != nil {
 					t.Error("GetEmployeeBySlackID with empty string should return nil")
+				}
+
+				if emp := service.GetEmployeeByGitHubID(""); emp != nil {
+					t.Error("GetEmployeeByGitHubID with empty string should return nil")
 				}
 
 				if team := service.GetTeamByName(""); team != nil {

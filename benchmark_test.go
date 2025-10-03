@@ -41,6 +41,16 @@ func BenchmarkGetEmployeeBySlackID(b *testing.B) {
 	}
 }
 
+// BenchmarkGetEmployeeBySlackID benchmarks employee lookup by Slack ID
+func BenchmarkGetEmployeeByGitHubID(b *testing.B) {
+	service := setupBenchmarkService(b)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		service.GetEmployeeByGitHubID("ghuser1")
+	}
+}
+
 // BenchmarkGetTeamByName benchmarks team lookup
 func BenchmarkGetTeamByName(b *testing.B) {
 	service := setupBenchmarkService(b)
