@@ -11,6 +11,7 @@ type Employee struct {
 	Email    string `json:"email"`
 	JobTitle string `json:"job_title"`
 	SlackUID string `json:"slack_uid"`
+	GithubID string `json:"github_id"`
 }
 
 // Team represents a team in the organizational data
