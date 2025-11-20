@@ -16,7 +16,8 @@
         "email": "jsmith@example.com",
         "job_title": "Software Engineer",
         "slack_uid": "U12345678",
-        "github_id": "jsmith-dev"
+        "github_id": "jsmith-dev",
+        "manager_uid": "adoe"
       },
       "adoe": {
         "uid": "adoe",
@@ -24,7 +25,8 @@
         "email": "adoe@example.com",
         "job_title": "Team Lead",
         "slack_uid": "U87654321",
-        "github_id": "alice-codes"
+        "github_id": "alice-codes",
+        "is_people_manager": true
       },
       "bwilson": {
         "uid": "bwilson",

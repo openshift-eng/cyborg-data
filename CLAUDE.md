@@ -282,6 +282,7 @@ All methods available on `ServiceInterface`:
 - `GetEmployeeByUID(uid string) *Employee` - Lookup by UID
 - `GetEmployeeBySlackID(slackID string) *Employee` - Lookup by Slack ID
 - `GetEmployeeByGitHubID(githubID string) *Employee` - Lookup by GitHub username
+- `GetManagerForEmployee(uid string) *Employee` - Get employee's manager
 
 ### Entity Queries
 - `GetTeamByName(teamName string) *Team` - Get team details
@@ -319,6 +320,7 @@ All queries are O(1) via pre-computed indexes:
 - `GetEmployeeByUID`: Direct map lookup
 - `GetEmployeeBySlackID`: Index lookup + map lookup
 - `GetEmployeeByGitHubID`: Index lookup + map lookup
+- `GetManagerForEmployee`: Two direct map lookups (employee + manager)
 - `GetTeamByName`, `GetOrgByName`, `GetPillarByName`, `GetTeamGroupByName`: Direct map lookups
 - `GetTeamsForUID`: Index lookup (no traversal)
 - `IsEmployeeInTeam`: Index scan (pre-computed memberships only)

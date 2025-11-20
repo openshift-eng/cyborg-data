@@ -18,24 +18,26 @@ func TestGetEmployeeByUID(t *testing.T) {
 			name: "existing employee jsmith",
 			uid:  "jsmith",
 			expected: &Employee{
-				UID:      "jsmith",
-				FullName: "John Smith",
-				Email:    "jsmith@example.com",
-				JobTitle: "Software Engineer",
-				SlackUID: "U12345678",
-				GitHubID: "jsmith-dev",
+				UID:        "jsmith",
+				FullName:   "John Smith",
+				Email:      "jsmith@example.com",
+				JobTitle:   "Software Engineer",
+				SlackUID:   "U12345678",
+				GitHubID:   "jsmith-dev",
+				ManagerUID: "adoe",
 			},
 		},
 		{
 			name: "existing employee adoe",
 			uid:  "adoe",
 			expected: &Employee{
-				UID:      "adoe",
-				FullName: "Alice Doe",
-				Email:    "adoe@example.com",
-				JobTitle: "Team Lead",
-				SlackUID: "U87654321",
-				GitHubID: "alice-codes",
+				UID:             "adoe",
+				FullName:        "Alice Doe",
+				Email:           "adoe@example.com",
+				JobTitle:        "Team Lead",
+				SlackUID:        "U87654321",
+				GitHubID:        "alice-codes",
+				IsPeopleManager: true,
 			},
 		},
 		{
@@ -73,12 +75,13 @@ func TestGetEmployeeBySlackID(t *testing.T) {
 			name:    "existing slack ID for jsmith",
 			slackID: "U12345678",
 			expected: &Employee{
-				UID:      "jsmith",
-				FullName: "John Smith",
-				Email:    "jsmith@example.com",
-				JobTitle: "Software Engineer",
-				SlackUID: "U12345678",
-				GitHubID: "jsmith-dev",
+				UID:        "jsmith",
+				FullName:   "John Smith",
+				Email:      "jsmith@example.com",
+				JobTitle:   "Software Engineer",
+				SlackUID:   "U12345678",
+				GitHubID:   "jsmith-dev",
+				ManagerUID: "adoe",
 			},
 		},
 		{
@@ -128,12 +131,13 @@ func TestGetEmployeeByGitHubID(t *testing.T) {
 			name:     "existing github ID for jsmith",
 			githubID: "jsmith-dev",
 			expected: &Employee{
-				UID:      "jsmith",
-				FullName: "John Smith",
-				Email:    "jsmith@example.com",
-				JobTitle: "Software Engineer",
-				SlackUID: "U12345678",
-				GitHubID: "jsmith-dev",
+				UID:        "jsmith",
+				FullName:   "John Smith",
+				Email:      "jsmith@example.com",
+				JobTitle:   "Software Engineer",
+				SlackUID:   "U12345678",
+				GitHubID:   "jsmith-dev",
+				ManagerUID: "adoe",
 			},
 		},
 		{
@@ -323,5 +327,59 @@ func TestNewEmployeeFields(t *testing.T) {
 	}
 	if emp.IsPeopleManager != false {
 		t.Errorf("expected IsPeopleManager false, got %v", emp.IsPeopleManager)
+	}
+}
+
+// TestGetManagerForEmployee tests manager lookup functionality
+func TestGetManagerForEmployee(t *testing.T) {
+	service := setupTestService(t)
+
+	tests := []struct {
+		name            string
+		uid             string
+		expectedManager *Employee
+	}{
+		{
+			name: "employee with manager",
+			uid:  "jsmith",
+			expectedManager: &Employee{
+				UID:             "adoe",
+				FullName:        "Alice Doe",
+				Email:           "adoe@example.com",
+				JobTitle:        "Team Lead",
+				SlackUID:        "U87654321",
+				GitHubID:        "alice-codes",
+				IsPeopleManager: true,
+			},
+		},
+		{
+			name:            "employee without manager",
+			uid:             "bwilson",
+			expectedManager: nil,
+		},
+		{
+			name:            "people manager (adoe has no manager)",
+			uid:             "adoe",
+			expectedManager: nil,
+		},
+		{
+			name:            "nonexistent employee",
+			uid:             "nonexistent",
+			expectedManager: nil,
+		},
+		{
+			name:            "empty UID",
+			uid:             "",
+			expectedManager: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.GetManagerForEmployee(tt.uid)
+			if !reflect.DeepEqual(result, tt.expectedManager) {
+				t.Errorf("GetManagerForEmployee(%q) = %+v, expected %+v", tt.uid, result, tt.expectedManager)
+			}
+		})
 	}
 }

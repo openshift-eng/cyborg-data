@@ -26,6 +26,7 @@ type ServiceInterface interface {
 	GetEmployeeByUID(uid string) *Employee
 	GetEmployeeBySlackID(slackID string) *Employee
 	GetEmployeeByGitHubID(githubID string) *Employee
+	GetManagerForEmployee(uid string) *Employee
 	GetTeamByName(teamName string) *Team
 	GetOrgByName(orgName string) *Org
 	GetPillarByName(pillarName string) *Pillar

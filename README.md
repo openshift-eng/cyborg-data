@@ -123,6 +123,10 @@ employee = service.GetEmployeeBySlackID("U123ABC456")
 // GitHub integration - lookup by GitHub username
 employee = service.GetEmployeeByGitHubID("jsmith-dev")
 
+// Get employee's manager
+manager := service.GetManagerForEmployee("jsmith")
+// Returns the manager's Employee record, or nil if no manager
+
 // Returns *Employee with fields:
 //   - UID, FullName, Email, JobTitle
 //   - SlackUID, GitHubID
@@ -201,6 +205,7 @@ teamGroupNames := service.GetAllTeamGroupNames()
 | `GetEmployeeByUID` | O(1) | `lookups.employees` |
 | `GetEmployeeBySlackID` | O(1) | `indexes.slack_id_mappings` |
 | `GetEmployeeByGitHubID` | O(1) | `indexes.github_id_mappings` |
+| `GetManagerForEmployee` | O(1) | `lookups.employees` (2 lookups) |
 | `GetTeamByName` | O(1) | `lookups.teams` |
 | `GetOrgByName` | O(1) | `lookups.orgs` |
 | `GetPillarByName` | O(1) | `lookups.pillars` |

@@ -132,6 +132,34 @@ func (s *Service) GetEmployeeByGitHubID(githubID string) *Employee {
 	return nil
 }
 
+// GetManagerForEmployee returns the manager for a given employee UID
+func (s *Service) GetManagerForEmployee(uid string) *Employee {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Employees == nil {
+		return nil
+	}
+
+	// Get the employee first
+	emp, exists := s.data.Lookups.Employees[uid]
+	if !exists {
+		return nil
+	}
+
+	// Check if employee has a manager
+	if emp.ManagerUID == "" {
+		return nil
+	}
+
+	// Look up the manager
+	if manager, exists := s.data.Lookups.Employees[emp.ManagerUID]; exists {
+		return &manager
+	}
+
+	return nil
+}
+
 // GetTeamByName returns a team by name
 func (s *Service) GetTeamByName(teamName string) *Team {
 	s.mu.RLock()
