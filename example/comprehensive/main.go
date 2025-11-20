@@ -65,9 +65,21 @@ func demonstrateService(service *orgdatacore.Service, logger logr.Logger) {
 }
 
 func demonstrateAdvancedQueries(service *orgdatacore.Service, logger logr.Logger) {
-	// Slack ID to UID mapping
+	// Employee lookups by different IDs
 	if employee := service.GetEmployeeBySlackID("U12345678"); employee != nil {
-		logger.Info("Slack ID mapping", "slackID", "U12345678", "uid", employee.UID)
+		logger.Info("Slack ID mapping", "slackID", "U12345678", "uid", employee.UID, "name", employee.FullName)
+	}
+
+	if employee := service.GetEmployeeByGitHubID("jsmith-dev"); employee != nil {
+		logger.Info("GitHub ID mapping", "githubID", "jsmith-dev", "uid", employee.UID, "name", employee.FullName)
+		// Show new employee fields
+		if employee.RhatGeo != "" || employee.CostCenter != 0 {
+			logger.Info("Employee details",
+				"rhatGeo", employee.RhatGeo,
+				"costCenter", employee.CostCenter,
+				"managerUID", employee.ManagerUID,
+				"isPeopleManager", employee.IsPeopleManager)
+		}
 	}
 
 	// Team membership checks
@@ -82,11 +94,35 @@ func demonstrateAdvancedQueries(service *orgdatacore.Service, logger logr.Logger
 	teamMembers := service.GetTeamMembers("test-team")
 	logger.Info("Team member count", "team", "test-team", "memberCount", len(teamMembers))
 
+	// Organization, Pillar, and TeamGroup queries
+	if org := service.GetOrgByName("test-org"); org != nil {
+		logger.Info("Organization lookup", "name", org.Name, "type", org.Type)
+	}
+
+	if pillar := service.GetPillarByName("engineering"); pillar != nil {
+		logger.Info("Pillar lookup", "name", pillar.Name, "type", pillar.Type)
+	}
+
+	if teamGroup := service.GetTeamGroupByName("backend-teams"); teamGroup != nil {
+		logger.Info("Team group lookup", "name", teamGroup.Name, "type", teamGroup.Type)
+	}
+
 	// Organization membership
 	userOrgs := service.GetUserOrganizations("U12345678")
 	if len(userOrgs) > 0 {
 		logger.Info("User organizations", "slackID", "U12345678", "orgCount", len(userOrgs))
 	}
+
+	// Enumeration methods
+	allTeams := service.GetAllTeamNames()
+	allOrgs := service.GetAllOrgNames()
+	allPillars := service.GetAllPillarNames()
+	allTeamGroups := service.GetAllTeamGroupNames()
+	logger.Info("Data statistics",
+		"totalTeams", len(allTeams),
+		"totalOrgs", len(allOrgs),
+		"totalPillars", len(allPillars),
+		"totalTeamGroups", len(allTeamGroups))
 }
 
 func hasGCSConfig() bool {
@@ -134,8 +170,7 @@ func demonstrateGCSDataSource(service *orgdatacore.Service, logger logr.Logger) 
 }
 
 func demonstrateGCSDataSourceStub(logger logr.Logger) {
-	logger.Info("GCS DataSource is the ONLY supported production data source")
-	logger.Info("File-based data sources have been deprecated for security reasons")
+	logger.Info("GCS DataSource is the production data source")
 
 	logger.Info("GCS DataSource Configuration Example")
 	logger.Info("Environment variables needed",

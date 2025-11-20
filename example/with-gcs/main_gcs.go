@@ -98,16 +98,38 @@ func demonstrateQueries(service *orgdatacore.Service, logger logr.Logger) {
 		"loadTime", version.LoadTime.Format("15:04:05"))
 
 	// Show that queries are identical regardless of data source
-	logger.Info("Note: All queries work identically whether data comes from files or GCS!")
+	logger.Info("Note: All queries work identically with any data source!")
 
-	// Example queries (same as file-only example)
+	// Employee lookups by different IDs
 	if emp := service.GetEmployeeByUID("jsmith"); emp != nil {
-		logger.Info("Employee lookup", "name", emp.FullName, "uid", emp.UID, "jobTitle", emp.JobTitle)
+		logger.Info("Employee lookup by UID", "name", emp.FullName, "uid", emp.UID, "jobTitle", emp.JobTitle)
 	}
 
+	if emp := service.GetEmployeeBySlackID("U12345678"); emp != nil {
+		logger.Info("Employee lookup by Slack ID", "slackID", "U12345678", "uid", emp.UID)
+	}
+
+	if emp := service.GetEmployeeByGitHubID("jsmith-dev"); emp != nil {
+		logger.Info("Employee lookup by GitHub ID", "githubID", "jsmith-dev", "uid", emp.UID)
+	}
+
+	// Team membership
 	teams := service.GetTeamsForUID("jsmith")
 	if len(teams) > 0 {
 		logger.Info("Team membership", "uid", "jsmith", "teams", teams)
+	}
+
+	// Organization, pillar, and team group queries
+	if org := service.GetOrgByName("test-org"); org != nil {
+		logger.Info("Organization query", "name", org.Name)
+	}
+
+	if pillar := service.GetPillarByName("engineering"); pillar != nil {
+		logger.Info("Pillar query", "name", pillar.Name)
+	}
+
+	if teamGroup := service.GetTeamGroupByName("backend-teams"); teamGroup != nil {
+		logger.Info("Team group query", "name", teamGroup.Name)
 	}
 }
 
