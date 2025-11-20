@@ -1,5 +1,4 @@
 //go:build !gcs
-// +build !gcs
 
 package main
 

@@ -364,7 +364,8 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 	teamsIndex := relationshipIndex["teams"]
 
 	for _, membership := range memberships {
-		if membership.Type == MembershipTypeOrg {
+		switch membership.Type {
+		case MembershipTypeOrg:
 			// Direct organization membership
 			if !seenItems[membership.Name] {
 				orgs = append(orgs, OrgInfo{
@@ -373,7 +374,7 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 				})
 				seenItems[membership.Name] = true
 			}
-		} else if membership.Type == MembershipTypeTeam {
+		case MembershipTypeTeam:
 			// Add the team membership itself
 			if !seenItems[membership.Name] {
 				orgs = append(orgs, OrgInfo{
