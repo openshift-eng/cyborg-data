@@ -117,11 +117,11 @@ func (s *Service) GetEmployeeByGitHubID(githubID string) *Employee {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.data == nil || s.data.Lookups.Employees == nil {
+	if s.data == nil || s.data.Indexes.GitHubIDMappings.GitHubIDToUID == nil || s.data.Lookups.Employees == nil {
 		return nil
 	}
 
-	uid := s.data.Indexes.GitHubIDMappings.GitHubUIDToUID[githubID]
+	uid := s.data.Indexes.GitHubIDMappings.GitHubIDToUID[githubID]
 	if uid == "" {
 		return nil
 	}
@@ -164,6 +164,38 @@ func (s *Service) GetOrgByName(orgName string) *Org {
 		return nil
 	}
 	return &org
+}
+
+// GetPillarByName returns a pillar by name
+func (s *Service) GetPillarByName(pillarName string) *Pillar {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Pillars == nil {
+		return nil
+	}
+
+	pillar, exists := s.data.Lookups.Pillars[pillarName]
+	if !exists {
+		return nil
+	}
+	return &pillar
+}
+
+// GetTeamGroupByName returns a team group by name
+func (s *Service) GetTeamGroupByName(teamGroupName string) *TeamGroup {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.TeamGroups == nil {
+		return nil
+	}
+
+	teamGroup, exists := s.data.Lookups.TeamGroups[teamGroupName]
+	if !exists {
+		return nil
+	}
+	return &teamGroup
 }
 
 // GetTeamsForUID returns all teams a UID is a member of
@@ -392,4 +424,84 @@ func (s *Service) getUIDFromSlackID(slackID string) string {
 		return ""
 	}
 	return s.data.Indexes.SlackIDMappings.SlackUIDToUID[slackID]
+}
+
+// GetAllEmployeeUIDs returns all employee UIDs in the system
+func (s *Service) GetAllEmployeeUIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Employees == nil {
+		return []string{}
+	}
+
+	uids := make([]string, 0, len(s.data.Lookups.Employees))
+	for uid := range s.data.Lookups.Employees {
+		uids = append(uids, uid)
+	}
+	return uids
+}
+
+// GetAllTeamNames returns all team names in the system
+func (s *Service) GetAllTeamNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Teams == nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(s.data.Lookups.Teams))
+	for name := range s.data.Lookups.Teams {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetAllOrgNames returns all organization names in the system
+func (s *Service) GetAllOrgNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Orgs == nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(s.data.Lookups.Orgs))
+	for name := range s.data.Lookups.Orgs {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetAllPillarNames returns all pillar names in the system
+func (s *Service) GetAllPillarNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Pillars == nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(s.data.Lookups.Pillars))
+	for name := range s.data.Lookups.Pillars {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetAllTeamGroupNames returns all team group names in the system
+func (s *Service) GetAllTeamGroupNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.TeamGroups == nil {
+		return []string{}
+	}
+
+	names := make([]string, 0, len(s.data.Lookups.TeamGroups))
+	for name := range s.data.Lookups.TeamGroups {
+		names = append(names, name)
+	}
+	return names
 }

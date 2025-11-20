@@ -16,23 +16,23 @@
         "email": "jsmith@example.com",
         "job_title": "Software Engineer",
         "slack_uid": "U12345678",
-        "github_id": "jsmith"
+        "github_id": "jsmith-dev"
       },
       "adoe": {
         "uid": "adoe",
-        "full_name": "Alice Doe", 
+        "full_name": "Alice Doe",
         "email": "adoe@example.com",
         "job_title": "Team Lead",
         "slack_uid": "U87654321",
-        "github_id": "adeer"
+        "github_id": "alice-codes"
       },
       "bwilson": {
         "uid": "bwilson",
         "full_name": "Bob Wilson",
-        "email": "bwilson@example.com", 
+        "email": "bwilson@example.com",
         "job_title": "Senior Engineer",
         "slack_uid": "U98765432",
-        "github_id": "l33tCoder1"
+        "github_id": "bobw"
       }
     },
     "teams": {
@@ -71,10 +71,32 @@
         }
       },
       "platform-org": {
-        "uid": "org2", 
+        "uid": "org2",
         "name": "platform-org",
         "type": "organization",
         "group": {
+          "resolved_people_uid_list": ["bwilson"]
+        }
+      }
+    },
+    "pillars": {
+      "engineering": {
+        "name": "engineering",
+        "group": {
+          "type": {
+            "name": "pillar"
+          },
+          "resolved_people_uid_list": ["bwilson"]
+        }
+      }
+    },
+    "team_groups": {
+      "backend-teams": {
+        "name": "backend-teams",
+        "group": {
+          "type": {
+            "name": "team_group"
+          },
           "resolved_people_uid_list": ["bwilson"]
         }
       }
@@ -121,15 +143,15 @@
     "slack_id_mappings": {
       "slack_uid_to_uid": {
         "U12345678": "jsmith",
-        "U87654321": "adoe", 
+        "U87654321": "adoe",
         "U98765432": "bwilson"
       }
     },
     "github_id_mappings": {
       "github_id_to_uid": {
-        "jsmith": "jsmith",
-        "adeer": "adoe",
-        "l33tCoder1": "bwilson"
+        "jsmith-dev": "jsmith",
+        "alice-codes": "adoe",
+        "bobw": "bwilson"
       }
     }
   }

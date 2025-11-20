@@ -21,48 +21,27 @@ func main() {
 	// Create a new service
 	service := orgdatacore.NewService()
 
-	// Example 1: Load data using DataSource interface (recommended approach)
-	logger.Info("--- DataSource Interface Example ---")
-	fileSource := orgdatacore.NewFileDataSource("../../testdata/test_org_data.json")
-
-	err := service.LoadFromDataSource(context.Background(), fileSource)
-	if err != nil {
-		logger.Error(err, "Could not load via DataSource")
-	} else {
-		logger.Info("Loaded organizational data via DataSource", "source", fileSource.String())
-		demonstrateService(service, logger)
-	}
-
-	// Example 2: File watching with hot reload
-	logger.Info("--- File Watching Example ---")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err = service.StartDataSourceWatcher(ctx, fileSource)
-	if err != nil {
-		logger.Error(err, "File watcher setup failed")
-	} else {
-		logger.Info("File watcher started successfully (would monitor for changes)")
-	}
-
-	// Example 3: Advanced queries
-	logger.Info("--- Advanced Queries Example ---")
-	demonstrateAdvancedQueries(service, logger)
-
-	// Example 4: GCS DataSource (if you have GCS credentials)
+	// Example 1: GCS DataSource (production data source)
 	if hasGCSConfig() {
 		logger.Info("--- GCS DataSource Example ---")
 		demonstrateGCSDataSource(service, logger)
 	} else {
-		logger.Info("--- GCS DataSource Example (Simulated) ---")
+		logger.Info("--- GCS DataSource Example (Configuration Required) ---")
 		demonstrateGCSDataSourceStub(logger)
+	}
+
+	// Example 2: Advanced queries (only if data was loaded)
+	version := service.GetVersion()
+	if version.EmployeeCount > 0 {
+		logger.Info("--- Advanced Queries Example ---")
+		demonstrateAdvancedQueries(service, logger)
 	}
 
 	logger.Info("Core package is ready for use!",
 		"import", "github.com/openshift-eng/cyborg-data",
 		"interface", "orgdatacore.ServiceInterface",
 		"implementation", "orgdatacore.Service",
-		"datasources", "File, GCS (with build tag), HTTP (future)")
+		"datasources", "GCS (with -tags gcs build flag)")
 }
 
 func demonstrateService(service *orgdatacore.Service, logger logr.Logger) {
@@ -155,6 +134,9 @@ func demonstrateGCSDataSource(service *orgdatacore.Service, logger logr.Logger) 
 }
 
 func demonstrateGCSDataSourceStub(logger logr.Logger) {
+	logger.Info("GCS DataSource is the ONLY supported production data source")
+	logger.Info("File-based data sources have been deprecated for security reasons")
+
 	logger.Info("GCS DataSource Configuration Example")
 	logger.Info("Environment variables needed",
 		"GCS_BUCKET", "resolved-org",
@@ -164,8 +146,9 @@ func demonstrateGCSDataSourceStub(logger logr.Logger) {
 	logger.Info("Alternative authentication", "GCS_CREDENTIALS_JSON", `{"type":"service_account",...}`)
 
 	logger.Info("To enable full GCS support",
-		"step1", "go get cloud.google.com/go/storage",
-		"step2", "go build -tags gcs")
+		"step1", "Build with GCS tag: go build -tags gcs",
+		"step2", "Use NewGCSDataSourceWithSDK() to create the data source",
+		"step3", "Set appropriate environment variables for authentication")
 
 	// Show how it would work
 	config := orgdatacore.GCSConfig{
@@ -176,7 +159,8 @@ func demonstrateGCSDataSourceStub(logger logr.Logger) {
 	}
 
 	source := orgdatacore.NewGCSDataSource(config)
-	logger.Info("GCS DataSource created", "source", source.String())
+	logger.Info("GCS DataSource stub created", "source", source.String())
+	logger.Info("Note: This stub will error until built with -tags gcs")
 }
 
 func getEnvDefault(key, defaultValue string) string {
