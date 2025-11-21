@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
 )
 
 // TestServiceWithNoData tests service behavior before data is loaded
@@ -161,7 +163,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 	// Load initial data
 	testDataPath := filepath.Join("testdata", "test_org_data.json")
-	fileSource := NewFileDataSource(testDataPath)
+	fileSource := testingsupport.NewFileDataSource(testDataPath)
 	if err := service.LoadFromDataSource(context.Background(), fileSource); err != nil {
 		t.Fatalf("Failed to load initial data: %v", err)
 	}
@@ -216,7 +218,7 @@ func TestReloadData(t *testing.T) {
 
 	// Load data for the first time
 	testDataPath := filepath.Join("testdata", "test_org_data.json")
-	fileSource := NewFileDataSource(testDataPath)
+	fileSource := testingsupport.NewFileDataSource(testDataPath)
 	err := service.LoadFromDataSource(context.Background(), fileSource)
 	if err != nil {
 		t.Fatalf("Failed to load data: %v", err)

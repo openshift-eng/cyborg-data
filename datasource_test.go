@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
 )
 
 // TestFileDataSource tests the FileDataSource implementation
@@ -44,7 +46,7 @@ func TestFileDataSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source := NewFileDataSource(tt.filePaths...)
+			source := testingsupport.NewFileDataSource(tt.filePaths...)
 
 			reader, err := source.Load(context.Background())
 
@@ -114,7 +116,7 @@ func TestFileDataSourceString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source := NewFileDataSource(tt.filePaths...)
+			source := testingsupport.NewFileDataSource(tt.filePaths...)
 			result := source.String()
 
 			if !strings.Contains(result, tt.contains) {
@@ -137,7 +139,7 @@ func TestFileDataSourceWatch(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	source := NewFileDataSource(tmpFile)
+	source := testingsupport.NewFileDataSource(tmpFile)
 	source.PollInterval = 50 * time.Millisecond
 
 	// Test watch functionality
@@ -208,7 +210,7 @@ func TestDataSourceIntegrationWithService(t *testing.T) {
 
 	// Test with file data source
 	testDataPath := filepath.Join("testdata", "test_org_data.json")
-	fileSource := NewFileDataSource(testDataPath)
+	fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 	err := service.LoadFromDataSource(context.Background(), fileSource)
 	if err != nil {

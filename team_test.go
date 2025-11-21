@@ -324,3 +324,124 @@ func TestTeamMembershipConsistency(t *testing.T) {
 		}
 	}
 }
+
+// TestGroupExtendedFields tests the extended Group fields added in refactoring
+func TestGroupExtendedFields(t *testing.T) {
+	service := NewService()
+	service.data = &Data{
+		Lookups: Lookups{
+			Teams: map[string]Team{
+				"Backend Team": {
+					UID:         "team1",
+					Name:        "Backend Team",
+					TabName:     "Backend",
+					Description: "Backend development team",
+					Type:        "team",
+					Group: Group{
+						Type: GroupType{
+							Name: "team",
+						},
+						ResolvedPeopleUIDList: []string{"user1"},
+						Slack: &SlackConfig{
+							Channels: []ChannelInfo{
+								{
+									Channel:     "team-backend",
+									ChannelID:   "C123",
+									Description: "Main channel",
+									Types:       []string{"team-internal"},
+								},
+							},
+							Aliases: []AliasInfo{
+								{
+									Alias:       "@backend-team",
+									Description: "Team alias",
+								},
+							},
+						},
+						Roles: []RoleInfo{
+							{
+								People: []string{"manager1"},
+								Types:  []string{"manager"},
+							},
+						},
+						Jiras: []JiraInfo{
+							{
+								Project:     "BACKEND",
+								Component:   "API",
+								Description: "Backend API",
+								Types:       []string{"main"},
+							},
+						},
+						Repos: []RepoInfo{
+							{
+								Repo:        "https://github.com/org/backend",
+								Description: "Main backend repo",
+								Types:       []string{"source"},
+							},
+						},
+						Keywords: []string{"backend", "api"},
+						Emails: []EmailInfo{
+							{
+								Address:     "backend@example.com",
+								Name:        "Team Email",
+								Description: "Backend team email",
+							},
+						},
+						Resources: []ResourceInfo{
+							{
+								Name:        "Wiki",
+								URL:         "https://wiki.example.com",
+								Description: "Team wiki",
+							},
+						},
+						ComponentRoles: []ComponentRoleInfo{
+							{
+								Component: "/component/path",
+								Types:     []string{"owner"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	team := service.GetTeamByName("Backend Team")
+	if team == nil {
+		t.Fatal("expected team, got nil")
+	}
+
+	if team.TabName != "Backend" {
+		t.Errorf("expected TabName 'Backend', got '%s'", team.TabName)
+	}
+	if team.Description != "Backend development team" {
+		t.Errorf("expected description, got '%s'", team.Description)
+	}
+	if team.Group.Slack == nil {
+		t.Fatal("expected Slack config, got nil")
+	}
+	if len(team.Group.Slack.Channels) != 1 {
+		t.Errorf("expected 1 channel, got %d", len(team.Group.Slack.Channels))
+	}
+	if len(team.Group.Roles) != 1 {
+		t.Errorf("expected 1 role, got %d", len(team.Group.Roles))
+	}
+	if len(team.Group.Jiras) != 1 {
+		t.Errorf("expected 1 jira, got %d", len(team.Group.Jiras))
+	}
+	if len(team.Group.Repos) != 1 {
+		t.Errorf("expected 1 repo, got %d", len(team.Group.Repos))
+	}
+	if len(team.Group.Keywords) != 2 {
+		t.Errorf("expected 2 keywords, got %d", len(team.Group.Keywords))
+	}
+	if len(team.Group.Emails) != 1 {
+		t.Errorf("expected 1 email, got %d", len(team.Group.Emails))
+	}
+	if len(team.Group.Resources) != 1 {
+		t.Errorf("expected 1 resource, got %d", len(team.Group.Resources))
+	}
+	if len(team.Group.ComponentRoles) != 1 {
+		t.Errorf("expected 1 component role, got %d", len(team.Group.ComponentRoles))
+	}
+}

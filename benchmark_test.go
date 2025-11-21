@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
 )
 
 // setupBenchmarkService creates a service for benchmarking
@@ -12,7 +14,7 @@ func setupBenchmarkService(b *testing.B) *Service {
 	service := NewService()
 
 	testDataPath := filepath.Join("testdata", "test_org_data.json")
-	fileSource := NewFileDataSource(testDataPath)
+	fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 	if err := service.LoadFromDataSource(context.Background(), fileSource); err != nil {
 		b.Fatalf("Failed to load test data: %v", err)

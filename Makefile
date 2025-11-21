@@ -1,13 +1,11 @@
 all: test examples
 
 # Build all examples
-examples: file-only-example gcs-example comprehensive-example
+# NOTE: Production deployments require -tags gcs for GCS support
+examples: gcs-example comprehensive-example
 .PHONY: examples
 
 # Individual example targets
-file-only-example:
-	cd example/file-only && go build -o ./file-only .
-
 gcs-example:
 	cd example/with-gcs && go build -tags gcs -o ./with-gcs .
 
@@ -48,15 +46,14 @@ lint-with-gcs:
 
 # Clean up
 clean:
-	rm -f example/file-only/file-only example/with-gcs/with-gcs example/with-gcs/with-gcs-stub example/comprehensive/comprehensive
+	rm -f example/with-gcs/with-gcs example/with-gcs/with-gcs-stub example/comprehensive/comprehensive
 .PHONY: clean
 
 # Help
 help:
 	@echo "Available targets:"
 	@echo "  all                    - Run tests and build all examples"
-	@echo "  examples               - Build all examples"
-	@echo "  file-only-example      - Build lightweight file-only example"
+	@echo "  examples               - Build all examples (requires -tags gcs for production)"
 	@echo "  gcs-example            - Build GCS example with full SDK support"
 	@echo "  gcs-example-stub       - Build GCS example in stub mode (no tags)"
 	@echo "  comprehensive-example  - Build comprehensive demo"
@@ -68,4 +65,6 @@ help:
 	@echo "  lint-with-gcs          - Run linter with GCS build tags"
 	@echo "  clean                  - Remove built binaries"
 	@echo "  help                   - Show this help"
+	@echo ""
+	@echo "NOTE: Production builds require -tags gcs for GCS support"
 .PHONY: help
