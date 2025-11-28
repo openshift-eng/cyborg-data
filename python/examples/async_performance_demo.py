@@ -28,11 +28,9 @@ from orgdatacore import (
     get_logger,
 )
 
-try:
-    from orgdatacore._async import AsyncGCSDataSource
-    HAS_GCS = True
-except ImportError:
-    HAS_GCS = False
+# Check if GCS support is available
+from orgdatacore import AsyncGCSDataSource
+HAS_GCS = AsyncGCSDataSource is not None
 
 
 async def benchmark_sequential(service: AsyncService, uids: list[str]) -> float:

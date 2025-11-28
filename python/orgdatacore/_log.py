@@ -4,7 +4,7 @@ This module provides structured logging support matching the Go library's
 logging capabilities.
 
 Usage:
-    from orgdatacore.logging import get_logger, set_logger
+    from orgdatacore import get_logger, set_logger
 
     # Use the default logger
     logger = get_logger()
@@ -56,7 +56,7 @@ def set_logger(logger: Optional[logging.Logger]) -> None:
 
     Example:
         import logging
-        from orgdatacore.logging import set_logger
+        from orgdatacore import set_logger
 
         # Use your application's logger
         app_logger = logging.getLogger("myapp.orgdata")
@@ -79,7 +79,7 @@ def configure_default_logging(
         format_string: Custom format string (default: structured format)
 
     Example:
-        from orgdatacore.logging import configure_default_logging
+        from orgdatacore import configure_default_logging
         import logging
 
         configure_default_logging(level=logging.DEBUG)

@@ -4,7 +4,7 @@ Data source implementations for orgdatacore.
 This module provides the GCSDataSource for production use with Google Cloud Storage.
 
 For custom data sources (e.g., S3, Azure Blob, etc.), implement the DataSource
-protocol from orgdatacore.interface.
+protocol (just implement load(), watch(), __str__() methods).
 
 Example custom implementation:
 

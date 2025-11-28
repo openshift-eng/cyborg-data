@@ -102,17 +102,14 @@ from ._async import AsyncService
 # GCS Data Sources
 from ._gcs import GCSDataSource
 
-# Optional: GCSDataSourceWithSDK (requires google-cloud-storage)
+# Optional GCS data sources (require google-cloud-storage)
+# These are conditionally available based on whether the optional dependency is installed
 try:
     from ._gcs import GCSDataSourceWithSDK
-except ImportError:
-    pass
-
-# Optional: AsyncGCSDataSource (requires google-cloud-storage)
-try:
     from ._async import AsyncGCSDataSource
 except ImportError:
-    pass
+    GCSDataSourceWithSDK = None  # type: ignore[misc, assignment]
+    AsyncGCSDataSource = None  # type: ignore[misc, assignment]
 
 __all__ = [
     # Types
@@ -155,6 +152,8 @@ __all__ = [
     "AsyncService",
     # Data Sources
     "GCSDataSource",
+    "GCSDataSourceWithSDK",  # Optional: requires google-cloud-storage
+    "AsyncGCSDataSource",  # Optional: requires google-cloud-storage
     # Exceptions
     "OrgDataError",
     "DataLoadError",

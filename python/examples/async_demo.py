@@ -27,12 +27,9 @@ from orgdatacore import (
     configure_default_logging,
 )
 
-# Optional: import async GCS data source if available
-try:
-    from orgdatacore._async import AsyncGCSDataSource
-    HAS_GCS = True
-except ImportError:
-    HAS_GCS = False
+# Check if GCS support is available
+from orgdatacore import AsyncGCSDataSource
+HAS_GCS = AsyncGCSDataSource is not None
 
 
 async def main() -> None:
