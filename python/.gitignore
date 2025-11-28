@@ -28,3 +28,6 @@ htmlcov/
 # mypy
 .mypy_cache/
 
+# UV (virtual environment is in .venv, already ignored above)
+# Note: uv.lock should be committed for reproducible builds
+

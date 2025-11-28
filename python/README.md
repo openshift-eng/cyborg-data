@@ -6,6 +6,26 @@ This library provides thread-safe access to organizational data including employ
 
 ## Installation
 
+### Using UV (Recommended)
+
+[UV](https://github.com/astral-sh/uv) is a fast Python package installer.
+
+```bash
+# Install the package
+uv pip install -e .
+
+# With GCS support (recommended for production)
+uv pip install -e ".[gcs]"
+
+# Or use uv sync for development (installs dev dependencies)
+uv sync
+
+# With GCS support
+uv sync --extra gcs
+```
+
+### Using pip
+
 ```bash
 # Install from source
 pip install -e .
@@ -184,7 +204,30 @@ The `Service` class is thread-safe. All read operations can be performed concurr
 
 ## Development
 
-### Running Tests
+### Using UV (Recommended)
+
+```bash
+# Set up development environment
+uv sync
+
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov=orgdatacore --cov-report=html
+
+# Type checking
+uv run mypy orgdatacore
+
+# Code formatting
+uv run black orgdatacore tests
+uv run isort orgdatacore tests
+
+# Linting
+uv run ruff check orgdatacore tests
+```
+
+### Using pip
 
 ```bash
 # Install dev dependencies
@@ -195,17 +238,11 @@ pytest
 
 # Run tests with coverage
 pytest --cov=orgdatacore --cov-report=html
-```
 
-### Type Checking
-
-```bash
+# Type checking
 mypy orgdatacore
-```
 
-### Code Formatting
-
-```bash
+# Code formatting
 black orgdatacore tests
 isort orgdatacore tests
 ```
