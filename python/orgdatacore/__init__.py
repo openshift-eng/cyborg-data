@@ -33,14 +33,10 @@ NOTE: File-based data sources are NOT supported for production use.
 They are only available internally for testing purposes.
 """
 
-# Types and constants
 from ._types import (
-    # Enums
     MembershipType,
     OrgInfoType,
-    # Protocol
     DataSource,
-    # Data types
     Employee,
     Team,
     Org,
@@ -72,7 +68,6 @@ from ._types import (
     GCSConfig,
 )
 
-# Exceptions
 from ._exceptions import (
     OrgDataError,
     DataLoadError,
@@ -81,10 +76,8 @@ from ._exceptions import (
     ConfigurationError,
 )
 
-# Logging
 from ._log import get_logger, set_logger, configure_default_logging
 
-# Version
 from ._version import (
     __version__,
     __version_info__,
@@ -93,17 +86,10 @@ from ._version import (
     get_version_dict,
 )
 
-# Service
 from ._service import Service
-
-# Async
 from ._async import AsyncService
-
-# GCS Data Sources
 from ._gcs import GCSDataSource
 
-# Optional GCS data sources (require google-cloud-storage)
-# These are conditionally available based on whether the optional dependency is installed
 try:
     from ._gcs import GCSDataSourceWithSDK
     from ._async import AsyncGCSDataSource
@@ -112,7 +98,6 @@ except ImportError:
     AsyncGCSDataSource = None  # type: ignore[misc, assignment]
 
 __all__ = [
-    # Types
     "Employee",
     "Team",
     "Org",
@@ -142,29 +127,22 @@ __all__ = [
     "OrgInfo",
     "DataVersion",
     "GCSConfig",
-    # Enums
     "MembershipType",
     "OrgInfoType",
-    # Protocol
     "DataSource",
-    # Service
     "Service",
     "AsyncService",
-    # Data Sources
     "GCSDataSource",
-    "GCSDataSourceWithSDK",  # Optional: requires google-cloud-storage
-    "AsyncGCSDataSource",  # Optional: requires google-cloud-storage
-    # Exceptions
+    "GCSDataSourceWithSDK",
+    "AsyncGCSDataSource",
     "OrgDataError",
     "DataLoadError",
     "DataSourceError",
     "GCSError",
     "ConfigurationError",
-    # Logging
     "get_logger",
     "set_logger",
     "configure_default_logging",
-    # Version
     "__version__",
     "__version_info__",
     "API_VERSION",

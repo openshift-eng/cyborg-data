@@ -248,7 +248,6 @@ def _parse_relationship_info(data: dict[str, Any]) -> RelationshipInfo:
 
 def _parse_data(raw_data: dict[str, Any]) -> Data:
     """Parse the complete Data structure from JSON."""
-    # Parse metadata
     metadata_raw = raw_data.get("metadata", {})
     metadata = Metadata(
         generated_at=metadata_raw.get("generated_at", ""),
@@ -258,7 +257,6 @@ def _parse_data(raw_data: dict[str, Any]) -> Data:
         total_teams=metadata_raw.get("total_teams", 0),
     )
 
-    # Parse lookups
     lookups_raw = raw_data.get("lookups", {})
     lookups = Lookups(
         employees={k: _parse_employee(v) for k, v in lookups_raw.get("employees", {}).items()},
@@ -268,18 +266,15 @@ def _parse_data(raw_data: dict[str, Any]) -> Data:
         team_groups={k: _parse_team_group(v) for k, v in lookups_raw.get("team_groups", {}).items()},
     )
 
-    # Parse indexes
     indexes_raw = raw_data.get("indexes", {})
     membership_raw = indexes_raw.get("membership", {})
-    
-    # Parse membership index
+
     membership_index_raw = membership_raw.get("membership_index", {})
     membership_index = {
         k: tuple(_parse_membership_info(m) for m in v)
         for k, v in membership_index_raw.items()
     }
-    
-    # Parse relationship index
+
     relationship_index_raw = membership_raw.get("relationship_index", {})
     relationship_index = {}
     for category, items in relationship_index_raw.items():
@@ -346,7 +341,6 @@ class Service:
         self._data: Data | None = None
         self._version = DataVersion()
 
-        # Support constructor injection
         if data_source is not None:
             self.load_from_data_source(data_source)
 
@@ -411,11 +405,8 @@ class Service:
             DataLoadError: If initial load fails.
         """
         logger = get_logger()
-
-        # Perform initial load
         self.load_from_data_source(source)
 
-        # Define callback for reload
         def callback() -> Optional[Exception]:
             try:
                 logger.info("Reloading data from source", extra={"source": str(source)})
@@ -425,7 +416,6 @@ class Service:
                 logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
                 return e
 
-        # Start watcher
         logger.info("Starting data source watcher", extra={"source": str(source)})
         err = source.watch(callback)
         if err:
@@ -433,41 +423,16 @@ class Service:
             raise err
 
     def is_healthy(self) -> bool:
-        """Check if the service is healthy and has data loaded.
-
-        Useful for Kubernetes liveness/readiness probes.
-
-        Returns:
-            True if data is loaded and service is operational.
-
-        Example:
-            # In a health check endpoint
-            @app.get("/healthz")
-            def health():
-                if not service.is_healthy():
-                    return {"status": "unhealthy"}, 503
-                return {"status": "healthy"}
-        """
+        """Check if the service is healthy and has data loaded."""
         with self._lock:
             return self._data is not None
 
     def is_ready(self) -> bool:
-        """Check if the service is ready to serve requests.
-
-        More thorough than is_healthy - checks that data is loaded
-        and contains expected content.
-
-        Returns:
-            True if service is ready to serve requests.
-        """
+        """Check if the service is ready to serve requests."""
         with self._lock:
             if self._data is None:
                 return False
-            # Verify we have the expected data structures
-            return (
-                self._data.lookups is not None
-                and self._data.indexes is not None
-            )
+            return self._data.lookups is not None and self._data.indexes is not None
 
     def get_version(self) -> DataVersion:
         """Get the current data version."""
@@ -519,16 +484,10 @@ class Service:
             if self._data is None or not self._data.lookups.employees:
                 return None
 
-            # Get the employee first
             emp = self._data.lookups.employees.get(uid)
-            if not emp:
+            if not emp or not emp.manager_uid:
                 return None
 
-            # Check if employee has a manager
-            if not emp.manager_uid:
-                return None
-
-            # Look up the manager
             return self._data.lookups.employees.get(emp.manager_uid)
 
     def get_team_by_name(self, team_name: str) -> Optional[Team]:
@@ -589,14 +548,11 @@ class Service:
             if not team:
                 return []
 
-            # Get employee objects for each UID
-            members = []
-            for uid in team.group.resolved_people_uid_list:
-                emp = self._data.lookups.employees.get(uid)
-                if emp:
-                    members.append(emp)
-
-            return members
+            return [
+                emp
+                for uid in team.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
 
     def is_employee_in_team(self, uid: str, team_name: str) -> bool:
         """Check if an employee is in a specific team."""
@@ -617,20 +573,15 @@ class Service:
                 return False
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
-
-            # Get relationship index once
-            relationship_index = self._data.indexes.membership.relationship_index
-            teams_index = relationship_index.get("teams", {})
+            teams_index = self._data.indexes.membership.relationship_index.get("teams", {})
 
             for membership in memberships:
                 if membership.type == MembershipType.ORG and membership.name == org_name:
                     return True
                 elif membership.type == MembershipType.TEAM:
-                    # Check if team belongs to the specified org through relationship index
-                    team_relationships = teams_index.get(membership.name)
-                    if team_relationships:
-                        if org_name in team_relationships.ancestry.orgs:
-                            return True
+                    team_rel = teams_index.get(membership.name)
+                    if team_rel and org_name in team_rel.ancestry.orgs:
+                        return True
 
             return False
 
@@ -653,80 +604,42 @@ class Service:
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             orgs: list[OrgInfo] = []
-            seen_items: set[str] = set()
-
-            # Get relationship index once
-            relationship_index = self._data.indexes.membership.relationship_index
-            teams_index = relationship_index.get("teams", {})
+            seen: set[str] = set()
+            teams_index = self._data.indexes.membership.relationship_index.get("teams", {})
 
             for membership in memberships:
                 if membership.type == MembershipType.ORG:
-                    # Direct organization membership
-                    if membership.name not in seen_items:
-                        orgs.append(OrgInfo(
-                            name=membership.name,
-                            type=OrgInfoType.ORGANIZATION,
-                        ))
-                        seen_items.add(membership.name)
-                elif membership.type == MembershipType.TEAM:
-                    # Add the team membership itself
-                    if membership.name not in seen_items:
-                        orgs.append(OrgInfo(
-                            name=membership.name,
-                            type=OrgInfoType.TEAM,
-                        ))
-                        seen_items.add(membership.name)
+                    if membership.name not in seen:
+                        orgs.append(OrgInfo(name=membership.name, type=OrgInfoType.ORGANIZATION))
+                        seen.add(membership.name)
 
-                    # Get team's hierarchy directly from relationship index
-                    team_relationships = teams_index.get(membership.name)
-                    if team_relationships:
-                        # Add all ancestry items
-                        self._add_ancestry_items(orgs, seen_items, team_relationships.ancestry)
+                elif membership.type == MembershipType.TEAM:
+                    if membership.name not in seen:
+                        orgs.append(OrgInfo(name=membership.name, type=OrgInfoType.TEAM))
+                        seen.add(membership.name)
+
+                    team_rel = teams_index.get(membership.name)
+                    if team_rel:
+                        self._add_ancestry_items(orgs, seen, team_rel.ancestry)
 
             return orgs
 
     def _add_ancestry_items(
         self,
         orgs: list[OrgInfo],
-        seen_items: set[str],
+        seen: set[str],
         ancestry: Ancestry,
     ) -> None:
-        """Add all ancestry items to the orgs list, avoiding duplicates."""
-        # Add organizations
-        for org_name in ancestry.orgs:
-            if org_name not in seen_items:
-                orgs.append(OrgInfo(
-                    name=org_name,
-                    type=OrgInfoType.ORGANIZATION,
-                ))
-                seen_items.add(org_name)
-
-        # Add pillars
-        for pillar_name in ancestry.pillars:
-            if pillar_name not in seen_items:
-                orgs.append(OrgInfo(
-                    name=pillar_name,
-                    type=OrgInfoType.PILLAR,
-                ))
-                seen_items.add(pillar_name)
-
-        # Add team groups
-        for team_group_name in ancestry.team_groups:
-            if team_group_name not in seen_items:
-                orgs.append(OrgInfo(
-                    name=team_group_name,
-                    type=OrgInfoType.TEAM_GROUP,
-                ))
-                seen_items.add(team_group_name)
-
-        # Add parent teams
-        for parent_team_name in ancestry.teams:
-            if parent_team_name not in seen_items:
-                orgs.append(OrgInfo(
-                    name=parent_team_name,
-                    type=OrgInfoType.PARENT_TEAM,
-                ))
-                seen_items.add(parent_team_name)
+        """Add ancestry items to the orgs list, avoiding duplicates."""
+        for name, org_type in [
+            *((n, OrgInfoType.ORGANIZATION) for n in ancestry.orgs),
+            *((n, OrgInfoType.PILLAR) for n in ancestry.pillars),
+            *((n, OrgInfoType.TEAM_GROUP) for n in ancestry.team_groups),
+            *((n, OrgInfoType.PARENT_TEAM) for n in ancestry.teams),
+        ]:
+            if name not in seen:
+                orgs.append(OrgInfo(name=name, type=org_type))
+                seen.add(name)
 
     def _get_uid_from_slack_id(self, slack_id: str) -> str:
         """Get the UID for a given Slack ID."""
