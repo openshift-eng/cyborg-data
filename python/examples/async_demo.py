@@ -29,7 +29,7 @@ from orgdatacore import (
 
 # Optional: import async GCS data source if available
 try:
-    from orgdatacore.async_datasources import AsyncGCSDataSource
+    from orgdatacore._async import AsyncGCSDataSource
     HAS_GCS = True
 except ImportError:
     HAS_GCS = False

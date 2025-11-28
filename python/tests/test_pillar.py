@@ -3,7 +3,7 @@
 import pytest
 
 from orgdatacore import Service
-from orgdatacore.types import (
+from orgdatacore import (
     Data, Lookups, Indexes, Pillar, Group, GroupType,
     MembershipIndex, SlackIDMappings, GitHubIDMappings,
 )

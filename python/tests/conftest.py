@@ -7,7 +7,7 @@ import pytest
 from orgdatacore import Service
 
 # Import from internal testing module - NOT part of public API
-from orgdatacore.internal.testing import FileDataSource
+from orgdatacore._internal.testing import FileDataSource
 
 
 @pytest.fixture

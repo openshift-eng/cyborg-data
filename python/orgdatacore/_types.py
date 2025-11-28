@@ -1,8 +1,127 @@
-"""Type definitions for orgdatacore."""
+"""Type definitions and constants for orgdatacore."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional
+from enum import StrEnum
+from typing import BinaryIO, Callable, Final, Optional, Protocol
+
+__all__ = [
+    # Enums
+    "MembershipType",
+    "OrgInfoType",
+    # Legacy constants
+    "MEMBERSHIP_TYPE_TEAM",
+    "MEMBERSHIP_TYPE_ORG",
+    "ORG_INFO_TYPE_ORGANIZATION",
+    "ORG_INFO_TYPE_TEAM",
+    "ORG_INFO_TYPE_PILLAR",
+    "ORG_INFO_TYPE_TEAM_GROUP",
+    "ORG_INFO_TYPE_PARENT_TEAM",
+    # Data types
+    "Employee",
+    "Team",
+    "Org",
+    "Pillar",
+    "TeamGroup",
+    "Group",
+    "GroupType",
+    "Data",
+    "Metadata",
+    "Lookups",
+    "Indexes",
+    "MembershipIndex",
+    "MembershipInfo",
+    "RelationshipInfo",
+    "Ancestry",
+    "SlackIDMappings",
+    "GitHubIDMappings",
+    "SlackConfig",
+    "ChannelInfo",
+    "AliasInfo",
+    "RoleInfo",
+    "JiraInfo",
+    "RepoInfo",
+    "EmailInfo",
+    "ResourceInfo",
+    "ComponentRoleInfo",
+    "OrgInfo",
+    "DataVersion",
+    "GCSConfig",
+    # Protocols
+    "DataSource",
+]
+
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+
+class MembershipType(StrEnum):
+    """Membership types for organizational hierarchy."""
+
+    TEAM = "team"
+    ORG = "org"
+
+
+class OrgInfoType(StrEnum):
+    """Organization info types returned by get_user_organizations."""
+
+    ORGANIZATION = "Organization"
+    TEAM = "Team"
+    PILLAR = "Pillar"
+    TEAM_GROUP = "Team Group"
+    PARENT_TEAM = "Parent Team"
+
+
+# Legacy constants for backwards compatibility
+MEMBERSHIP_TYPE_TEAM: Final = MembershipType.TEAM
+MEMBERSHIP_TYPE_ORG: Final = MembershipType.ORG
+ORG_INFO_TYPE_ORGANIZATION: Final = OrgInfoType.ORGANIZATION
+ORG_INFO_TYPE_TEAM: Final = OrgInfoType.TEAM
+ORG_INFO_TYPE_PILLAR: Final = OrgInfoType.PILLAR
+ORG_INFO_TYPE_TEAM_GROUP: Final = OrgInfoType.TEAM_GROUP
+ORG_INFO_TYPE_PARENT_TEAM: Final = OrgInfoType.PARENT_TEAM
+
+
+# =============================================================================
+# Protocols
+# =============================================================================
+
+
+class DataSource(Protocol):
+    """
+    DataSource represents a source of organizational data.
+
+    Implement this protocol to create custom data sources (S3, Azure, etc.).
+    No inheritance required - just implement the methods (duck typing).
+
+    Example:
+        class S3DataSource:  # No inheritance needed!
+            def load(self) -> BinaryIO:
+                ...
+            def watch(self, callback) -> Optional[Exception]:
+                ...
+            def __str__(self) -> str:
+                return "s3://bucket/key"
+    """
+
+    def load(self) -> BinaryIO:
+        """Returns a file-like object for the organizational data JSON."""
+        ...
+
+    def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+        """Monitors for changes and calls the callback when data is updated."""
+        ...
+
+    def __str__(self) -> str:
+        """Returns a description of this data source."""
+        ...
+
+
+# =============================================================================
+# Data Types
+# =============================================================================
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,3 +409,4 @@ class GCSConfig:
     project_id: str = ""
     credentials_json: str = ""
     check_interval: timedelta = field(default_factory=lambda: timedelta(minutes=5))
+

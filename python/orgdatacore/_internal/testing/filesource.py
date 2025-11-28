@@ -13,8 +13,8 @@ import time
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-from orgdatacore.exceptions import FileSourceError
-from orgdatacore.logging import get_logger
+from orgdatacore._exceptions import FileSourceError
+from orgdatacore._log import get_logger
 
 
 class FileDataSource:

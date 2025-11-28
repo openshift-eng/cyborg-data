@@ -7,7 +7,7 @@ from typing import BinaryIO, Callable, Optional
 import pytest
 
 from orgdatacore import AsyncService, DataLoadError
-from orgdatacore.internal.testing import create_test_data_json
+from orgdatacore._internal.testing import create_test_data_json
 
 
 class AsyncFakeDataSource:

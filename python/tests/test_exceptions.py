@@ -9,7 +9,7 @@ from orgdatacore import (
     GCSError,
     ConfigurationError,
 )
-from orgdatacore.exceptions import FileSourceError
+from orgdatacore._exceptions import FileSourceError
 
 
 class TestExceptionHierarchy:

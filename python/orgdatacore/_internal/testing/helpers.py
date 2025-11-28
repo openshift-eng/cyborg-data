@@ -6,7 +6,7 @@ from typing import Any, BinaryIO, Callable, Optional
 
 # Note: We don't inherit from DataSource - it's a Protocol (structural typing)
 # Just implement the required methods: load(), watch(), __str__()
-from orgdatacore.types import (
+from orgdatacore._types import (
     Data,
     Metadata,
     Lookups,

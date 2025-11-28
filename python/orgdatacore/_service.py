@@ -3,41 +3,42 @@
 import json
 import threading
 from datetime import datetime
-from typing import Optional, Any
+from typing import Any, Optional
 
-from .constants import MembershipType, OrgInfoType
-from .exceptions import DataLoadError
-from .interface import DataSource
-from .logging import get_logger
-from .types import (
-    Data,
-    DataVersion,
-    Employee,
-    Team,
-    Org,
-    Pillar,
-    TeamGroup,
-    OrgInfo,
-    Metadata,
-    Lookups,
-    Indexes,
-    MembershipIndex,
-    MembershipInfo,
-    RelationshipInfo,
+from ._exceptions import DataLoadError
+from ._log import get_logger
+from ._types import (
+    AliasInfo,
     Ancestry,
-    SlackIDMappings,
+    ChannelInfo,
+    ComponentRoleInfo,
+    Data,
+    DataSource,
+    DataVersion,
+    EmailInfo,
+    Employee,
     GitHubIDMappings,
     Group,
     GroupType,
-    SlackConfig,
-    ChannelInfo,
-    AliasInfo,
-    RoleInfo,
+    Indexes,
     JiraInfo,
+    Lookups,
+    MembershipIndex,
+    MembershipInfo,
+    MembershipType,
+    Metadata,
+    Org,
+    OrgInfo,
+    OrgInfoType,
+    Pillar,
+    RelationshipInfo,
     RepoInfo,
-    EmailInfo,
     ResourceInfo,
-    ComponentRoleInfo,
+    RoleInfo,
+    SlackConfig,
+    SlackIDMappings,
+    Team,
+    TeamGroup,
 )
 
 

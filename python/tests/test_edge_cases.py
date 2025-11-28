@@ -10,7 +10,7 @@ import pytest
 from orgdatacore import Service
 
 # Import from internal testing module - NOT part of public API
-from orgdatacore.internal.testing import FileDataSource, FakeDataSource
+from orgdatacore._internal.testing import FileDataSource, FakeDataSource
 
 
 class TestServiceWithNoData:

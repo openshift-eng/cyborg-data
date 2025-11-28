@@ -39,9 +39,9 @@ import time
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-from .exceptions import GCSError, ConfigurationError
-from .logging import get_logger
-from .types import GCSConfig
+from ._exceptions import ConfigurationError, GCSError
+from ._log import get_logger
+from ._types import GCSConfig
 
 # Default retry configuration
 DEFAULT_MAX_RETRIES = 3

@@ -157,7 +157,7 @@ class TestNewEmployeeFields:
 
     def test_new_employee_fields(self):
         """Test that new employee fields are properly handled."""
-        from orgdatacore.types import Data, Lookups, Indexes, MembershipIndex, SlackIDMappings, GitHubIDMappings
+        from orgdatacore import Data, Lookups, Indexes, MembershipIndex, SlackIDMappings, GitHubIDMappings
         
         service = Service()
         service._data = Data(
