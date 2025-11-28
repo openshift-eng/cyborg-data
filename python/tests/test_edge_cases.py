@@ -8,10 +8,9 @@ from pathlib import Path
 import pytest
 
 from orgdatacore import Service
-from orgdatacore.test_helpers import FakeDataSource
 
 # Import from internal testing module - NOT part of public API
-from orgdatacore.internal.testing import FileDataSource
+from orgdatacore.internal.testing import FileDataSource, FakeDataSource
 
 
 class TestServiceWithNoData:
