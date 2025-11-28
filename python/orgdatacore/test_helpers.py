@@ -4,7 +4,8 @@ import json
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-from .interface import DataSource
+# Note: We don't inherit from DataSource - it's a Protocol (structural typing)
+# Just implement the required methods: load(), watch(), __str__()
 from .types import (
     Data,
     Metadata,
@@ -24,7 +25,7 @@ from .types import (
 )
 
 
-class FakeDataSource(DataSource):
+class FakeDataSource:
     """FakeDataSource implements DataSource for testing with controllable data."""
 
     def __init__(
@@ -436,4 +437,5 @@ def assert_employee_equal(
         raise AssertionError(
             f"{context}: SlackUID got {actual.slack_uid!r}, expected {expected.slack_uid!r}"
         )
+
 

@@ -248,3 +248,4 @@ class TestGroupExtendedFields:
         assert len(team.group.resources) == 1
         assert len(team.group.component_roles) == 1
 
+

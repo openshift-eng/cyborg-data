@@ -15,7 +15,7 @@ from .constants import (
     ORG_INFO_TYPE_TEAM_GROUP,
     ORG_INFO_TYPE_PARENT_TEAM,
 )
-from .interface import DataSource, ServiceInterface
+from .interface import DataSource
 from .types import (
     Data,
     DataVersion,
@@ -322,14 +322,38 @@ def _parse_data(raw_data: dict[str, Any]) -> Data:
     )
 
 
-class Service(ServiceInterface):
-    """Service implements the core organizational data service."""
+class Service:
+    """
+    Service implements the core organizational data service.
 
-    def __init__(self) -> None:
-        """Create a new organizational data service."""
+    The service can be initialized in two ways:
+
+    1. Lazy loading (matches Go API):
+        service = Service()
+        service.load_from_data_source(gcs_source)
+
+    2. Constructor injection:
+        service = Service(data_source=gcs_source)
+
+    Both approaches are equivalent. Use constructor injection for simpler code,
+    or lazy loading if you need to defer data loading.
+    """
+
+    def __init__(self, data_source: DataSource | None = None) -> None:
+        """
+        Create a new organizational data service.
+
+        Args:
+            data_source: Optional data source to load immediately.
+                        If provided, data is loaded during construction.
+        """
         self._lock = threading.RLock()
         self._data: Data | None = None
         self._version = DataVersion()
+
+        # Support constructor injection
+        if data_source is not None:
+            self.load_from_data_source(data_source)
 
     def load_from_data_source(self, source: DataSource) -> None:
         """Load organizational data from a data source."""
@@ -668,4 +692,5 @@ class Service(ServiceInterface):
             if self._data is None or not self._data.lookups.team_groups:
                 return []
             return list(self._data.lookups.team_groups.keys())
+
 

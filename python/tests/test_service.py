@@ -26,6 +26,22 @@ class TestNewService:
         assert version.employee_count == 0
         assert version.org_count == 0
 
+    def test_constructor_injection(self, test_data_path):
+        """Service should support constructor injection of data source."""
+        file_source = FileDataSource(str(test_data_path))
+        
+        # Constructor injection - data loaded immediately
+        service = Service(data_source=file_source)
+        
+        version = service.get_version()
+        assert version.employee_count == 3
+        assert version.org_count == 2
+        
+        # Data should be queryable
+        emp = service.get_employee_by_uid("jsmith")
+        assert emp is not None
+        assert emp.full_name == "John Smith"
+
 
 class TestServiceInterface:
     """Tests to ensure Service implements ServiceInterface."""

@@ -41,11 +41,12 @@ import time
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-from .interface import DataSource
+# Note: We don't inherit from DataSource - it's a Protocol (structural typing)
+# Just implement the required methods: load(), watch(), __str__()
 from .types import GCSConfig
 
 
-class GCSDataSource(DataSource):
+class GCSDataSource:
     """
     GCSDataSource is a stub for GCS support.
 
@@ -120,7 +121,7 @@ class GCSDataSource(DataSource):
 try:
     from google.cloud import storage  # type: ignore
 
-    class GCSDataSourceWithSDK(DataSource):
+    class GCSDataSourceWithSDK:
         """
         GCSDataSourceWithSDK provides actual GCS support using the Google Cloud SDK.
 

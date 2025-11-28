@@ -55,9 +55,12 @@ config = GCSConfig(
 )
 source = GCSDataSourceWithSDK(config)
 
-# Create service and load data
-service = Service()
-service.load_from_data_source(source)
+# Option 1: Constructor injection (recommended for simple cases)
+service = Service(data_source=source)
+
+# Option 2: Lazy loading (matches Go API, good for deferred loading)
+# service = Service()
+# service.load_from_data_source(source)
 
 # Query employees
 employee = service.get_employee_by_uid("jsmith")
@@ -146,15 +149,14 @@ The main class providing access to organizational data.
 - `get_all_pillar_names() -> list[str]`
 - `get_all_team_group_names() -> list[str]`
 
-### DataSource Interface
+### DataSource Protocol
 
-Implement this interface for custom storage backends:
+Implement this protocol for custom storage backends (no inheritance needed):
 
 ```python
-from orgdatacore.interface import DataSource
 from typing import BinaryIO, Callable, Optional
 
-class MyDataSource(DataSource):
+class MyDataSource:  # No inheritance needed!
     def load(self) -> BinaryIO:
         """Return a file-like object containing JSON data."""
         ...

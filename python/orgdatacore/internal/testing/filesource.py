@@ -13,10 +13,11 @@ import time
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-from orgdatacore.interface import DataSource
+# Note: We don't inherit from DataSource - it's a Protocol (structural typing)
+# Just implement the required methods: load(), watch(), __str__()
 
 
-class FileDataSource(DataSource):
+class FileDataSource:
     """
     FileDataSource loads organizational data from local files.
 
@@ -117,4 +118,5 @@ class FileDataSource(DataSource):
         if len(self.file_paths) == 1:
             return f"file:{self.file_paths[0]}"
         return f"files:{','.join(self.file_paths)}"
+
 

@@ -161,3 +161,4 @@ class TestOrgInfoTypes:
             assert actual_type == expected_type, \
                 f"Expected {name} to have type {expected_type}, got {actual_type}"
 
+

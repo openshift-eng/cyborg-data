@@ -216,3 +216,4 @@ class TestGetManagerForEmployee:
             assert result is not None
             assert result.uid == expected_manager_uid
 
+
