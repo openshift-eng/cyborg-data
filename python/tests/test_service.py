@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from orgdatacore import Service
+from orgdatacore import Service, DataLoadError
 
 # Import from internal testing module - NOT part of public API
 from orgdatacore.internal.testing import FileDataSource, FakeDataSource
@@ -98,11 +98,11 @@ class TestLoadFromDataSource:
         assert version.org_count == 2
 
     def test_load_nonexistent_file(self):
-        """Loading a nonexistent file should raise an error."""
+        """Loading a nonexistent file should raise DataLoadError."""
         service = Service()
         file_source = FileDataSource("nonexistent.json")
         
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(DataLoadError, match="file not found"):
             service.load_from_data_source(file_source)
 
     def test_load_sets_version_info(self, service: Service):
@@ -137,10 +137,10 @@ class TestInvalidJSONHandling:
     """Tests for handling invalid JSON data."""
 
     def test_invalid_json_raises_error(self, empty_service: Service):
-        """Loading invalid JSON should raise an error."""
+        """Loading invalid JSON should raise DataLoadError."""
         invalid_source = FakeDataSource(data='{"invalid": json}')
         
-        with pytest.raises(ValueError):
+        with pytest.raises(DataLoadError):
             empty_service.load_from_data_source(invalid_source)
 
     def test_service_usable_after_failed_load(self, empty_service: Service):
@@ -149,9 +149,29 @@ class TestInvalidJSONHandling:
         
         try:
             empty_service.load_from_data_source(invalid_source)
-        except ValueError:
+        except DataLoadError:
             pass
         
         # Service should have no data
         assert empty_service.get_employee_by_uid("test") is None
+
+
+class TestHealthCheck:
+    """Tests for health check methods."""
+
+    def test_is_healthy_without_data(self, empty_service: Service):
+        """Service should not be healthy without data."""
+        assert empty_service.is_healthy() is False
+
+    def test_is_healthy_with_data(self, service: Service):
+        """Service should be healthy with data loaded."""
+        assert service.is_healthy() is True
+
+    def test_is_ready_without_data(self, empty_service: Service):
+        """Service should not be ready without data."""
+        assert empty_service.is_ready() is False
+
+    def test_is_ready_with_data(self, service: Service):
+        """Service should be ready with data loaded."""
+        assert service.is_ready() is True
 

@@ -13,8 +13,8 @@ import time
 from io import BytesIO
 from typing import BinaryIO, Callable, Optional
 
-# Note: We don't inherit from DataSource - it's a Protocol (structural typing)
-# Just implement the required methods: load(), watch(), __str__()
+from orgdatacore.exceptions import FileSourceError
+from orgdatacore.logging import get_logger
 
 
 class FileDataSource:
@@ -48,29 +48,50 @@ class FileDataSource:
         self._stop_event = threading.Event()
 
     def load(self) -> BinaryIO:
-        """Load and return a reader for the organizational data file."""
+        """Load and return a reader for the organizational data file.
+
+        Returns:
+            File-like object containing the data.
+
+        Raises:
+            FileSourceError: If loading fails.
+        """
+        logger = get_logger()
+
         if not self.file_paths:
-            raise ValueError("no file paths provided")
+            raise FileSourceError("no file paths provided")
 
         # Load the primary data file (use the last path if multiple provided)
         file_path = self.file_paths[-1]
+        logger.debug("Loading from file", extra={"path": file_path})
+
         try:
             with open(file_path, "rb") as f:
                 content = f.read()
             return BytesIO(content)
         except FileNotFoundError:
-            raise FileNotFoundError(f"failed to open file {file_path}")
+            raise FileSourceError(f"file not found: {file_path}")
+        except PermissionError:
+            raise FileSourceError(f"permission denied: {file_path}")
         except IOError as e:
-            raise IOError(f"failed to read file {file_path}: {e}")
+            raise FileSourceError(f"failed to read file {file_path}: {e}")
 
     def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
         """
         Monitor for file changes and call callback when data is updated.
 
         This starts a background thread that polls for file changes.
+
+        Args:
+            callback: Function to call when files change.
+
+        Returns:
+            Exception if setup fails, None otherwise.
         """
+        logger = get_logger()
+
         if not self.file_paths:
-            return ValueError("no file paths to watch")
+            return FileSourceError("no file paths to watch")
 
         # Get initial modification times
         mod_times: dict[str, float] = {}
@@ -79,6 +100,11 @@ class FileDataSource:
                 mod_times[path] = os.path.getmtime(path)
             except OSError:
                 pass
+
+        logger.debug(
+            "Starting file watcher",
+            extra={"paths": self.file_paths, "poll_interval": self.poll_interval},
+        )
 
         def watcher() -> None:
             while not self._stop_event.is_set():
@@ -99,13 +125,13 @@ class FileDataSource:
                         pass
 
                 if changed:
+                    logger.debug("File change detected, triggering reload")
                     try:
                         callback()
-                    except Exception:
-                        # Log but don't crash the watcher
-                        pass
+                    except Exception as e:
+                        logger.error("Reload callback failed", extra={"error": str(e)})
 
-        thread = threading.Thread(target=watcher, daemon=True)
+        thread = threading.Thread(target=watcher, daemon=True, name="file-watcher")
         thread.start()
         return None
 
@@ -118,5 +144,3 @@ class FileDataSource:
         if len(self.file_paths) == 1:
             return f"file:{self.file_paths[0]}"
         return f"files:{','.join(self.file_paths)}"
-
-

@@ -2,12 +2,13 @@
 
 import json
 import threading
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any
 
 from .constants import MembershipType, OrgInfoType
+from .exceptions import DataLoadError
 from .interface import DataSource
+from .logging import get_logger
 from .types import (
     Data,
     DataVersion,
@@ -349,16 +350,36 @@ class Service:
             self.load_from_data_source(data_source)
 
     def load_from_data_source(self, source: DataSource) -> None:
-        """Load organizational data from a data source."""
-        reader = source.load()
+        """Load organizational data from a data source.
+
+        Args:
+            source: Data source to load from.
+
+        Raises:
+            DataLoadError: If loading or parsing fails.
+        """
+        logger = get_logger()
+        logger.debug("Loading data from source", extra={"source": str(source)})
+
+        try:
+            reader = source.load()
+        except Exception as e:
+            logger.error("Failed to load from data source", extra={"source": str(source), "error": str(e)})
+            raise DataLoadError(f"failed to load from data source {source}: {e}") from e
+
         try:
             raw_data = json.load(reader)
         except json.JSONDecodeError as e:
-            raise ValueError(f"failed to parse JSON from source {source}: {e}")
+            logger.error("Failed to parse JSON", extra={"source": str(source), "error": str(e)})
+            raise DataLoadError(f"failed to parse JSON from source {source}: {e}") from e
         finally:
             reader.close()
 
-        org_data = _parse_data(raw_data)
+        try:
+            org_data = _parse_data(raw_data)
+        except Exception as e:
+            logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
+            raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
 
         with self._lock:
             self._data = org_data
@@ -368,23 +389,84 @@ class Service:
                 employee_count=len(org_data.lookups.employees),
             )
 
+        logger.info(
+            "Data loaded successfully",
+            extra={
+                "source": str(source),
+                "employee_count": self._version.employee_count,
+                "org_count": self._version.org_count,
+            },
+        )
+
     def start_data_source_watcher(self, source: DataSource) -> None:
-        """Start watching a data source for changes."""
+        """Start watching a data source for changes.
+
+        Performs initial load, then starts background watcher for hot reload.
+
+        Args:
+            source: Data source to watch.
+
+        Raises:
+            DataLoadError: If initial load fails.
+        """
+        logger = get_logger()
+
         # Perform initial load
         self.load_from_data_source(source)
 
         # Define callback for reload
         def callback() -> Optional[Exception]:
             try:
+                logger.info("Reloading data from source", extra={"source": str(source)})
                 self.load_from_data_source(source)
                 return None
             except Exception as e:
+                logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
                 return e
 
         # Start watcher
+        logger.info("Starting data source watcher", extra={"source": str(source)})
         err = source.watch(callback)
         if err:
+            logger.error("Failed to start watcher", extra={"source": str(source), "error": str(err)})
             raise err
+
+    def is_healthy(self) -> bool:
+        """Check if the service is healthy and has data loaded.
+
+        Useful for Kubernetes liveness/readiness probes.
+
+        Returns:
+            True if data is loaded and service is operational.
+
+        Example:
+            # In a health check endpoint
+            @app.get("/healthz")
+            def health():
+                if not service.is_healthy():
+                    return {"status": "unhealthy"}, 503
+                return {"status": "healthy"}
+        """
+        with self._lock:
+            return self._data is not None
+
+    def is_ready(self) -> bool:
+        """Check if the service is ready to serve requests.
+
+        More thorough than is_healthy - checks that data is loaded
+        and contains expected content.
+
+        Returns:
+            True if service is ready to serve requests.
+        """
+        with self._lock:
+            if self._data is None:
+                return False
+            # Verify we have the expected data structures
+            return (
+                self._data.lookups is not None
+                and self._data.indexes is not None
+            )
 
     def get_version(self) -> DataVersion:
         """Get the current data version."""

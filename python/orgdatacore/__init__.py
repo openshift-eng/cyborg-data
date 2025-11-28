@@ -109,6 +109,16 @@ from .service import Service
 
 from .datasources import GCSDataSource
 
+from .exceptions import (
+    OrgDataError,
+    DataLoadError,
+    DataSourceError,
+    GCSError,
+    ConfigurationError,
+)
+
+from .logging import get_logger, set_logger, configure_default_logging
+
 __all__ = [
     # Types
     "Employee",
@@ -158,6 +168,16 @@ __all__ = [
     "Service",
     # Data Sources - GCS is the only supported production data source
     "GCSDataSource",
+    # Exceptions
+    "OrgDataError",
+    "DataLoadError",
+    "DataSourceError",
+    "GCSError",
+    "ConfigurationError",
+    # Logging
+    "get_logger",
+    "set_logger",
+    "configure_default_logging",
 ]
 
 __version__ = "1.0.0"
