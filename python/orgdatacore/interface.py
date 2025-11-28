@@ -15,7 +15,7 @@ Example custom DataSource:
             return "s3://bucket/key"
 """
 
-from typing import Protocol, Callable, BinaryIO, Optional, runtime_checkable
+from typing import Protocol, Callable, BinaryIO, Optional
 
 from .types import (
     Employee,
@@ -28,7 +28,6 @@ from .types import (
 )
 
 
-@runtime_checkable
 class DataSource(Protocol):
     """
     DataSource represents a source of organizational data.
