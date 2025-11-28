@@ -119,6 +119,16 @@ from .exceptions import (
 
 from .logging import get_logger, set_logger, configure_default_logging
 
+from .version import (
+    __version__,
+    __version_info__,
+    API_VERSION,
+    check_api_compatibility,
+    get_version_dict,
+)
+
+from .async_service import AsyncService
+
 __all__ = [
     # Types
     "Employee",
@@ -178,6 +188,12 @@ __all__ = [
     "get_logger",
     "set_logger",
     "configure_default_logging",
+    # Version
+    "__version__",
+    "__version_info__",
+    "API_VERSION",
+    "check_api_compatibility",
+    "get_version_dict",
+    # Async
+    "AsyncService",
 ]
-
-__version__ = "1.0.0"
