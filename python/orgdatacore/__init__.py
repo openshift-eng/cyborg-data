@@ -38,14 +38,6 @@ from ._types import (
     # Enums
     MembershipType,
     OrgInfoType,
-    # Legacy constants
-    MEMBERSHIP_TYPE_TEAM,
-    MEMBERSHIP_TYPE_ORG,
-    ORG_INFO_TYPE_ORGANIZATION,
-    ORG_INFO_TYPE_TEAM,
-    ORG_INFO_TYPE_PILLAR,
-    ORG_INFO_TYPE_TEAM_GROUP,
-    ORG_INFO_TYPE_PARENT_TEAM,
     # Protocol
     DataSource,
     # Data types
@@ -156,14 +148,6 @@ __all__ = [
     # Enums
     "MembershipType",
     "OrgInfoType",
-    # Legacy constants
-    "MEMBERSHIP_TYPE_TEAM",
-    "MEMBERSHIP_TYPE_ORG",
-    "ORG_INFO_TYPE_ORGANIZATION",
-    "ORG_INFO_TYPE_TEAM",
-    "ORG_INFO_TYPE_PILLAR",
-    "ORG_INFO_TYPE_TEAM_GROUP",
-    "ORG_INFO_TYPE_PARENT_TEAM",
     # Protocol
     "DataSource",
     # Service

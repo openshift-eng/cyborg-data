@@ -3,20 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import BinaryIO, Callable, Final, Optional, Protocol
+from typing import BinaryIO, Callable, Optional, Protocol
 
 __all__ = [
     # Enums
     "MembershipType",
     "OrgInfoType",
-    # Legacy constants
-    "MEMBERSHIP_TYPE_TEAM",
-    "MEMBERSHIP_TYPE_ORG",
-    "ORG_INFO_TYPE_ORGANIZATION",
-    "ORG_INFO_TYPE_TEAM",
-    "ORG_INFO_TYPE_PILLAR",
-    "ORG_INFO_TYPE_TEAM_GROUP",
-    "ORG_INFO_TYPE_PARENT_TEAM",
     # Data types
     "Employee",
     "Team",
@@ -72,16 +64,6 @@ class OrgInfoType(StrEnum):
     PILLAR = "Pillar"
     TEAM_GROUP = "Team Group"
     PARENT_TEAM = "Parent Team"
-
-
-# Legacy constants for backwards compatibility
-MEMBERSHIP_TYPE_TEAM: Final = MembershipType.TEAM
-MEMBERSHIP_TYPE_ORG: Final = MembershipType.ORG
-ORG_INFO_TYPE_ORGANIZATION: Final = OrgInfoType.ORGANIZATION
-ORG_INFO_TYPE_TEAM: Final = OrgInfoType.TEAM
-ORG_INFO_TYPE_PILLAR: Final = OrgInfoType.PILLAR
-ORG_INFO_TYPE_TEAM_GROUP: Final = OrgInfoType.TEAM_GROUP
-ORG_INFO_TYPE_PARENT_TEAM: Final = OrgInfoType.PARENT_TEAM
 
 
 # =============================================================================
