@@ -2,7 +2,7 @@
 
 import json
 from io import BytesIO
-from typing import BinaryIO, Callable, Optional
+from typing import Any, BinaryIO, Callable, Optional
 
 # Note: We don't inherit from DataSource - it's a Protocol (structural typing)
 # Just implement the required methods: load(), watch(), __str__()
@@ -14,6 +14,8 @@ from orgdatacore.types import (
     Employee,
     Team,
     Org,
+    Pillar,
+    TeamGroup,
     Group,
     GroupType,
     MembershipIndex,
@@ -102,7 +104,7 @@ def create_test_data() -> Data:
                     type="team",
                     group=Group(
                         type=GroupType(name="team"),
-                        resolved_people_uid_list=["testuser1", "testuser2"],
+                        resolved_people_uid_list=("testuser1", "testuser2"),
                     ),
                 ),
             },
@@ -113,7 +115,7 @@ def create_test_data() -> Data:
                     type="organization",
                     group=Group(
                         type=GroupType(name="organization"),
-                        resolved_people_uid_list=["testuser1", "testuser2"],
+                        resolved_people_uid_list=("testuser1", "testuser2"),
                     ),
                 ),
             },
@@ -121,23 +123,23 @@ def create_test_data() -> Data:
         indexes=Indexes(
             membership=MembershipIndex(
                 membership_index={
-                    "testuser1": [
+                    "testuser1": (
                         MembershipInfo(name="test-squad", type="team"),
                         MembershipInfo(name="test-division", type="org"),
-                    ],
-                    "testuser2": [
+                    ),
+                    "testuser2": (
                         MembershipInfo(name="test-squad", type="team"),
                         MembershipInfo(name="test-division", type="org"),
-                    ],
+                    ),
                 },
                 relationship_index={
                     "teams": {
                         "test-squad": RelationshipInfo(
                             ancestry=Ancestry(
-                                orgs=["test-division"],
-                                teams=[],
-                                pillars=[],
-                                team_groups=[],
+                                orgs=("test-division",),
+                                teams=(),
+                                pillars=(),
+                                team_groups=(),
                             ),
                         ),
                     },
@@ -201,7 +203,7 @@ def _data_to_json(data: Data) -> str:
     return json.dumps(_data_to_dict(data))
 
 
-def _data_to_dict(data: Data) -> dict:
+def _data_to_dict(data: Data) -> dict[str, Any]:
     """Convert Data to dictionary for JSON serialization."""
     return {
         "metadata": {
@@ -232,10 +234,10 @@ def _data_to_dict(data: Data) -> dict:
                     cat: {
                         k: {
                             "ancestry": {
-                                "orgs": v.ancestry.orgs,
-                                "teams": v.ancestry.teams,
-                                "pillars": v.ancestry.pillars,
-                                "team_groups": v.ancestry.team_groups,
+                                "orgs": list(v.ancestry.orgs),
+                                "teams": list(v.ancestry.teams),
+                                "pillars": list(v.ancestry.pillars),
+                                "team_groups": list(v.ancestry.team_groups),
                             }
                         }
                         for k, v in items.items()
@@ -244,18 +246,18 @@ def _data_to_dict(data: Data) -> dict:
                 },
             },
             "slack_id_mappings": {
-                "slack_uid_to_uid": data.indexes.slack_id_mappings.slack_uid_to_uid,
+                "slack_uid_to_uid": dict(data.indexes.slack_id_mappings.slack_uid_to_uid),
             },
             "github_id_mappings": {
-                "github_id_to_uid": data.indexes.github_id_mappings.github_id_to_uid,
+                "github_id_to_uid": dict(data.indexes.github_id_mappings.github_id_to_uid),
             },
         },
     }
 
 
-def _employee_to_dict(emp: Employee) -> dict:
+def _employee_to_dict(emp: Employee) -> dict[str, Any]:
     """Convert Employee to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "uid": emp.uid,
         "full_name": emp.full_name,
         "email": emp.email,
@@ -276,11 +278,11 @@ def _employee_to_dict(emp: Employee) -> dict:
     return d
 
 
-def _group_to_dict(group: Group) -> dict:
+def _group_to_dict(group: Group) -> dict[str, Any]:
     """Convert Group to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "type": {"name": group.type.name},
-        "resolved_people_uid_list": group.resolved_people_uid_list,
+        "resolved_people_uid_list": list(group.resolved_people_uid_list),
     }
     if group.slack:
         d["slack"] = {
@@ -289,7 +291,7 @@ def _group_to_dict(group: Group) -> dict:
                     "channel": c.channel,
                     "channel_id": c.channel_id,
                     "description": c.description,
-                    "types": c.types,
+                    "types": list(c.types),
                 }
                 for c in group.slack.channels
             ],
@@ -299,7 +301,7 @@ def _group_to_dict(group: Group) -> dict:
             ],
         }
     if group.roles:
-        d["roles"] = [{"people": r.people, "types": r.types} for r in group.roles]
+        d["roles"] = [{"people": list(r.people), "types": list(r.types)} for r in group.roles]
     if group.jiras:
         d["jiras"] = [
             {
@@ -307,7 +309,7 @@ def _group_to_dict(group: Group) -> dict:
                 "component": j.component,
                 "description": j.description,
                 "view": j.view,
-                "types": j.types,
+                "types": list(j.types),
             }
             for j in group.jiras
         ]
@@ -316,16 +318,16 @@ def _group_to_dict(group: Group) -> dict:
             {
                 "repo": r.repo,
                 "description": r.description,
-                "tags": r.tags,
+                "tags": list(r.tags),
                 "path": r.path,
-                "roles": r.roles,
+                "roles": list(r.roles),
                 "branch": r.branch,
-                "types": r.types,
+                "types": list(r.types),
             }
             for r in group.repos
         ]
     if group.keywords:
-        d["keywords"] = group.keywords
+        d["keywords"] = list(group.keywords)
     if group.emails:
         d["emails"] = [
             {"address": e.address, "name": e.name, "description": e.description}
@@ -338,14 +340,14 @@ def _group_to_dict(group: Group) -> dict:
         ]
     if group.component_roles:
         d["component_roles"] = [
-            {"component": c.component, "types": c.types} for c in group.component_roles
+            {"component": c.component, "types": list(c.types)} for c in group.component_roles
         ]
     return d
 
 
-def _team_to_dict(team: Team) -> dict:
+def _team_to_dict(team: Team) -> dict[str, Any]:
     """Convert Team to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "uid": team.uid,
         "name": team.name,
         "type": team.type,
@@ -358,9 +360,9 @@ def _team_to_dict(team: Team) -> dict:
     return d
 
 
-def _org_to_dict(org: Org) -> dict:
+def _org_to_dict(org: Org) -> dict[str, Any]:
     """Convert Org to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "uid": org.uid,
         "name": org.name,
         "type": org.type,
@@ -373,9 +375,9 @@ def _org_to_dict(org: Org) -> dict:
     return d
 
 
-def _pillar_to_dict(pillar) -> dict:
+def _pillar_to_dict(pillar: Pillar) -> dict[str, Any]:
     """Convert Pillar to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "uid": pillar.uid,
         "name": pillar.name,
         "type": pillar.type,
@@ -388,9 +390,9 @@ def _pillar_to_dict(pillar) -> dict:
     return d
 
 
-def _team_group_to_dict(team_group) -> dict:
+def _team_group_to_dict(team_group: TeamGroup) -> dict[str, Any]:
     """Convert TeamGroup to dictionary."""
-    d = {
+    d: dict[str, Any] = {
         "uid": team_group.uid,
         "name": team_group.name,
         "type": team_group.type,
@@ -437,5 +439,3 @@ def assert_employee_equal(
         raise AssertionError(
             f"{context}: SlackUID got {actual.slack_uid!r}, expected {expected.slack_uid!r}"
         )
-
-

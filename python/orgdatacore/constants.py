@@ -1,6 +1,7 @@
 """Constants for orgdatacore."""
 
 from enum import StrEnum
+from typing import Final
 
 
 class MembershipType(StrEnum):
@@ -18,11 +19,11 @@ class OrgInfoType(StrEnum):
     PARENT_TEAM = "Parent Team"
 
 
-# Legacy constants for backwards compatibility
-MEMBERSHIP_TYPE_TEAM = MembershipType.TEAM
-MEMBERSHIP_TYPE_ORG = MembershipType.ORG
-ORG_INFO_TYPE_ORGANIZATION = OrgInfoType.ORGANIZATION
-ORG_INFO_TYPE_TEAM = OrgInfoType.TEAM
-ORG_INFO_TYPE_PILLAR = OrgInfoType.PILLAR
-ORG_INFO_TYPE_TEAM_GROUP = OrgInfoType.TEAM_GROUP
-ORG_INFO_TYPE_PARENT_TEAM = OrgInfoType.PARENT_TEAM
+# Legacy constants for backwards compatibility (type-safe with Final)
+MEMBERSHIP_TYPE_TEAM: Final = MembershipType.TEAM
+MEMBERSHIP_TYPE_ORG: Final = MembershipType.ORG
+ORG_INFO_TYPE_ORGANIZATION: Final = OrgInfoType.ORGANIZATION
+ORG_INFO_TYPE_TEAM: Final = OrgInfoType.TEAM
+ORG_INFO_TYPE_PILLAR: Final = OrgInfoType.PILLAR
+ORG_INFO_TYPE_TEAM_GROUP: Final = OrgInfoType.TEAM_GROUP
+ORG_INFO_TYPE_PARENT_TEAM: Final = OrgInfoType.PARENT_TEAM

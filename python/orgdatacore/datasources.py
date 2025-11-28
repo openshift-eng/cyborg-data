@@ -119,7 +119,7 @@ class GCSDataSource:
 
 # Optional: GCS implementation with actual SDK support
 try:
-    from google.cloud import storage  # type: ignore
+    from google.cloud import storage
 
     class GCSDataSourceWithSDK:
         """
