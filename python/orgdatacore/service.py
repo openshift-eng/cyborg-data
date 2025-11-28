@@ -6,15 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any
 
-from .constants import (
-    MEMBERSHIP_TYPE_TEAM,
-    MEMBERSHIP_TYPE_ORG,
-    ORG_INFO_TYPE_ORGANIZATION,
-    ORG_INFO_TYPE_TEAM,
-    ORG_INFO_TYPE_PILLAR,
-    ORG_INFO_TYPE_TEAM_GROUP,
-    ORG_INFO_TYPE_PARENT_TEAM,
-)
+from .constants import MembershipType, OrgInfoType
 from .interface import DataSource
 from .types import (
     Data,
@@ -77,7 +69,7 @@ def _parse_channel_info(data: dict[str, Any]) -> ChannelInfo:
         channel=data.get("channel", ""),
         channel_id=data.get("channel_id", ""),
         description=data.get("description", ""),
-        types=data.get("types", []),
+        types=tuple(data.get("types", [])),
     )
 
 
@@ -94,16 +86,16 @@ def _parse_slack_config(data: dict[str, Any] | None) -> SlackConfig | None:
     if not data:
         return None
     return SlackConfig(
-        channels=[_parse_channel_info(c) for c in data.get("channels", [])],
-        aliases=[_parse_alias_info(a) for a in data.get("aliases", [])],
+        channels=tuple(_parse_channel_info(c) for c in data.get("channels", [])),
+        aliases=tuple(_parse_alias_info(a) for a in data.get("aliases", [])),
     )
 
 
 def _parse_role_info(data: dict[str, Any]) -> RoleInfo:
     """Parse a RoleInfo from a dictionary."""
     return RoleInfo(
-        people=data.get("people", []),
-        types=data.get("types", []),
+        people=tuple(data.get("people", [])),
+        types=tuple(data.get("types", [])),
     )
 
 
@@ -114,7 +106,7 @@ def _parse_jira_info(data: dict[str, Any]) -> JiraInfo:
         component=data.get("component", ""),
         description=data.get("description", ""),
         view=data.get("view", ""),
-        types=data.get("types", []),
+        types=tuple(data.get("types", [])),
     )
 
 
@@ -123,11 +115,11 @@ def _parse_repo_info(data: dict[str, Any]) -> RepoInfo:
     return RepoInfo(
         repo=data.get("repo", ""),
         description=data.get("description", ""),
-        tags=data.get("tags", []),
+        tags=tuple(data.get("tags", [])),
         path=data.get("path", ""),
-        roles=data.get("roles", []),
+        roles=tuple(data.get("roles", [])),
         branch=data.get("branch", ""),
-        types=data.get("types", []),
+        types=tuple(data.get("types", [])),
     )
 
 
@@ -153,7 +145,7 @@ def _parse_component_role_info(data: dict[str, Any]) -> ComponentRoleInfo:
     """Parse a ComponentRoleInfo from a dictionary."""
     return ComponentRoleInfo(
         component=data.get("component", ""),
-        types=data.get("types", []),
+        types=tuple(data.get("types", [])),
     )
 
 
@@ -163,17 +155,17 @@ def _parse_group(data: dict[str, Any] | None) -> Group:
         return Group()
     return Group(
         type=_parse_group_type(data.get("type")),
-        resolved_people_uid_list=data.get("resolved_people_uid_list", []),
+        resolved_people_uid_list=tuple(data.get("resolved_people_uid_list", [])),
         slack=_parse_slack_config(data.get("slack")),
-        roles=[_parse_role_info(r) for r in data.get("roles", [])],
-        jiras=[_parse_jira_info(j) for j in data.get("jiras", [])],
-        repos=[_parse_repo_info(r) for r in data.get("repos", [])],
-        keywords=data.get("keywords", []),
-        emails=[_parse_email_info(e) for e in data.get("emails", [])],
-        resources=[_parse_resource_info(r) for r in data.get("resources", [])],
-        component_roles=[
+        roles=tuple(_parse_role_info(r) for r in data.get("roles", [])),
+        jiras=tuple(_parse_jira_info(j) for j in data.get("jiras", [])),
+        repos=tuple(_parse_repo_info(r) for r in data.get("repos", [])),
+        keywords=tuple(data.get("keywords", [])),
+        emails=tuple(_parse_email_info(e) for e in data.get("emails", [])),
+        resources=tuple(_parse_resource_info(r) for r in data.get("resources", [])),
+        component_roles=tuple(
             _parse_component_role_info(c) for c in data.get("component_roles", [])
-        ],
+        ),
     )
 
 
@@ -238,10 +230,10 @@ def _parse_ancestry(data: dict[str, Any] | None) -> Ancestry:
     if not data:
         return Ancestry()
     return Ancestry(
-        orgs=data.get("orgs", []),
-        teams=data.get("teams", []),
-        pillars=data.get("pillars", []),
-        team_groups=data.get("team_groups", []),
+        orgs=tuple(data.get("orgs", [])),
+        teams=tuple(data.get("teams", [])),
+        pillars=tuple(data.get("pillars", [])),
+        team_groups=tuple(data.get("team_groups", [])),
     )
 
 
@@ -281,7 +273,7 @@ def _parse_data(raw_data: dict[str, Any]) -> Data:
     # Parse membership index
     membership_index_raw = membership_raw.get("membership_index", {})
     membership_index = {
-        k: [_parse_membership_info(m) for m in v]
+        k: tuple(_parse_membership_info(m) for m in v)
         for k, v in membership_index_raw.items()
     }
     
@@ -339,13 +331,14 @@ class Service:
     or lazy loading if you need to defer data loading.
     """
 
-    def __init__(self, data_source: DataSource | None = None) -> None:
+    def __init__(self, *, data_source: DataSource | None = None) -> None:
         """
         Create a new organizational data service.
 
         Args:
             data_source: Optional data source to load immediately.
                         If provided, data is loaded during construction.
+                        Must be passed as keyword argument.
         """
         self._lock = threading.RLock()
         self._data: Data | None = None
@@ -489,10 +482,10 @@ class Service:
             if self._data is None or not self._data.indexes.membership.membership_index:
                 return []
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, [])
+            memberships = self._data.indexes.membership.membership_index.get(uid, ())
             teams = []
             for membership in memberships:
-                if membership.type == MEMBERSHIP_TYPE_TEAM:
+                if membership.type == MembershipType.TEAM:
                     teams.append(membership.name)
             return teams
 
@@ -540,16 +533,16 @@ class Service:
             if self._data is None or not self._data.indexes.membership.membership_index:
                 return False
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, [])
+            memberships = self._data.indexes.membership.membership_index.get(uid, ())
 
             # Get relationship index once
             relationship_index = self._data.indexes.membership.relationship_index
             teams_index = relationship_index.get("teams", {})
 
             for membership in memberships:
-                if membership.type == MEMBERSHIP_TYPE_ORG and membership.name == org_name:
+                if membership.type == MembershipType.ORG and membership.name == org_name:
                     return True
-                elif membership.type == MEMBERSHIP_TYPE_TEAM:
+                elif membership.type == MembershipType.TEAM:
                     # Check if team belongs to the specified org through relationship index
                     team_relationships = teams_index.get(membership.name)
                     if team_relationships:
@@ -575,7 +568,7 @@ class Service:
             if not uid:
                 return []
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, [])
+            memberships = self._data.indexes.membership.membership_index.get(uid, ())
             orgs: list[OrgInfo] = []
             seen_items: set[str] = set()
 
@@ -584,20 +577,20 @@ class Service:
             teams_index = relationship_index.get("teams", {})
 
             for membership in memberships:
-                if membership.type == MEMBERSHIP_TYPE_ORG:
+                if membership.type == MembershipType.ORG:
                     # Direct organization membership
                     if membership.name not in seen_items:
                         orgs.append(OrgInfo(
                             name=membership.name,
-                            type=ORG_INFO_TYPE_ORGANIZATION,
+                            type=OrgInfoType.ORGANIZATION,
                         ))
                         seen_items.add(membership.name)
-                elif membership.type == MEMBERSHIP_TYPE_TEAM:
+                elif membership.type == MembershipType.TEAM:
                     # Add the team membership itself
                     if membership.name not in seen_items:
                         orgs.append(OrgInfo(
                             name=membership.name,
-                            type=ORG_INFO_TYPE_TEAM,
+                            type=OrgInfoType.TEAM,
                         ))
                         seen_items.add(membership.name)
 
@@ -621,7 +614,7 @@ class Service:
             if org_name not in seen_items:
                 orgs.append(OrgInfo(
                     name=org_name,
-                    type=ORG_INFO_TYPE_ORGANIZATION,
+                    type=OrgInfoType.ORGANIZATION,
                 ))
                 seen_items.add(org_name)
 
@@ -630,7 +623,7 @@ class Service:
             if pillar_name not in seen_items:
                 orgs.append(OrgInfo(
                     name=pillar_name,
-                    type=ORG_INFO_TYPE_PILLAR,
+                    type=OrgInfoType.PILLAR,
                 ))
                 seen_items.add(pillar_name)
 
@@ -639,7 +632,7 @@ class Service:
             if team_group_name not in seen_items:
                 orgs.append(OrgInfo(
                     name=team_group_name,
-                    type=ORG_INFO_TYPE_TEAM_GROUP,
+                    type=OrgInfoType.TEAM_GROUP,
                 ))
                 seen_items.add(team_group_name)
 
@@ -648,7 +641,7 @@ class Service:
             if parent_team_name not in seen_items:
                 orgs.append(OrgInfo(
                     name=parent_team_name,
-                    type=ORG_INFO_TYPE_PARENT_TEAM,
+                    type=OrgInfoType.PARENT_TEAM,
                 ))
                 seen_items.add(parent_team_name)
 

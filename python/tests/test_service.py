@@ -26,10 +26,10 @@ class TestNewService:
         assert version.org_count == 0
 
     def test_constructor_injection(self, test_data_path):
-        """Service should support constructor injection of data source."""
+        """Service should support constructor injection of data source (keyword-only)."""
         file_source = FileDataSource(str(test_data_path))
         
-        # Constructor injection - data loaded immediately
+        # Constructor injection - must use keyword argument
         service = Service(data_source=file_source)
         
         version = service.get_version()

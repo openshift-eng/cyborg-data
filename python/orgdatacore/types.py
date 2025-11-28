@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Employee:
     """Represents an employee in the organizational data."""
 
@@ -21,17 +21,17 @@ class Employee:
     is_people_manager: bool = False
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ChannelInfo:
     """Represents a Slack channel configuration."""
 
     channel: str = ""
     channel_id: str = ""
     description: str = ""
-    types: list[str] = field(default_factory=list)
+    types: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class AliasInfo:
     """Represents a Slack alias configuration."""
 
@@ -39,23 +39,23 @@ class AliasInfo:
     description: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SlackConfig:
     """Contains Slack channel and alias configuration."""
 
-    channels: list[ChannelInfo] = field(default_factory=list)
-    aliases: list[AliasInfo] = field(default_factory=list)
+    channels: tuple[ChannelInfo, ...] = ()
+    aliases: tuple[AliasInfo, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class RoleInfo:
     """Represents a role assignment with associated people."""
 
-    people: list[str] = field(default_factory=list)
-    types: list[str] = field(default_factory=list)
+    people: tuple[str, ...] = ()
+    types: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class JiraInfo:
     """Represents Jira project/component configuration."""
 
@@ -63,23 +63,23 @@ class JiraInfo:
     component: str = ""
     description: str = ""
     view: str = ""
-    types: list[str] = field(default_factory=list)
+    types: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class RepoInfo:
     """Represents GitHub repository configuration."""
 
     repo: str = ""
     description: str = ""
-    tags: list[str] = field(default_factory=list)
+    tags: tuple[str, ...] = ()
     path: str = ""
-    roles: list[str] = field(default_factory=list)
+    roles: tuple[str, ...] = ()
     branch: str = ""
-    types: list[str] = field(default_factory=list)
+    types: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class EmailInfo:
     """Represents an email configuration."""
 
@@ -88,7 +88,7 @@ class EmailInfo:
     description: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ResourceInfo:
     """Represents a resource/documentation link."""
 
@@ -97,38 +97,38 @@ class ResourceInfo:
     description: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ComponentRoleInfo:
     """Represents component ownership information."""
 
     component: str = ""
-    types: list[str] = field(default_factory=list)
+    types: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class GroupType:
     """Contains group type information."""
 
     name: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Group:
     """Contains group metadata and configuration."""
 
     type: GroupType = field(default_factory=GroupType)
-    resolved_people_uid_list: list[str] = field(default_factory=list)
+    resolved_people_uid_list: tuple[str, ...] = ()
     slack: Optional[SlackConfig] = None
-    roles: list[RoleInfo] = field(default_factory=list)
-    jiras: list[JiraInfo] = field(default_factory=list)
-    repos: list[RepoInfo] = field(default_factory=list)
-    keywords: list[str] = field(default_factory=list)
-    emails: list[EmailInfo] = field(default_factory=list)
-    resources: list[ResourceInfo] = field(default_factory=list)
-    component_roles: list[ComponentRoleInfo] = field(default_factory=list)
+    roles: tuple[RoleInfo, ...] = ()
+    jiras: tuple[JiraInfo, ...] = ()
+    repos: tuple[RepoInfo, ...] = ()
+    keywords: tuple[str, ...] = ()
+    emails: tuple[EmailInfo, ...] = ()
+    resources: tuple[ResourceInfo, ...] = ()
+    component_roles: tuple[ComponentRoleInfo, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Team:
     """Represents a team in the organizational data."""
 
@@ -140,7 +140,7 @@ class Team:
     group: Group = field(default_factory=Group)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Org:
     """Represents an organization in the organizational data."""
 
@@ -152,7 +152,7 @@ class Org:
     group: Group = field(default_factory=Group)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Pillar:
     """Represents a pillar in the organizational hierarchy."""
 
@@ -164,7 +164,7 @@ class Pillar:
     group: Group = field(default_factory=Group)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class TeamGroup:
     """Represents a team group in the organizational hierarchy."""
 
@@ -176,7 +176,7 @@ class TeamGroup:
     group: Group = field(default_factory=Group)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Metadata:
     """Contains summary information about the data."""
 
@@ -187,7 +187,7 @@ class Metadata:
     total_teams: int = 0
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Lookups:
     """Contains the main data objects."""
 
@@ -198,7 +198,7 @@ class Lookups:
     team_groups: dict[str, TeamGroup] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class MembershipInfo:
     """Represents a membership entry with name and type."""
 
@@ -206,48 +206,46 @@ class MembershipInfo:
     type: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Ancestry:
     """Represents ancestry information."""
 
-    orgs: list[str] = field(default_factory=list)
-    teams: list[str] = field(default_factory=list)
-    pillars: list[str] = field(default_factory=list)
-    team_groups: list[str] = field(default_factory=list)
+    orgs: tuple[str, ...] = ()
+    teams: tuple[str, ...] = ()
+    pillars: tuple[str, ...] = ()
+    team_groups: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class RelationshipInfo:
     """Represents relationship information with ancestry."""
 
     ancestry: Ancestry = field(default_factory=Ancestry)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class MembershipIndex:
     """Represents the membership index structure."""
 
-    membership_index: dict[str, list[MembershipInfo]] = field(default_factory=dict)
-    relationship_index: dict[str, dict[str, RelationshipInfo]] = field(
-        default_factory=dict
-    )
+    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(default_factory=dict)
+    relationship_index: dict[str, dict[str, RelationshipInfo]] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SlackIDMappings:
     """Contains Slack ID to UID mappings."""
 
     slack_uid_to_uid: dict[str, str] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class GitHubIDMappings:
     """Contains GitHub ID to UID mappings."""
 
     github_id_to_uid: dict[str, str] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Indexes:
     """Contains pre-computed lookup tables."""
 
@@ -256,7 +254,7 @@ class Indexes:
     github_id_mappings: GitHubIDMappings = field(default_factory=GitHubIDMappings)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Data:
     """Represents the comprehensive organizational data structure."""
 
@@ -265,7 +263,7 @@ class Data:
     indexes: Indexes = field(default_factory=Indexes)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class OrgInfo:
     """Represents organization information for a user."""
 
@@ -273,7 +271,7 @@ class OrgInfo:
     type: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class DataVersion:
     """Tracks the version of loaded data for hot reload."""
 
@@ -283,7 +281,7 @@ class DataVersion:
     employee_count: int = 0
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class GCSConfig:
     """Represents Google Cloud Storage configuration for data loading."""
 
@@ -292,5 +290,3 @@ class GCSConfig:
     project_id: str = ""
     credentials_json: str = ""
     check_interval: timedelta = field(default_factory=lambda: timedelta(minutes=5))
-
-

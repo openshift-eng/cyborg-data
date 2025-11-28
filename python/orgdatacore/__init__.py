@@ -91,6 +91,9 @@ from .types import (
 )
 
 from .constants import (
+    MembershipType,
+    OrgInfoType,
+    # Legacy constants for backwards compatibility
     MEMBERSHIP_TYPE_TEAM,
     MEMBERSHIP_TYPE_ORG,
     ORG_INFO_TYPE_ORGANIZATION,
@@ -137,7 +140,10 @@ __all__ = [
     "OrgInfo",
     "DataVersion",
     "GCSConfig",
-    # Constants
+    # Enums (modern)
+    "MembershipType",
+    "OrgInfoType",
+    # Constants (legacy, for backwards compatibility)
     "MEMBERSHIP_TYPE_TEAM",
     "MEMBERSHIP_TYPE_ORG",
     "ORG_INFO_TYPE_ORGANIZATION",
