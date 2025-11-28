@@ -37,7 +37,7 @@ func TestGetEmployeeByUID(t *testing.T) {
 				JobTitle:        "Team Lead",
 				SlackUID:        "U87654321",
 				GitHubID:        "alice-codes",
-				IsPeopleManager: true, x,
+				IsPeopleManager: true,
 			},
 		},
 		{
