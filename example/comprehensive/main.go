@@ -2,24 +2,30 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
 	orgdatacore "github.com/openshift-eng/cyborg-data"
 )
 
 func main() {
 	// Set up structured logging for the demo
-	logger := stdr.New(log.New(os.Stdout, "[DEMO] ", 0))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 	orgdatacore.SetLogger(logger)
 
 	logger.Info("=== Organizational Data Core Package Demo ===")
 
-	// Create a new service
-	service := orgdatacore.NewService()
+	// Show version info
+	versionInfo := orgdatacore.GetVersionInfo()
+	logger.Info("Library version", "version", versionInfo.Version, "commit", versionInfo.GitCommit)
+
+	// Create a new service with options
+	service := orgdatacore.NewService(
+		orgdatacore.WithLogger(logger),
+	)
 
 	// Example 1: GCS DataSource (production data source)
 	if hasGCSConfig() {
@@ -44,7 +50,7 @@ func main() {
 		"datasources", "GCS (with -tags gcs build flag)")
 }
 
-func demonstrateService(service *orgdatacore.Service, logger logr.Logger) {
+func demonstrateService(service *orgdatacore.Service, logger *slog.Logger) {
 	// Get version info
 	version := service.GetVersion()
 	logger.Info("Data loaded",
@@ -64,7 +70,7 @@ func demonstrateService(service *orgdatacore.Service, logger logr.Logger) {
 	}
 }
 
-func demonstrateAdvancedQueries(service *orgdatacore.Service, logger logr.Logger) {
+func demonstrateAdvancedQueries(service *orgdatacore.Service, logger *slog.Logger) {
 	// Employee lookups by different IDs
 	if employee := service.GetEmployeeBySlackID("U12345678"); employee != nil {
 		logger.Info("Slack ID mapping", "slackID", "U12345678", "uid", employee.UID, "name", employee.FullName)
@@ -130,7 +136,7 @@ func hasGCSConfig() bool {
 		(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" || os.Getenv("GCS_CREDENTIALS_JSON") != "")
 }
 
-func demonstrateGCSDataSource(service *orgdatacore.Service, logger logr.Logger) {
+func demonstrateGCSDataSource(service *orgdatacore.Service, logger *slog.Logger) {
 	config := orgdatacore.GCSConfig{
 		Bucket:          getEnvDefault("GCS_BUCKET", "resolved-org"),
 		ObjectPath:      getEnvDefault("GCS_OBJECT_PATH", "orgdata/comprehensive_index_dump.json"),
@@ -143,10 +149,11 @@ func demonstrateGCSDataSource(service *orgdatacore.Service, logger logr.Logger) 
 
 	// Note: This will fail unless built with -tags gcs
 	gcsSource := orgdatacore.NewGCSDataSource(config)
+	defer gcsSource.Close()
 
 	err := service.LoadFromDataSource(context.Background(), gcsSource)
 	if err != nil {
-		logger.Error(err, "GCS load failed (expected without -tags gcs)")
+		logger.Error("GCS load failed (expected without -tags gcs)", "error", err)
 		logger.Info("To enable GCS support",
 			"step1", "go get cloud.google.com/go/storage",
 			"step2", "go build -tags gcs",
@@ -162,14 +169,14 @@ func demonstrateGCSDataSource(service *orgdatacore.Service, logger logr.Logger) 
 
 		err = service.StartDataSourceWatcher(ctx, gcsSource)
 		if err != nil {
-			logger.Error(err, "GCS watcher failed")
+			logger.Error("GCS watcher failed", "error", err)
 		} else {
 			logger.Info("Started GCS watcher (will check for updates every 5 minutes)")
 		}
 	}
 }
 
-func demonstrateGCSDataSourceStub(logger logr.Logger) {
+func demonstrateGCSDataSourceStub(logger *slog.Logger) {
 	logger.Info("GCS DataSource is the production data source")
 
 	logger.Info("GCS DataSource Configuration Example")
@@ -194,6 +201,8 @@ func demonstrateGCSDataSourceStub(logger logr.Logger) {
 	}
 
 	source := orgdatacore.NewGCSDataSource(config)
+	defer source.Close()
+
 	logger.Info("GCS DataSource stub created", "source", source.String())
 	logger.Info("Note: This stub will error until built with -tags gcs")
 }

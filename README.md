@@ -2,6 +2,8 @@
 
 This package provides the core functionality for accessing and querying organizational data in a performant, indexed manner.
 
+> **Note on Stability**: This library is currently in pre-stable development (version 0.x). While we strive for backward compatibility, breaking changes may occur between minor versions until we reach v1.0.0. Please review release notes when upgrading.
+
 ## Overview
 
 The `orgdatacore` package is designed to be a reusable component that can be consumed by multiple services including:
@@ -45,31 +47,30 @@ import (
 )
 
 func main() {
+    ctx := context.Background()
     service := orgdatacore.NewService()
 
-    // Configure GCS
-    config := orgdatacore.GCSConfig{
-        Bucket:        "orgdata-sensitive",
-        ObjectPath:    "orgdata/comprehensive_index_dump.json",
-        ProjectID:     "your-project-id",
-        CheckInterval: 5 * time.Minute,
+    // Create GCS data source with functional options
+    gcsSource, err := orgdatacore.NewGCSDataSourceWithSDK(ctx,
+        "orgdata-sensitive",                        // bucket
+        "orgdata/comprehensive_index_dump.json",    // object path
+        orgdatacore.WithProjectID("your-project-id"),
+        orgdatacore.WithCheckInterval(5*time.Minute),
         // Optional: provide service account credentials directly
-        // CredentialsJSON: `{"type":"service_account",...}`,
-    }
-
-    // Load from GCS using the SDK implementation
-    gcsSource, err := orgdatacore.NewGCSDataSourceWithSDK(context.Background(), config)
+        // orgdatacore.WithCredentialsJSON(`{"type":"service_account",...}`),
+    )
     if err != nil {
         log.Fatal(err)
     }
+    defer gcsSource.Close()
 
-    err = service.LoadFromDataSource(context.Background(), gcsSource)
+    err = service.LoadFromDataSource(ctx, gcsSource)
     if err != nil {
         log.Fatal(err)
     }
 
     // Start watching for GCS changes
-    service.StartDataSourceWatcher(context.Background(), gcsSource)
+    service.StartDataSourceWatcher(ctx, gcsSource)
 }
 ```
 
@@ -336,18 +337,30 @@ Examples of custom sources you could implement:
 
 ## Logging
 
-The package uses structured logging via the `logr` interface, making it compatible with OpenShift and Kubernetes logging standards.
+The package uses Go's standard library `log/slog` for structured logging.
 
-**Default**: Uses `stdr` (standard library logger wrapper)
+**Default**: Uses `slog.Default()`
 
-**OpenShift Integration**:
+**Custom Logger**:
 ```go
-import "k8s.io/klog/v2/klogr"
-import orgdatacore "github.com/openshift-eng/cyborg-data"
+import (
+    "log/slog"
+    "os"
+    orgdatacore "github.com/openshift-eng/cyborg-data"
+)
 
 func init() {
-    orgdatacore.SetLogger(klogr.New())
+    // JSON logging for production
+    logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    }))
+    orgdatacore.SetLogger(logger)
 }
+```
+
+**Per-Service Logger** (using functional options):
+```go
+service := orgdatacore.NewService(orgdatacore.WithLogger(myLogger))
 ```
 
 Log events include data source changes, reload operations, and error conditions with structured key-value context.
@@ -370,4 +383,3 @@ cd example/with-gcs && go build -tags gcs -o ./with-gcs .
 - Go 1.23.0+
 - Build with `-tags gcs` for production use
 - GCS SDK required for production: `cloud.google.com/go/storage`
-- `github.com/go-logr/logr` for structured logging

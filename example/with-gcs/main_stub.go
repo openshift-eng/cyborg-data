@@ -4,26 +4,33 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
-	"github.com/go-logr/stdr"
 	orgdatacore "github.com/openshift-eng/cyborg-data"
 )
 
 func main() {
 	// Set up structured logging for the demo
-	logger := stdr.New(log.New(os.Stdout, "[GCS-STUB] ", 0))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 	orgdatacore.SetLogger(logger)
 
 	logger.Info("=== GCS Example (Stub Mode) ===")
-	logger.Info("⚠ WARNING: Built without '-tags gcs'")
+	logger.Warn("Built without '-tags gcs'")
 	logger.Info("This example demonstrates the GCS API but uses a stub implementation")
 	logger.Info("For full GCS functionality, rebuild with: go build -tags gcs .")
 
-	// Create a new service
-	service := orgdatacore.NewService()
+	// Show version info
+	versionInfo := orgdatacore.GetVersionInfo()
+	logger.Info("Library version", "version", versionInfo.Version, "commit", versionInfo.GitCommit)
+
+	// Create a new service with options
+	service := orgdatacore.NewService(
+		orgdatacore.WithLogger(logger),
+	)
 
 	// Configure GCS data source
 	gcsConfig := orgdatacore.GCSConfig{
@@ -42,10 +49,11 @@ func main() {
 	// Create GCS data source (stub version)
 	logger.Info("Creating GCS data source", "bucket", gcsConfig.Bucket)
 	dataSource := orgdatacore.NewGCSDataSource(gcsConfig)
+	defer dataSource.Close()
 
 	// Load data from GCS (will fail with stub)
 	if err := service.LoadFromDataSource(ctx, dataSource); err != nil {
-		logger.Error(err, "Expected stub error")
+		logger.Error("Expected stub error", "error", err)
 		logger.Info("This is expected behavior in stub mode")
 		logger.Info("To use real GCS functionality",
 			"step1", "go get cloud.google.com/go/storage",

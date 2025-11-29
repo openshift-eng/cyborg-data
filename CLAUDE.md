@@ -79,6 +79,7 @@ This codebase uses Go build tags to optionally include GCS support:
 
 ### Files Affected by Build Tags
 - `gcs_datasource.go` - Only compiled with `//go:build gcs` tag
+- `options_gcs.go` - GCS functional options, only compiled with `//go:build gcs` tag
 - `datasources.go` - Contains stub GCSDataSource that always errors without the tag
 - `internal/testing/filesource.go` - Internal test-only FileDataSource (not public API)
 
@@ -157,15 +158,15 @@ When modifying GCS code, run: `go test -tags gcs -run TestGCS`
 
 ## Logging
 
-The package uses structured logging via `logr` interface (compatible with OpenShift/Kubernetes):
-- Default: `stdr` (stdlib wrapper)
-- Set custom logger: `orgdatacore.SetLogger(klogr.New())`
-- Helper functions in `logger.go`: `logInfo()`, `logError()`
+The package uses Go's standard library `log/slog` for structured logging:
+- Default: `slog.Default()`
+- Set custom logger: `orgdatacore.SetLogger(myLogger)`
+- Per-service logger: `orgdatacore.NewService(orgdatacore.WithLogger(logger))`
 
 When adding logging, use structured key-value pairs:
 ```go
-logInfo("Data reloaded", "source", source.String(), "employee_count", count)
-logError(err, "Failed to load data", "source", source.String())
+s.logger.Info("Data reloaded", "source", source.String(), "employee_count", count)
+s.logger.Error("Failed to load data", "source", source.String(), "error", err)
 ```
 
 ## Common Development Patterns
@@ -332,10 +333,18 @@ When adding new queries, ensure they use existing indexes rather than traversing
 ## Dependencies
 
 - Go 1.23.0+
-- Standard library only (default build)
+- Standard library only (default build) - uses `log/slog` for logging
 - Optional with `-tags gcs`:
   - `cloud.google.com/go/storage` - GCS client
-  - `github.com/go-logr/logr` - Logging interface
-  - `github.com/go-logr/stdr` - stdlib logger adapter
 
 Avoid adding new required dependencies. Optional dependencies should use build tags.
+
+## Modern Go Patterns
+
+This codebase uses idiomatic Go 1.23+ patterns:
+
+- **Sentinel Errors** (`errors.go`): Use `errors.Is()` and `errors.As()` for error handling
+- **Functional Options** (`options.go`): `NewService(opts...)` and `NewGCSDataSourceWithSDK(ctx, bucket, path, opts...)`
+- **Type-safe Enums** (`enums.go`): `MembershipType`, `OrgInfoType`, `EntityType` with validation
+- **Iterators** (`iterators.go`): Go 1.23+ `iter.Seq` for lazy iteration over large datasets
+- **Version Info** (`version.go`): Runtime version information via `GetVersionInfo()`
