@@ -4,14 +4,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`cyborg-data` (package name: `orgdatacore`) is a Go library for high-performance organizational data access. It provides O(1) lookups for employee, team, organization, pillar, and team group queries through pre-computed indexes. The library is designed to be consumed by multiple services (Slack bots, REST APIs, CLI tools) and supports hot-reload from pluggable data sources.
+`cyborg-data` (package name: `orgdatacore`) is a **multi-language library** for high-performance organizational data access, available in **Go** and **Python**. It provides O(1) lookups for employee, team, organization, pillar, and team group queries through pre-computed indexes. The library is designed to be consumed by multiple services (Slack bots, REST APIs, CLI tools) and supports hot-reload from pluggable data sources.
 
 **Key Architecture Principle**: All organizational relationships are pre-computed during indexing. No expensive tree traversals occur at query time.
 
+### Repository Structure
+
+This is a multi-language monorepo:
+- `go/` - Go implementation (module: `github.com/openshift-eng/cyborg-data/go`)
+- `python/` - Python implementation (package: `orgdatacore`)
+- `testdata/` - Shared test fixtures
+- `docs/` - Shared documentation
+- Root `Makefile` - Multi-language build orchestration
+
+**When working on features, ensure API parity between Go and Python implementations.**
+
 ## Build Commands
 
-### Basic Development
+### Multi-Language Commands (Root)
 ```bash
+# Test both Go and Python
+make test
+
+# Lint both implementations
+make lint
+
+# Build both implementations
+make build
+
+# Clean all artifacts
+make clean
+
+# Test Go only
+make go-test
+
+# Test Python only
+make python-test
+```
+
+### Go Development (in go/ directory)
+```bash
+cd go
+
 # Run all tests
 make test
 
@@ -37,8 +71,48 @@ make vendor
 make clean
 ```
 
-### Single Test Execution
+### Python Development (in python/ directory)
 ```bash
+cd python
+
+# Run all tests
+pytest
+
+# Run tests with coverage
+pytest --cov=orgdatacore --cov-report=html
+
+# Run specific test file
+pytest tests/test_service.py
+
+# Run specific test
+pytest tests/test_employee.py::test_get_employee_by_uid
+
+# Lint code
+ruff check .
+
+# Format code
+ruff format .
+
+# Type check
+mypy orgdatacore
+
+# Build package
+uv build
+
+# Install in development mode
+pip install -e .
+
+# Install with GCS support
+pip install -e ".[gcs]"
+
+# Install dev dependencies
+pip install -e ".[dev]"
+```
+
+### Single Go Test Execution (from go/ directory)
+```bash
+cd go
+
 # Run a specific test
 go test -run TestEmployeeQueries
 
@@ -58,8 +132,10 @@ go test -run TestPillar    # Pillar tests
 go test -run TestTeamGroup # Team group tests
 ```
 
-### Building Examples
+### Building Go Examples (from go/ directory)
 ```bash
+cd go
+
 # Comprehensive example (shows GCS usage)
 cd example/comprehensive && go build -o ./comprehensive .
 
@@ -339,3 +415,262 @@ When adding new queries, ensure they use existing indexes rather than traversing
   - `github.com/go-logr/stdr` - stdlib logger adapter
 
 Avoid adding new required dependencies. Optional dependencies should use build tags.
+
+---
+
+## Python Implementation Guide
+
+### Python Project Structure
+
+```
+python/
+├── orgdatacore/            # Package directory
+│   ├── __init__.py         # Public API exports
+│   ├── _service.py         # Service implementation
+│   ├── _async.py           # Async service wrapper
+│   ├── _types.py           # Data structures
+│   ├── _gcs.py             # GCS data source (optional)
+│   ├── _log.py             # Logging utilities
+│   ├── _exceptions.py      # Custom exceptions
+│   ├── _internal/          # Internal utilities
+│   └── py.typed            # PEP 561 marker for type hints
+├── tests/                  # Test files
+│   ├── test_service.py
+│   ├── test_employee.py
+│   ├── test_team.py
+│   ├── test_async.py
+│   └── conftest.py         # Pytest fixtures
+├── examples/               # Example scripts
+├── pyproject.toml          # Package configuration
+├── requirements.txt        # Runtime dependencies
+└── requirements-dev.txt    # Dev dependencies
+```
+
+### Python Testing Strategy
+
+Test files mirror the Go test structure:
+- `tests/test_service.py` - Core service functionality
+- `tests/test_employee.py` - Employee query tests
+- `tests/test_team.py` - Team membership tests
+- `tests/test_organization.py` - Organization hierarchy tests
+- `tests/test_pillar.py` - Pillar query tests
+- `tests/test_team_group.py` - Team group query tests
+- `tests/test_async.py` - Async functionality tests
+- `tests/test_edge_cases.py` - Edge cases and error scenarios
+
+### Running Specific Python Tests
+```bash
+cd python
+
+# Run employee tests
+pytest tests/test_employee.py
+
+# Run team tests
+pytest tests/test_team.py
+
+# Run async tests
+pytest tests/test_async.py
+
+# Run with verbose output
+pytest -v tests/test_service.py
+
+# Run specific test function
+pytest tests/test_employee.py::test_get_employee_by_uid -v
+```
+
+### Python Naming Conventions
+
+Python uses snake_case (PEP 8), while Go uses PascalCase/camelCase:
+
+| Go | Python |
+|----|--------|
+| `GetEmployeeByUID(uid)` | `get_employee_by_uid(uid)` |
+| `GetTeamByName(name)` | `get_team_by_name(name)` |
+| `IsEmployeeInTeam(uid, team)` | `is_employee_in_team(uid, team)` |
+| `LoadFromDataSource(ctx, src)` | `load_from_data_source(source)` |
+
+### Python Type Hints
+
+All Python code is fully typed with type hints:
+- Use `from typing import Optional, List, Dict` for type annotations
+- All public methods have type signatures
+- `mypy --strict` passes without errors
+- PEP 561 compliant with `py.typed` marker
+
+Example:
+```python
+def get_employee_by_uid(self, uid: str) -> Optional[Employee]:
+    """Get employee by UID."""
+    ...
+```
+
+### Python Async Support
+
+Python implementation includes async variants:
+```python
+from orgdatacore import AsyncService
+
+async def main():
+    service = AsyncService()
+    await service.load_from_data_source(source)
+    employee = await service.get_employee_by_uid("user123")
+```
+
+The async implementation wraps the synchronous service using `asyncio.to_thread()` for I/O operations.
+
+### Python Optional Dependencies
+
+Like Go's build tags, Python uses extras for optional dependencies:
+
+```bash
+# Base install (no GCS)
+pip install orgdatacore
+
+# With GCS support
+pip install orgdatacore[gcs]
+
+# With dev tools
+pip install orgdatacore[dev]
+```
+
+In `pyproject.toml`:
+```toml
+[project.optional-dependencies]
+gcs = ["google-cloud-storage>=2.0.0"]
+dev = ["pytest>=7.0.0", "mypy>=1.0.0", "ruff>=0.1.0"]
+```
+
+### Python Logging
+
+Python uses standard library `logging`:
+```python
+import logging
+
+logger = logging.getLogger("orgdatacore")
+logger.setLevel(logging.INFO)
+
+# In code:
+logger.info("Data loaded", extra={"source": source, "count": count})
+logger.error("Failed to load", exc_info=True)
+```
+
+### Python Development Patterns
+
+#### Adding a New Query Method
+1. Add method to `Service` class in `_service.py`
+2. Add async variant to `AsyncService` in `_async.py`
+3. Add type hints for all parameters and return types
+4. Use `self._lock` for thread safety (RLock)
+5. Check if `self._data` is None before accessing
+6. Add tests in appropriate `test_*.py` file
+7. Add docstring with description and examples
+
+#### Python Data Source Interface
+```python
+from abc import ABC, abstractmethod
+from typing import Dict, Any, Callable
+
+class DataSource(ABC):
+    @abstractmethod
+    def load(self) -> Dict[str, Any]:
+        """Load and return JSON data."""
+        pass
+
+    @abstractmethod
+    def watch(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """Watch for changes and call callback with new data."""
+        pass
+```
+
+### Ensuring API Parity
+
+When adding features to one implementation:
+
+1. **Update both Go and Python** - Feature changes must be atomic across languages
+2. **Match method signatures** - Same parameters (adjusted for naming conventions)
+3. **Same return types** - Equivalent data structures
+4. **Identical test coverage** - Port tests to both languages
+5. **Update both READMEs** - Document in `go/README.md` and `python/README.md`
+6. **Update CLAUDE.md** - Add guidance for both implementations
+
+### Python Package Version Management
+
+Python package versioning is in `pyproject.toml`:
+```toml
+[project]
+name = "orgdatacore"
+version = "1.0.0"
+```
+
+Go and Python versions can be independent:
+- Go: Tagged as `go/v1.0.0`
+- Python: Tagged as `python/v1.0.0`
+
+Or synchronized if APIs match perfectly:
+- Both: Tagged as `v1.0.0`
+
+### Python Code Quality Tools
+
+- **ruff**: Linting and formatting (replaces black, isort, flake8)
+- **mypy**: Static type checking
+- **pytest**: Testing framework
+- **pytest-cov**: Coverage reporting
+- **pytest-asyncio**: Async test support
+
+All configured in `pyproject.toml`:
+```toml
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+```
+
+### Working in the Python Codebase
+
+```bash
+# Navigate to Python directory
+cd python
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev,gcs]"
+
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=orgdatacore --cov-report=html
+
+# Lint and format
+ruff check .
+ruff format .
+
+# Type check
+mypy orgdatacore
+
+# Build distribution
+uv build
+```
+
+### Test Data Path
+
+Python tests use the shared `testdata/` directory:
+```python
+import os
+from pathlib import Path
+
+# From python/tests/
+test_data_path = Path(__file__).parent.parent.parent / "testdata" / "test_org_data.json"
+```
+
+This mirrors the Go approach of using `../testdata/` from the `go/` directory.

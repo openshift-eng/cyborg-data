@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	orgdatacore "github.com/openshift-eng/cyborg-data"
+	orgdatacore "github.com/openshift-eng/cyborg-data/go"
 )
 
 func main() {

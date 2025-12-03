@@ -3,3 +3,8 @@ build_root_image:
   namespace: openshift
   name: release
   tag: rhel-9-release-golang-1.23-openshift-4.19
+
+# Multi-language repository structure:
+# - go/     - Go implementation (go.mod at go/go.mod)
+# - python/ - Python implementation (pyproject.toml at python/pyproject.toml)
+# - testdata/ - Shared test fixtures

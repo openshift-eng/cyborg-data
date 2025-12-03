@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
+	testingsupport "github.com/openshift-eng/cyborg-data/go/internal/testing"
 )
 
 // TestFileDataSource tests the FileDataSource implementation
 func TestFileDataSource(t *testing.T) {
 	// Test with existing test data
-	testDataPath := filepath.Join("testdata", "test_org_data.json")
+	testDataPath := filepath.Join("..", "testdata", "test_org_data.json")
 
 	tests := []struct {
 		name        string
@@ -209,7 +209,7 @@ func TestDataSourceIntegrationWithService(t *testing.T) {
 	service := NewService()
 
 	// Test with file data source
-	testDataPath := filepath.Join("testdata", "test_org_data.json")
+	testDataPath := filepath.Join("..", "testdata", "test_org_data.json")
 	fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 	err := service.LoadFromDataSource(context.Background(), fileSource)

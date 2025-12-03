@@ -1,4 +1,4 @@
-module github.com/openshift-eng/cyborg-data
+module github.com/openshift-eng/cyborg-data/go
 
 go 1.23.0
 

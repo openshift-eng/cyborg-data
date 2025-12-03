@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	orgdatacore "github.com/openshift-eng/cyborg-data"
+	orgdatacore "github.com/openshift-eng/cyborg-data/go"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	}
 
 	logger.Info("Core package is ready for use!",
-		"import", "github.com/openshift-eng/cyborg-data",
+		"import", "github.com/openshift-eng/cyborg-data/go",
 		"interface", "orgdatacore.ServiceInterface",
 		"implementation", "orgdatacore.Service",
 		"datasources", "GCS (with -tags gcs build flag)")

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
+	testingsupport "github.com/openshift-eng/cyborg-data/go/internal/testing"
 )
 
 // setupBenchmarkService creates a service for benchmarking
@@ -13,7 +13,7 @@ func setupBenchmarkService(b *testing.B) *Service {
 	b.Helper()
 	service := NewService()
 
-	testDataPath := filepath.Join("testdata", "test_org_data.json")
+	testDataPath := filepath.Join("..", "testdata", "test_org_data.json")
 	fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 	if err := service.LoadFromDataSource(context.Background(), fileSource); err != nil {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	testingsupport "github.com/openshift-eng/cyborg-data/internal/testing"
+	testingsupport "github.com/openshift-eng/cyborg-data/go/internal/testing"
 )
 
 // setupTestService creates a service loaded with test data
@@ -14,7 +14,7 @@ func setupTestService(t *testing.T) *Service {
 	service := NewService()
 
 	// Load test data
-	testDataPath := filepath.Join("testdata", "test_org_data.json")
+	testDataPath := filepath.Join("..", "testdata", "test_org_data.json")
 	fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 	ctx := context.Background()
@@ -69,7 +69,7 @@ func TestLoadFromDataSource(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewService()
-			testDataPath := filepath.Join("testdata", tt.dataFile)
+			testDataPath := filepath.Join("..", "testdata", tt.dataFile)
 			fileSource := testingsupport.NewFileDataSource(testDataPath)
 
 			err := service.LoadFromDataSource(context.Background(), fileSource)

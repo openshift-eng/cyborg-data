@@ -42,7 +42,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/openshift-eng/cyborg-data"
+Homepage = "https://github.com/openshift-eng/cyborg-data/tree/main/python"
 Repository = "https://github.com/openshift-eng/cyborg-data"
 
 [tool.hatch.build.targets.wheel]
@@ -66,6 +66,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.mypy]
 python_version = "3.11"
