@@ -20,15 +20,15 @@ import asyncio
 import os
 from datetime import timedelta
 
+# Check if GCS support is available
 from orgdatacore import (
+    AsyncGCSDataSource,
     AsyncService,
     GCSConfig,
     __version__,
     configure_default_logging,
 )
 
-# Check if GCS support is available
-from orgdatacore import AsyncGCSDataSource
 HAS_GCS = AsyncGCSDataSource is not None
 
 
@@ -98,7 +98,7 @@ async def main() -> None:
 
     if teams:
         team_names = [t.name for t in teams[:5]]
-        print(f"\nFetching members for 5 teams concurrently...")
+        print("\nFetching members for 5 teams concurrently...")
 
         # This runs all 5 lookups concurrently!
         results = await asyncio.gather(

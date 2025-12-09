@@ -33,66 +33,62 @@ NOTE: File-based data sources are NOT supported for production use.
 They are only available internally for testing purposes.
 """
 
-from ._types import (
-    MembershipType,
-    OrgInfoType,
-    DataSource,
-    Employee,
-    Team,
-    Org,
-    Pillar,
-    TeamGroup,
-    Group,
-    GroupType,
-    Data,
-    Metadata,
-    Lookups,
-    Indexes,
-    MembershipIndex,
-    MembershipInfo,
-    RelationshipInfo,
-    Ancestry,
-    SlackIDMappings,
-    GitHubIDMappings,
-    SlackConfig,
-    ChannelInfo,
-    AliasInfo,
-    RoleInfo,
-    JiraInfo,
-    RepoInfo,
-    EmailInfo,
-    ResourceInfo,
-    ComponentRoleInfo,
-    OrgInfo,
-    DataVersion,
-    GCSConfig,
-)
-
+from ._async import AsyncService
 from ._exceptions import (
-    OrgDataError,
+    ConfigurationError,
     DataLoadError,
     DataSourceError,
     GCSError,
-    ConfigurationError,
+    OrgDataError,
 )
-
-from ._log import get_logger, set_logger, configure_default_logging
-
+from ._gcs import GCSDataSource
+from ._log import configure_default_logging, get_logger, set_logger
+from ._service import Service
+from ._types import (
+    AliasInfo,
+    Ancestry,
+    ChannelInfo,
+    ComponentRoleInfo,
+    Data,
+    DataSource,
+    DataVersion,
+    EmailInfo,
+    Employee,
+    GCSConfig,
+    GitHubIDMappings,
+    Group,
+    GroupType,
+    Indexes,
+    JiraInfo,
+    Lookups,
+    MembershipIndex,
+    MembershipInfo,
+    MembershipType,
+    Metadata,
+    Org,
+    OrgInfo,
+    OrgInfoType,
+    Pillar,
+    RelationshipInfo,
+    RepoInfo,
+    ResourceInfo,
+    RoleInfo,
+    SlackConfig,
+    SlackIDMappings,
+    Team,
+    TeamGroup,
+)
 from ._version import (
+    API_VERSION,
     __version__,
     __version_info__,
-    API_VERSION,
     check_api_compatibility,
     get_version_dict,
 )
 
-from ._service import Service
-from ._async import AsyncService
-from ._gcs import GCSDataSource
-
 try:
-    from ._gcs import GCSDataSourceWithSDK
     from ._async import AsyncGCSDataSource
+    from ._gcs import GCSDataSourceWithSDK
 except ImportError:
     GCSDataSourceWithSDK = None  # type: ignore[misc, assignment]
     AsyncGCSDataSource = None  # type: ignore[misc, assignment]

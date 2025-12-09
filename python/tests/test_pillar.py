@@ -1,11 +1,17 @@
 """Tests for pillar-related functionality."""
 
-import pytest
 
-from orgdatacore import Service
 from orgdatacore import (
-    Data, Lookups, Indexes, Pillar, Group, GroupType,
-    MembershipIndex, SlackIDMappings, GitHubIDMappings,
+    Data,
+    GitHubIDMappings,
+    Group,
+    GroupType,
+    Indexes,
+    Lookups,
+    MembershipIndex,
+    Pillar,
+    Service,
+    SlackIDMappings,
 )
 
 

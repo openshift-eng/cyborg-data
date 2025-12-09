@@ -2,15 +2,12 @@
 
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
-
-import pytest
 
 from orgdatacore import Service
 
 # Import from internal testing module - NOT part of public API
-from orgdatacore._internal.testing import FileDataSource, FakeDataSource
+from orgdatacore._internal.testing import FileDataSource
 
 
 class TestServiceWithNoData:
@@ -109,13 +106,13 @@ class TestConcurrentAccess:
                 errors.append(e)
 
         threads = [threading.Thread(target=reader, args=(i,)) for i in range(10)]
-        
+
         for t in threads:
             t.start()
-        
+
         for t in threads:
             t.join(timeout=5)
-        
+
         assert len(errors) == 0, f"Errors occurred: {errors}"
         assert len(results) == 10
 
@@ -123,10 +120,10 @@ class TestConcurrentAccess:
         """Test that concurrent reads and writes are safe."""
         service = Service()
         file_source = FileDataSource(str(test_data_path))
-        
+
         # Initial load
         service.load_from_data_source(file_source)
-        
+
         results = []
         errors = []
 
@@ -152,13 +149,13 @@ class TestConcurrentAccess:
         # Start 10 readers and 1 writer
         threads = [threading.Thread(target=reader) for _ in range(10)]
         threads.append(threading.Thread(target=writer))
-        
+
         for t in threads:
             t.start()
-        
+
         for t in threads:
             t.join(timeout=10)
-        
+
         assert len(errors) == 0, f"Errors occurred: {errors}"
 
 
@@ -168,27 +165,27 @@ class TestReloadData:
     def test_reload_data(self, test_data_path: Path):
         """Test that data can be reloaded."""
         service = Service()
-        
+
         # Initial state - no data
         version1 = service.get_version()
         assert version1.employee_count == 0
-        
+
         # Load data for the first time
         file_source = FileDataSource(str(test_data_path))
         service.load_from_data_source(file_source)
-        
+
         version2 = service.get_version()
         assert version2.employee_count == 3
         assert version2.load_time > version1.load_time
-        
+
         # Reload the same data
         time.sleep(0.001)  # Ensure time difference
         service.load_from_data_source(file_source)
-        
+
         version3 = service.get_version()
         assert version3.employee_count == 3
         assert version3.load_time > version2.load_time
-        
+
         # Data should still be accessible
         emp = service.get_employee_by_uid("jsmith")
         assert emp is not None

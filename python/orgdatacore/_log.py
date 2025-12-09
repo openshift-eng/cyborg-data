@@ -21,10 +21,9 @@ Usage:
 """
 
 import logging
-from typing import Optional
 
 # Default logger for the library
-_logger: Optional[logging.Logger] = None
+_logger: logging.Logger | None = None
 
 # Default logger name
 LOGGER_NAME = "orgdatacore"
@@ -45,7 +44,7 @@ def get_logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
 
 
-def set_logger(logger: Optional[logging.Logger]) -> None:
+def set_logger(logger: logging.Logger | None) -> None:
     """Set a custom logger for orgdatacore.
 
     This allows integrating orgdatacore logging with your application's
@@ -68,7 +67,7 @@ def set_logger(logger: Optional[logging.Logger]) -> None:
 
 def configure_default_logging(
     level: int = logging.INFO,
-    format_string: Optional[str] = None,
+    format_string: str | None = None,
 ) -> None:
     """Configure the default orgdatacore logger.
 

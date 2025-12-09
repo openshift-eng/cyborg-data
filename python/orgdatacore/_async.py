@@ -18,9 +18,10 @@ Example:
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Awaitable, BinaryIO, Callable, Optional
+from typing import Any, BinaryIO
 
 from ._exceptions import ConfigurationError, DataLoadError, GCSError
 from ._log import get_logger
@@ -65,14 +66,14 @@ class AsyncService:
         employee = await service.get_employee_by_uid("jdoe")
     """
 
-    def __init__(self, *, data_source: Optional[Any] = None) -> None:
+    def __init__(self, *, data_source: Any | None = None) -> None:
         """Initialize a new async organizational data service.
 
         Args:
             data_source: Optional async data source to load from immediately.
         """
         self._lock = asyncio.Lock()
-        self._data: Optional[Data] = None
+        self._data: Data | None = None
         self._version = DataVersion()
         self._init_source = data_source
 
@@ -155,7 +156,7 @@ class AsyncService:
         await self.load_from_data_source(source)
 
         # Define callback for reload
-        async def callback() -> Optional[Exception]:
+        async def callback() -> Exception | None:
             try:
                 logger.info("Reloading data from async source", extra={"source": str(source)})
                 await self.load_from_data_source(source)
@@ -187,14 +188,14 @@ class AsyncService:
 
     # Async lookup methods
 
-    async def get_employee_by_uid(self, uid: str) -> Optional[Employee]:
+    async def get_employee_by_uid(self, uid: str) -> Employee | None:
         """Get an employee by their UID."""
         async with self._lock:
             if self._data is None:
                 return None
             return self._data.lookups.employees.get(uid)
 
-    async def get_employee_by_email(self, email: str) -> Optional[Employee]:
+    async def get_employee_by_email(self, email: str) -> Employee | None:
         """Get an employee by their email address."""
         async with self._lock:
             if self._data is None:
@@ -204,17 +205,22 @@ class AsyncService:
                     return emp
             return None
 
-    async def get_employee_by_slack_uid(self, slack_uid: str) -> Optional[Employee]:
-        """Get an employee by their Slack UID."""
+    async def get_employee_by_slack_id(self, slack_id: str) -> Employee | None:
+        """Get an employee by their Slack ID."""
         async with self._lock:
             if self._data is None:
                 return None
-            uid = self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_uid)
+            uid = self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id)
             if uid:
                 return self._data.lookups.employees.get(uid)
             return None
 
-    async def get_employee_by_github_id(self, github_id: str) -> Optional[Employee]:
+    # Alias for backwards compatibility
+    async def get_employee_by_slack_uid(self, slack_uid: str) -> Employee | None:
+        """Get an employee by their Slack UID (alias for get_employee_by_slack_id)."""
+        return await self.get_employee_by_slack_id(slack_uid)
+
+    async def get_employee_by_github_id(self, github_id: str) -> Employee | None:
         """Get an employee by their GitHub ID."""
         async with self._lock:
             if self._data is None:
@@ -224,28 +230,28 @@ class AsyncService:
                 return self._data.lookups.employees.get(uid)
             return None
 
-    async def get_team_by_name(self, name: str) -> Optional[Team]:
+    async def get_team_by_name(self, name: str) -> Team | None:
         """Get a team by name."""
         async with self._lock:
             if self._data is None:
                 return None
             return self._data.lookups.teams.get(name)
 
-    async def get_org_by_name(self, name: str) -> Optional[Org]:
+    async def get_org_by_name(self, name: str) -> Org | None:
         """Get an organization by name."""
         async with self._lock:
             if self._data is None:
                 return None
             return self._data.lookups.orgs.get(name)
 
-    async def get_pillar_by_name(self, name: str) -> Optional[Pillar]:
+    async def get_pillar_by_name(self, name: str) -> Pillar | None:
         """Get a pillar by name."""
         async with self._lock:
             if self._data is None:
                 return None
             return self._data.lookups.pillars.get(name)
 
-    async def get_team_group_by_name(self, name: str) -> Optional[TeamGroup]:
+    async def get_team_group_by_name(self, name: str) -> TeamGroup | None:
         """Get a team group by name."""
         async with self._lock:
             if self._data is None:
@@ -375,7 +381,7 @@ async def _async_retry_with_backoff(
     """Execute an async operation with exponential backoff retry."""
     logger = get_logger()
     delay = initial_delay
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(max_retries + 1):
         try:
@@ -408,7 +414,7 @@ async def _async_retry_with_backoff(
 # =============================================================================
 
 try:
-    from google.cloud import storage
+    from google.cloud import storage  # type: ignore[import-untyped]
 
     class AsyncGCSDataSource:
         """Async GCS data source using google-cloud-storage.
@@ -454,7 +460,7 @@ try:
             self.max_retries = max_retries
             self.retry_delay = retry_delay
             self.retry_backoff = retry_backoff
-            self._client: Optional[storage.Client] = None
+            self._client: storage.Client | None = None
 
         def _get_client(self) -> storage.Client:
             """Get or create the GCS client (sync)."""
@@ -503,8 +509,8 @@ try:
             )
 
         async def watch(
-            self, callback: Callable[[], Awaitable[Optional[Exception]]]
-        ) -> Optional[Exception]:
+            self, callback: Callable[[], Awaitable[Exception | None]]
+        ) -> Exception | None:
             """Monitor for changes and call async callback when data is updated.
 
             Args:

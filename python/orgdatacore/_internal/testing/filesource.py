@@ -10,8 +10,9 @@ This module is NOT part of the public API and may change without notice.
 import os
 import threading
 import time
+from collections.abc import Callable
 from io import BytesIO
-from typing import BinaryIO, Callable, Optional
+from typing import BinaryIO
 
 from orgdatacore._exceptions import FileSourceError
 from orgdatacore._log import get_logger
@@ -73,10 +74,10 @@ class FileDataSource:
             raise FileSourceError(f"file not found: {file_path}")
         except PermissionError:
             raise FileSourceError(f"permission denied: {file_path}")
-        except IOError as e:
+        except OSError as e:
             raise FileSourceError(f"failed to read file {file_path}: {e}")
 
-    def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
         """
         Monitor for file changes and call callback when data is updated.
 

@@ -3,7 +3,7 @@
 import json
 import threading
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from ._exceptions import DataLoadError
 from ._log import get_logger
@@ -407,7 +407,7 @@ class Service:
         logger = get_logger()
         self.load_from_data_source(source)
 
-        def callback() -> Optional[Exception]:
+        def callback() -> Exception | None:
             try:
                 logger.info("Reloading data from source", extra={"source": str(source)})
                 self.load_from_data_source(source)
@@ -439,14 +439,25 @@ class Service:
         with self._lock:
             return self._version
 
-    def get_employee_by_uid(self, uid: str) -> Optional[Employee]:
+    def get_employee_by_uid(self, uid: str) -> Employee | None:
         """Get an employee by UID."""
         with self._lock:
             if self._data is None or not self._data.lookups.employees:
                 return None
             return self._data.lookups.employees.get(uid)
 
-    def get_employee_by_slack_id(self, slack_id: str) -> Optional[Employee]:
+    def get_employee_by_email(self, email: str) -> Employee | None:
+        """Get an employee by their email address."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.employees:
+                return None
+            email_lower = email.lower()
+            for emp in self._data.lookups.employees.values():
+                if emp.email.lower() == email_lower:
+                    return emp
+            return None
+
+    def get_employee_by_slack_id(self, slack_id: str) -> Employee | None:
         """Get an employee by Slack ID."""
         with self._lock:
             if (
@@ -462,7 +473,7 @@ class Service:
 
             return self._data.lookups.employees.get(uid)
 
-    def get_employee_by_github_id(self, github_id: str) -> Optional[Employee]:
+    def get_employee_by_github_id(self, github_id: str) -> Employee | None:
         """Get an employee by GitHub ID."""
         with self._lock:
             if (
@@ -478,7 +489,7 @@ class Service:
 
             return self._data.lookups.employees.get(uid)
 
-    def get_manager_for_employee(self, uid: str) -> Optional[Employee]:
+    def get_manager_for_employee(self, uid: str) -> Employee | None:
         """Get the manager for a given employee UID."""
         with self._lock:
             if self._data is None or not self._data.lookups.employees:
@@ -490,28 +501,28 @@ class Service:
 
             return self._data.lookups.employees.get(emp.manager_uid)
 
-    def get_team_by_name(self, team_name: str) -> Optional[Team]:
+    def get_team_by_name(self, team_name: str) -> Team | None:
         """Get a team by name."""
         with self._lock:
             if self._data is None or not self._data.lookups.teams:
                 return None
             return self._data.lookups.teams.get(team_name)
 
-    def get_org_by_name(self, org_name: str) -> Optional[Org]:
+    def get_org_by_name(self, org_name: str) -> Org | None:
         """Get an organization by name."""
         with self._lock:
             if self._data is None or not self._data.lookups.orgs:
                 return None
             return self._data.lookups.orgs.get(org_name)
 
-    def get_pillar_by_name(self, pillar_name: str) -> Optional[Pillar]:
+    def get_pillar_by_name(self, pillar_name: str) -> Pillar | None:
         """Get a pillar by name."""
         with self._lock:
             if self._data is None or not self._data.lookups.pillars:
                 return None
             return self._data.lookups.pillars.get(pillar_name)
 
-    def get_team_group_by_name(self, team_group_name: str) -> Optional[TeamGroup]:
+    def get_team_group_by_name(self, team_group_name: str) -> TeamGroup | None:
         """Get a team group by name."""
         with self._lock:
             if self._data is None or not self._data.lookups.team_groups:

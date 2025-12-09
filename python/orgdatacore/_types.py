@@ -1,9 +1,11 @@
 """Type definitions and constants for orgdatacore."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import BinaryIO, Callable, Optional, Protocol
+from typing import BinaryIO, Protocol
+
 
 class MembershipType(StrEnum):
     """Membership types for organizational hierarchy."""
@@ -43,7 +45,7 @@ class DataSource(Protocol):
         """Returns a file-like object for the organizational data JSON."""
         ...
 
-    def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
         """Monitors for changes and calls the callback when data is updated."""
         ...
 
@@ -165,7 +167,7 @@ class Group:
 
     type: GroupType = field(default_factory=GroupType)
     resolved_people_uid_list: tuple[str, ...] = ()
-    slack: Optional[SlackConfig] = None
+    slack: SlackConfig | None = None
     roles: tuple[RoleInfo, ...] = ()
     jiras: tuple[JiraInfo, ...] = ()
     repos: tuple[RepoInfo, ...] = ()

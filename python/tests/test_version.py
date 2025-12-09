@@ -3,9 +3,9 @@
 import re
 
 from orgdatacore import (
+    API_VERSION,
     __version__,
     __version_info__,
-    API_VERSION,
     check_api_compatibility,
     get_version_dict,
 )
@@ -86,8 +86,6 @@ class TestVersionDict:
             "major",
             "minor",
             "patch",
-            "prerelease",
-            "build",
         }
         assert set(d.keys()) == expected_keys
 

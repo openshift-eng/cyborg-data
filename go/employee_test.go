@@ -383,3 +383,73 @@ func TestGetManagerForEmployee(t *testing.T) {
 		})
 	}
 }
+
+// TestGetEmployeeByEmail tests employee lookup by email address
+func TestGetEmployeeByEmail(t *testing.T) {
+	service := setupTestService(t)
+
+	tests := []struct {
+		name     string
+		email    string
+		expected *Employee
+	}{
+		{
+			name:  "existing email for jsmith",
+			email: "jsmith@example.com",
+			expected: &Employee{
+				UID:        "jsmith",
+				FullName:   "John Smith",
+				Email:      "jsmith@example.com",
+				JobTitle:   "Software Engineer",
+				SlackUID:   "U12345678",
+				GitHubID:   "jsmith-dev",
+				ManagerUID: "adoe",
+			},
+		},
+		{
+			name:  "existing email for adoe",
+			email: "adoe@example.com",
+			expected: &Employee{
+				UID:             "adoe",
+				FullName:        "Alice Doe",
+				Email:           "adoe@example.com",
+				JobTitle:        "Team Lead",
+				SlackUID:        "U87654321",
+				GitHubID:        "alice-codes",
+				IsPeopleManager: true,
+			},
+		},
+		{
+			name:  "case insensitive email lookup",
+			email: "JSMITH@EXAMPLE.COM",
+			expected: &Employee{
+				UID:        "jsmith",
+				FullName:   "John Smith",
+				Email:      "jsmith@example.com",
+				JobTitle:   "Software Engineer",
+				SlackUID:   "U12345678",
+				GitHubID:   "jsmith-dev",
+				ManagerUID: "adoe",
+			},
+		},
+		{
+			name:     "nonexistent email",
+			email:    "nobody@example.com",
+			expected: nil,
+		},
+		{
+			name:     "empty email",
+			email:    "",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.GetEmployeeByEmail(tt.email)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("GetEmployeeByEmail(%q) = %+v, expected %+v", tt.email, result, tt.expected)
+			}
+		})
+	}
+}

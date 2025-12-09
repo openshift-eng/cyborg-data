@@ -1,8 +1,9 @@
 """Tests for the async service implementation."""
 
 import asyncio
+from collections.abc import Callable
 from io import BytesIO
-from typing import BinaryIO, Callable, Optional
+from typing import BinaryIO
 
 import pytest
 
@@ -13,7 +14,7 @@ from orgdatacore._internal.testing import create_test_data_json
 class AsyncFakeDataSource:
     """Async fake data source for testing."""
 
-    def __init__(self, data: str = "", load_error: Optional[Exception] = None) -> None:
+    def __init__(self, data: str = "", load_error: Exception | None = None) -> None:
         self.data = data
         self.load_error = load_error
 
@@ -22,7 +23,7 @@ class AsyncFakeDataSource:
             raise self.load_error
         return BytesIO(self.data.encode("utf-8"))
 
-    async def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+    async def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
         return None
 
     def __str__(self) -> str:
@@ -130,7 +131,7 @@ class TestAsyncService:
     @pytest.mark.asyncio
     async def test_load_error_raises_data_load_error(self) -> None:
         """Test that load errors are wrapped in DataLoadError."""
-        source = AsyncFakeDataSource(load_error=IOError("Connection failed"))
+        source = AsyncFakeDataSource(load_error=OSError("Connection failed"))
         service = AsyncService()
 
         with pytest.raises(DataLoadError, match="Connection failed"):

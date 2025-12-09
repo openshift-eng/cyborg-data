@@ -300,6 +300,10 @@ func (t *testDataSource) String() string {
 	return "test-data-source"
 }
 
+func (t *testDataSource) Close() error {
+	return nil
+}
+
 // stringReadCloser implements io.ReadCloser for test data
 type stringReadCloser struct {
 	data string

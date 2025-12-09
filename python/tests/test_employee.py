@@ -2,7 +2,7 @@
 
 import pytest
 
-from orgdatacore import Service, Employee
+from orgdatacore import Employee, Service
 
 
 class TestGetEmployeeByUID:
@@ -57,7 +57,7 @@ class TestGetEmployeeBySlackID:
     ):
         """Test employee lookup by Slack ID."""
         result = service.get_employee_by_slack_id(slack_id)
-        
+
         if expected_uid is None:
             assert result is None
         else:
@@ -80,7 +80,7 @@ class TestGetEmployeeByGitHubID:
     ):
         """Test employee lookup by GitHub ID."""
         result = service.get_employee_by_github_id(github_id)
-        
+
         if expected_uid is None:
             assert result is None
         else:
@@ -95,7 +95,7 @@ class TestEmployeeFields:
         """Test that all employee fields are populated correctly."""
         emp = service.get_employee_by_uid("jsmith")
         assert emp is not None
-        
+
         assert emp.uid == "jsmith"
         assert emp.full_name == "John Smith"
         assert emp.email == "jsmith@example.com"
@@ -118,12 +118,12 @@ class TestSlackIDMapping:
         emp = service.get_employee_by_uid(uid)
         assert emp is not None
         assert emp.slack_uid == slack_id
-        
+
         # Test SlackID -> Employee -> UID
         emp_by_slack = service.get_employee_by_slack_id(slack_id)
         assert emp_by_slack is not None
         assert emp_by_slack.uid == uid
-        
+
         # Ensure they're the same employee
         assert emp == emp_by_slack
 
@@ -142,12 +142,12 @@ class TestGitHubIDMapping:
         emp = service.get_employee_by_uid(uid)
         assert emp is not None
         assert emp.github_id == github_id
-        
+
         # Test GitHubID -> Employee -> UID
         emp_by_github = service.get_employee_by_github_id(github_id)
         assert emp_by_github is not None
         assert emp_by_github.uid == uid
-        
+
         # Ensure they're the same employee
         assert emp == emp_by_github
 
@@ -157,8 +157,15 @@ class TestNewEmployeeFields:
 
     def test_new_employee_fields(self):
         """Test that new employee fields are properly handled."""
-        from orgdatacore import Data, Lookups, Indexes, MembershipIndex, SlackIDMappings, GitHubIDMappings
-        
+        from orgdatacore import (
+            Data,
+            GitHubIDMappings,
+            Indexes,
+            Lookups,
+            MembershipIndex,
+            SlackIDMappings,
+        )
+
         service = Service()
         service._data = Data(
             lookups=Lookups(
@@ -186,7 +193,7 @@ class TestNewEmployeeFields:
 
         emp = service.get_employee_by_uid("testuser")
         assert emp is not None
-        
+
         assert emp.github_id == "testgithub"
         assert emp.rhat_geo == "NA"
         assert emp.cost_center == 12345
@@ -209,7 +216,7 @@ class TestGetManagerForEmployee:
     ):
         """Test manager lookup for employees."""
         result = service.get_manager_for_employee(uid)
-        
+
         if expected_manager_uid is None:
             assert result is None
         else:

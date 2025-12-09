@@ -3,11 +3,11 @@
 import pytest
 
 from orgdatacore import (
-    OrgDataError,
+    ConfigurationError,
     DataLoadError,
     DataSourceError,
     GCSError,
-    ConfigurationError,
+    OrgDataError,
 )
 from orgdatacore._exceptions import FileSourceError
 

@@ -41,7 +41,7 @@ import (
     "context"
     "log"
     "time"
-    orgdatacore "github.com/openshift-eng/cyborg-data"
+    orgdatacore "github.com/openshift-eng/cyborg-data/go"
 )
 
 func main() {
@@ -123,6 +123,9 @@ employee = service.GetEmployeeBySlackID("U123ABC456")
 // GitHub integration - lookup by GitHub username
 employee = service.GetEmployeeByGitHubID("jsmith-dev")
 
+// Email lookup (case-insensitive)
+employee = service.GetEmployeeByEmail("jsmith@example.com")
+
 // Get employee's manager
 manager := service.GetManagerForEmployee("jsmith")
 // Returns the manager's Employee record, or nil if no manager
@@ -199,12 +202,42 @@ pillarNames := service.GetAllPillarNames()
 teamGroupNames := service.GetAllTeamGroupNames()
 ```
 
+### Iterator-Based Enumeration (Go 1.23+)
+```go
+// Iterate over all employee UIDs
+for uid := range service.AllEmployeeUIDs() {
+    fmt.Println(uid)
+}
+
+// Iterate over all employees
+for emp := range service.AllEmployees() {
+    if emp.IsPeopleManager {
+        fmt.Printf("Manager: %s\n", emp.FullName)
+    }
+}
+
+// Iterate over teams with key-value pairs
+for name, team := range service.AllTeams() {
+    fmt.Printf("Team: %s (type: %s)\n", name, team.Type)
+}
+
+// Similarly for orgs, pillars, and team groups:
+// - AllOrgNames() / AllOrgs()
+// - AllPillarNames() / AllPillars()
+// - AllTeamGroupNames() / AllTeamGroups()
+```
+
+**Iterator Safety**: Iterators use a snapshot approach - data is collected while briefly
+holding a read lock, then iteration proceeds without holding any lock. This is safe
+for concurrent use and allows slow consumer operations without blocking other readers.
+
 ### Performance Characteristics
 | Operation | Complexity | Index Used |
 |-----------|------------|------------|
 | `GetEmployeeByUID` | O(1) | `lookups.employees` |
 | `GetEmployeeBySlackID` | O(1) | `indexes.slack_id_mappings` |
 | `GetEmployeeByGitHubID` | O(1) | `indexes.github_id_mappings` |
+| `GetEmployeeByEmail` | O(n) | Linear scan (n = employees) |
 | `GetManagerForEmployee` | O(1) | `lookups.employees` (2 lookups) |
 | `GetTeamByName` | O(1) | `lookups.teams` |
 | `GetOrgByName` | O(1) | `lookups.orgs` |
@@ -214,6 +247,8 @@ teamGroupNames := service.GetAllTeamGroupNames()
 | `IsEmployeeInTeam` | O(n) | Pre-computed membership (n = teams) |
 | `GetUserOrganizations` | O(1) | Flattened hierarchy index |
 | `GetAllEmployeeUIDs` | O(n) | Map key iteration |
+| `AllEmployeeUIDs()` | O(n) | Snapshot + iteration |
+| `AllEmployees()` | O(n) | Snapshot + iteration |
 
 **No expensive tree traversals** - all organizational relationships are pre-computed during indexing.
 
@@ -343,7 +378,7 @@ The package uses structured logging via the `logr` interface, making it compatib
 **OpenShift Integration**:
 ```go
 import "k8s.io/klog/v2/klogr"
-import orgdatacore "github.com/openshift-eng/cyborg-data"
+import orgdatacore "github.com/openshift-eng/cyborg-data/go"
 
 func init() {
     orgdatacore.SetLogger(klogr.New())

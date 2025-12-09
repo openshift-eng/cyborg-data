@@ -2,7 +2,7 @@
 
 import pytest
 
-from orgdatacore import Service, OrgInfo
+from orgdatacore import OrgInfo, Service
 
 
 class TestGetOrgByName:
@@ -18,7 +18,7 @@ class TestGetOrgByName:
     ):
         """Test organization lookup by name."""
         result = service.get_org_by_name(org_name)
-        
+
         if expected_found:
             assert result is not None
             assert result.name == expected_name
@@ -68,13 +68,13 @@ class TestGetUserOrganizations:
     def test_jsmith_organizations(self, service: Service):
         """Test jsmith's organizational hierarchy."""
         result = service.get_user_organizations("U12345678")  # jsmith
-        
+
         # Should contain these items
         expected_items = [
             OrgInfo(name="test-team", type="Team"),
             OrgInfo(name="test-org", type="Organization"),
         ]
-        
+
         for expected in expected_items:
             found = any(
                 item.name == expected.name and item.type == expected.type
@@ -85,7 +85,7 @@ class TestGetUserOrganizations:
     def test_bwilson_organizations(self, service: Service):
         """Test bwilson's organizational hierarchy."""
         result = service.get_user_organizations("U98765432")  # bwilson
-        
+
         # Should contain these items
         expected_items = [
             OrgInfo(name="platform-team", type="Team"),
@@ -94,7 +94,7 @@ class TestGetUserOrganizations:
             OrgInfo(name="engineering", type="Pillar"),
             OrgInfo(name="backend-teams", type="Team Group"),
         ]
-        
+
         for expected in expected_items:
             found = any(
                 item.name == expected.name and item.type == expected.type
@@ -110,7 +110,7 @@ class TestGetUserOrganizations:
     def test_no_duplicate_organizations(self, service: Service):
         """Test that no duplicate organizations are returned."""
         result = service.get_user_organizations("U98765432")  # bwilson
-        
+
         seen = set()
         for org in result:
             key = f"{org.name}:{org.type}"
@@ -144,9 +144,9 @@ class TestOrgInfoTypes:
     def test_org_info_types(self, service: Service):
         """Test that OrgInfo types are correct."""
         orgs = service.get_user_organizations("U98765432")  # bwilson
-        
+
         type_map = {org.name: org.type for org in orgs}
-        
+
         expected_types = {
             "platform-team": "Team",
             "platform-org": "Organization",
@@ -154,7 +154,7 @@ class TestOrgInfoTypes:
             "engineering": "Pillar",
             "backend-teams": "Team Group",
         }
-        
+
         for name, expected_type in expected_types.items():
             actual_type = type_map.get(name)
             assert actual_type is not None, f"Expected to find {name} in user organizations"

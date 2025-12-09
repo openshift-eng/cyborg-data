@@ -20,7 +20,9 @@ import os
 import time
 from datetime import timedelta
 
+# Check if GCS support is available
 from orgdatacore import (
+    AsyncGCSDataSource,
     AsyncService,
     GCSConfig,
     __version__,
@@ -28,8 +30,6 @@ from orgdatacore import (
     get_logger,
 )
 
-# Check if GCS support is available
-from orgdatacore import AsyncGCSDataSource
 HAS_GCS = AsyncGCSDataSource is not None
 
 
@@ -93,7 +93,7 @@ async def run_performance_benchmark(service: AsyncService) -> None:
         print(f"Speedup: {speedup:.2f}x faster with concurrent")
 
     # Mixed operations benchmark
-    print(f"\nMixed operations (employees + teams + orgs + 10 team members)...")
+    print("\nMixed operations (employees + teams + orgs + 10 team members)...")
     mixed_time = await benchmark_mixed_operations(service, 10)
     print(f"Mixed concurrent: {mixed_time:.4f}s")
 
@@ -104,7 +104,7 @@ async def simulate_data_change_detection(
 ) -> None:
     """
     Demonstrate the GCS watcher detecting changes.
-    
+
     Note: In a real scenario, the watcher runs indefinitely in the background.
     This demo shows how to set it up and monitor for reloads.
     """
@@ -112,13 +112,13 @@ async def simulate_data_change_detection(
     print("GCS WATCHER DEMO")
     print("=" * 60)
 
-    logger = get_logger()
+    get_logger()
     reload_count = 0
     reload_event = asyncio.Event()
 
     # Track initial version
     initial_version = service.get_version()
-    print(f"\nInitial data version:")
+    print("\nInitial data version:")
     print(f"  Employee count: {initial_version.employee_count}")
     print(f"  Org count: {initial_version.org_count}")
     print(f"  Load time: {initial_version.load_time}")
@@ -137,28 +137,28 @@ async def simulate_data_change_detection(
     # Start the watcher
     print("\nStarting GCS watcher...")
     print(f"Check interval: {source.config.check_interval}")
-    
+
     # Note: The watcher uses the callback passed to it during start_data_source_watcher
     # For this demo, we'll simulate the monitoring behavior
-    
+
     print("\nWatcher is now running in the background.")
     print("The watcher will check for GCS object changes at the configured interval.")
     print("If the GCS object is updated, the data will be automatically reloaded.")
 
     # Demonstrate that service remains functional while watcher runs
     print("\nDemonstrating service functionality while watcher is active...")
-    
+
     for i in range(3):
         await asyncio.sleep(1)
-        
+
         # Service should remain healthy and responsive
         health_status = "healthy" if service.is_healthy() else "unhealthy"
         ready_status = "ready" if service.is_ready() else "not ready"
-        
+
         # Do a quick lookup to prove service is working
         employees = await service.get_all_employees()
         employee_count = len(employees)
-        
+
         print(f"  [{i+1}/3] Service: {health_status}, {ready_status}, "
               f"employees: {employee_count}")
 
@@ -173,7 +173,7 @@ async def run_concurrent_stress_test(service: AsyncService) -> None:
     print("=" * 60)
 
     print("\nRunning 1000 concurrent lookups...")
-    
+
     employees = await service.get_all_employees()
     if not employees:
         print("No employees found, skipping stress test")

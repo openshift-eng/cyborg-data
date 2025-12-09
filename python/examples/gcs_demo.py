@@ -11,8 +11,9 @@ Uses Application Default Credentials (ADC) - make sure you're logged in:
 
 from datetime import timedelta
 
-from orgdatacore import Service, GCSConfig
 from orgdatacore.datasources import GCSDataSourceWithSDK
+
+from orgdatacore import GCSConfig, Service
 
 
 def main():
@@ -46,7 +47,7 @@ def main():
 
     # Show version info
     version = service.get_version()
-    print(f"✓ Data loaded successfully!")
+    print("✓ Data loaded successfully!")
     print(f"  Employees: {version.employee_count}")
     print(f"  Organizations: {version.org_count}")
     print(f"  Load time: {version.load_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -82,7 +83,7 @@ def main():
         sample_uid = all_employees[0]
         emp = service.get_employee_by_uid(sample_uid)
         if emp:
-            print(f"Sample employee:")
+            print("Sample employee:")
             print(f"  UID: {emp.uid}")
             print(f"  Name: {emp.full_name}")
             print(f"  Email: {emp.email}")
@@ -102,7 +103,7 @@ def main():
             if emp.slack_uid:
                 orgs = service.get_user_organizations(emp.slack_uid)
                 if orgs:
-                    print(f"  Organizations:")
+                    print("  Organizations:")
                     for org in orgs[:10]:  # Show first 10
                         print(f"    - {org.name} ({org.type})")
             print()

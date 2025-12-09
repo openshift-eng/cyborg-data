@@ -1,29 +1,30 @@
 """Test helpers for orgdatacore."""
 
 import json
+from collections.abc import Callable
 from io import BytesIO
-from typing import Any, BinaryIO, Callable, Optional
+from typing import Any, BinaryIO
 
 # Note: We don't inherit from DataSource - it's a Protocol (structural typing)
 # Just implement the required methods: load(), watch(), __str__()
 from orgdatacore._types import (
+    Ancestry,
     Data,
-    Metadata,
-    Lookups,
-    Indexes,
     Employee,
-    Team,
-    Org,
-    Pillar,
-    TeamGroup,
+    GitHubIDMappings,
     Group,
     GroupType,
+    Indexes,
+    Lookups,
     MembershipIndex,
     MembershipInfo,
+    Metadata,
+    Org,
+    Pillar,
     RelationshipInfo,
-    Ancestry,
     SlackIDMappings,
-    GitHubIDMappings,
+    Team,
+    TeamGroup,
 )
 
 
@@ -33,8 +34,8 @@ class FakeDataSource:
     def __init__(
         self,
         data: str = "",
-        load_error: Optional[Exception] = None,
-        watch_error: Optional[Exception] = None,
+        load_error: Exception | None = None,
+        watch_error: Exception | None = None,
         description: str = "fake-data-source",
     ) -> None:
         """
@@ -58,7 +59,7 @@ class FakeDataSource:
             raise self.load_error
         return BytesIO(self.data.encode("utf-8"))
 
-    def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
         """Track that watch was called but don't actually watch."""
         self.watch_called = True
         if self.watch_error:
@@ -406,7 +407,7 @@ def _team_group_to_dict(team_group: TeamGroup) -> dict[str, Any]:
 
 
 def assert_employee_equal(
-    actual: Optional[Employee], expected: Optional[Employee], context: str = ""
+    actual: Employee | None, expected: Employee | None, context: str = ""
 ) -> None:
     """Compare two employees for testing.
 

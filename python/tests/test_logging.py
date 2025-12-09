@@ -2,7 +2,7 @@
 
 import logging
 
-from orgdatacore import get_logger, set_logger, configure_default_logging
+from orgdatacore import configure_default_logging, get_logger, set_logger
 
 
 class TestLogging:

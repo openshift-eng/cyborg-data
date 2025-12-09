@@ -169,19 +169,19 @@ func TestGetUserOrganizations(t *testing.T) {
 			name:    "jsmith organizations",
 			slackID: "U12345678",
 			contains: []OrgInfo{
-				{Name: "test-team", Type: "Team"},
-				{Name: "test-org", Type: "Organization"},
+				{Name: "test-team", Type: OrgTypeTeam},
+				{Name: "test-org", Type: OrgTypeOrganization},
 			},
 		},
 		{
 			name:    "bwilson organizations",
 			slackID: "U98765432",
 			contains: []OrgInfo{
-				{Name: "platform-team", Type: "Team"},
-				{Name: "platform-org", Type: "Organization"},
-				{Name: "test-org", Type: "Organization"},
-				{Name: "engineering", Type: "Pillar"},
-				{Name: "backend-teams", Type: "Team Group"},
+				{Name: "platform-team", Type: OrgTypeTeam},
+				{Name: "platform-org", Type: OrgTypeOrganization},
+				{Name: "test-org", Type: OrgTypeOrganization},
+				{Name: "engineering", Type: OrgTypePillar},
+				{Name: "backend-teams", Type: OrgTypeTeamGroup},
 			},
 		},
 		{
@@ -213,7 +213,7 @@ func TestGetUserOrganizations(t *testing.T) {
 			// Check that no duplicates exist
 			seen := make(map[string]bool)
 			for _, org := range result {
-				key := org.Name + ":" + org.Type
+				key := org.Name + ":" + string(org.Type)
 				if seen[key] {
 					t.Errorf("GetUserOrganizations(%q) returned duplicate: %+v", tt.slackID, org)
 				}
@@ -254,17 +254,17 @@ func TestOrgInfoTypes(t *testing.T) {
 
 	orgs := service.GetUserOrganizations("U98765432") // bwilson
 
-	typeMap := make(map[string]string)
+	typeMap := make(map[string]OrgInfoType)
 	for _, org := range orgs {
 		typeMap[org.Name] = org.Type
 	}
 
-	expectedTypes := map[string]string{
-		"platform-team": "Team",
-		"platform-org":  "Organization",
-		"test-org":      "Organization",
-		"engineering":   "Pillar",
-		"backend-teams": "Team Group",
+	expectedTypes := map[string]OrgInfoType{
+		"platform-team": OrgTypeTeam,
+		"platform-org":  OrgTypeOrganization,
+		"test-org":      OrgTypeOrganization,
+		"engineering":   OrgTypePillar,
+		"backend-teams": OrgTypeTeamGroup,
 	}
 
 	for name, expectedType := range expectedTypes {

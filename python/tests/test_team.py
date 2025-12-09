@@ -2,11 +2,26 @@
 
 import pytest
 
-from orgdatacore import Service
 from orgdatacore import (
-    Data, Lookups, Indexes, Team, Group, GroupType, MembershipIndex,
-    SlackIDMappings, GitHubIDMappings, SlackConfig, ChannelInfo, AliasInfo,
-    RoleInfo, JiraInfo, RepoInfo, EmailInfo, ResourceInfo, ComponentRoleInfo,
+    AliasInfo,
+    ChannelInfo,
+    ComponentRoleInfo,
+    Data,
+    EmailInfo,
+    GitHubIDMappings,
+    Group,
+    GroupType,
+    Indexes,
+    JiraInfo,
+    Lookups,
+    MembershipIndex,
+    RepoInfo,
+    ResourceInfo,
+    RoleInfo,
+    Service,
+    SlackConfig,
+    SlackIDMappings,
+    Team,
 )
 
 
@@ -24,7 +39,7 @@ class TestGetTeamByName:
     ):
         """Test team lookup by name."""
         result = service.get_team_by_name(team_name)
-        
+
         if expected_found:
             assert result is not None
             assert result.name == expected_name
@@ -45,7 +60,7 @@ class TestGetTeamsForUID:
     ):
         """Test team membership lookup by UID."""
         result = service.get_teams_for_uid(uid)
-        
+
         assert sorted(result) == sorted(expected_teams)
 
 
@@ -62,7 +77,7 @@ class TestGetTeamsForSlackID:
     ):
         """Test team membership lookup by Slack ID."""
         result = service.get_teams_for_slack_id(slack_id)
-        
+
         assert sorted(result) == sorted(expected_teams)
 
 
@@ -79,14 +94,14 @@ class TestGetTeamMembers:
     ):
         """Test team member retrieval."""
         result = service.get_team_members(team_name)
-        
+
         result_uids = [emp.uid for emp in result]
         assert sorted(result_uids) == sorted(expected_uids)
 
     def test_team_members_have_all_fields(self, service: Service):
         """Test that returned employees have all fields populated."""
         members = service.get_team_members("test-team")
-        
+
         for emp in members:
             assert emp.uid != ""
             assert emp.full_name != ""
@@ -134,13 +149,13 @@ class TestTeamMembershipConsistency:
     def test_team_membership_consistency(self, service: Service):
         """Test that team membership is consistent across different queries."""
         members = service.get_team_members("test-team")
-        
+
         for member in members:
             # Each member should show up in get_teams_for_uid
             teams = service.get_teams_for_uid(member.uid)
             assert "test-team" in teams, \
                 f"Employee {member.uid} is member of test-team but get_teams_for_uid doesn't show it"
-            
+
             # is_employee_in_team should also return True
             assert service.is_employee_in_team(member.uid, "test-team"), \
                 f"Employee {member.uid} is member of test-team but is_employee_in_team returns False"
@@ -235,7 +250,7 @@ class TestGroupExtendedFields:
 
         team = service.get_team_by_name("Backend Team")
         assert team is not None
-        
+
         assert team.tab_name == "Backend"
         assert team.description == "Backend development team"
         assert team.group.slack is not None

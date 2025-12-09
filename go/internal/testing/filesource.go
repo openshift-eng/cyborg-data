@@ -104,3 +104,8 @@ func (f *FileDataSource) String() string {
 	}
 	return fmt.Sprintf("files:%s", strings.Join(f.FilePaths, ","))
 }
+
+// Close implements io.Closer. FileDataSource has no persistent resources to release.
+func (f *FileDataSource) Close() error {
+	return nil
+}

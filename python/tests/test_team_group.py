@@ -1,11 +1,17 @@
 """Tests for team group-related functionality."""
 
-import pytest
 
-from orgdatacore import Service
 from orgdatacore import (
-    Data, Lookups, Indexes, TeamGroup, Group, GroupType,
-    MembershipIndex, SlackIDMappings, GitHubIDMappings,
+    Data,
+    GitHubIDMappings,
+    Group,
+    GroupType,
+    Indexes,
+    Lookups,
+    MembershipIndex,
+    Service,
+    SlackIDMappings,
+    TeamGroup,
 )
 
 

@@ -36,8 +36,9 @@ DataSource implementation with proper access controls.
 
 import threading
 import time
+from collections.abc import Callable
 from io import BytesIO
-from typing import BinaryIO, Callable, Optional
+from typing import BinaryIO
 
 from ._exceptions import ConfigurationError, GCSError
 from ._log import get_logger
@@ -95,7 +96,7 @@ class GCSDataSource:
             "Alternatively, implement a custom DataSource for your storage backend."
         )
 
-    def watch(self, callback: Callable[[], Optional[Exception]]) -> Optional[Exception]:
+    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
         """
         Returns an error indicating GCS support is not enabled.
 
@@ -139,7 +140,7 @@ def _retry_with_backoff(
     """
     logger = get_logger()
     delay = initial_delay
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(max_retries + 1):
         try:
@@ -172,7 +173,7 @@ def _retry_with_backoff(
 
 # Optional: GCS implementation with actual SDK support
 try:
-    from google.cloud import storage
+    from google.cloud import storage  # type: ignore[import-untyped]
 
     class GCSDataSourceWithSDK:
         """
@@ -229,7 +230,7 @@ try:
             self.max_retries = max_retries
             self.retry_delay = retry_delay
             self.retry_backoff = retry_backoff
-            self._client: Optional[storage.Client] = None
+            self._client: storage.Client | None = None
             self._stop_event = threading.Event()
 
         def _get_client(self) -> storage.Client:
@@ -277,8 +278,8 @@ try:
             )
 
         def watch(
-            self, callback: Callable[[], Optional[Exception]]
-        ) -> Optional[Exception]:
+            self, callback: Callable[[], Exception | None]
+        ) -> Exception | None:
             """
             Monitor for changes and call callback when data is updated.
 
