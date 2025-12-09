@@ -168,37 +168,6 @@ def create_test_data_json() -> str:
     return _data_to_json(data)
 
 
-def create_empty_test_data() -> str:
-    """Create test data with no employees/teams/orgs."""
-    data = Data(
-        metadata=Metadata(
-            generated_at="2024-01-01T00:00:00Z",
-            data_version="empty-v1.0",
-            total_employees=0,
-            total_orgs=0,
-            total_teams=0,
-        ),
-        lookups=Lookups(
-            employees={},
-            teams={},
-            orgs={},
-        ),
-        indexes=Indexes(
-            membership=MembershipIndex(
-                membership_index={},
-                relationship_index={},
-            ),
-            slack_id_mappings=SlackIDMappings(
-                slack_uid_to_uid={},
-            ),
-            github_id_mappings=GitHubIDMappings(
-                github_id_to_uid={},
-            ),
-        ),
-    )
-    return _data_to_json(data)
-
-
 def _data_to_json(data: Data) -> str:
     """Convert Data to JSON string."""
     return json.dumps(_data_to_dict(data))
@@ -404,39 +373,3 @@ def _team_group_to_dict(team_group: TeamGroup) -> dict[str, Any]:
     if team_group.description:
         d["description"] = team_group.description
     return d
-
-
-def assert_employee_equal(
-    actual: Employee | None, expected: Employee | None, context: str = ""
-) -> None:
-    """Compare two employees for testing.
-
-    Raises:
-        AssertionError: If employees don't match.
-    """
-    if actual is None and expected is None:
-        return
-
-    if actual is None or expected is None:
-        raise AssertionError(f"{context}: got {actual}, expected {expected}")
-
-    if actual.uid != expected.uid:
-        raise AssertionError(
-            f"{context}: UID got {actual.uid!r}, expected {expected.uid!r}"
-        )
-    if actual.full_name != expected.full_name:
-        raise AssertionError(
-            f"{context}: FullName got {actual.full_name!r}, expected {expected.full_name!r}"
-        )
-    if actual.email != expected.email:
-        raise AssertionError(
-            f"{context}: Email got {actual.email!r}, expected {expected.email!r}"
-        )
-    if actual.job_title != expected.job_title:
-        raise AssertionError(
-            f"{context}: JobTitle got {actual.job_title!r}, expected {expected.job_title!r}"
-        )
-    if actual.slack_uid != expected.slack_uid:
-        raise AssertionError(
-            f"{context}: SlackUID got {actual.slack_uid!r}, expected {expected.slack_uid!r}"
-        )
