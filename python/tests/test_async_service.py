@@ -163,3 +163,154 @@ class TestAsyncService:
         # Should complete without errors
         assert service.is_healthy()
 
+    @pytest.mark.asyncio
+    async def test_get_employee_by_github_id(self) -> None:
+        """Test getting an employee by GitHub ID."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        employee = await service.get_employee_by_github_id("ghuser1")
+        assert employee is not None
+        assert employee.uid == "testuser1"
+
+    @pytest.mark.asyncio
+    async def test_get_org_by_name(self) -> None:
+        """Test getting an organization by name."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        org = await service.get_org_by_name("test-division")
+        assert org is not None
+        assert org.name == "test-division"
+
+    @pytest.mark.asyncio
+    async def test_get_pillar_by_name(self) -> None:
+        """Test getting a pillar by name returns None when not found."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        # Test data doesn't have pillars
+        pillar = await service.get_pillar_by_name("nonexistent-pillar")
+        assert pillar is None
+
+    @pytest.mark.asyncio
+    async def test_get_team_group_by_name(self) -> None:
+        """Test getting a team group by name returns None when not found."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        # Test data doesn't have team groups
+        team_group = await service.get_team_group_by_name("nonexistent-team-group")
+        assert team_group is None
+
+    @pytest.mark.asyncio
+    async def test_get_user_organizations(self) -> None:
+        """Test getting user organizations."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        orgs = await service.get_user_organizations("testuser1")
+        assert len(orgs) > 0
+
+    @pytest.mark.asyncio
+    async def test_get_all_teams(self) -> None:
+        """Test getting all teams."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        teams = await service.get_all_teams()
+        assert len(teams) > 0
+
+    @pytest.mark.asyncio
+    async def test_get_all_orgs(self) -> None:
+        """Test getting all orgs."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        orgs = await service.get_all_orgs()
+        assert len(orgs) > 0
+
+    @pytest.mark.asyncio
+    async def test_get_all_pillars(self) -> None:
+        """Test getting all pillars (empty in test data)."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        pillars = await service.get_all_pillars()
+        # Test data doesn't have pillars
+        assert isinstance(pillars, tuple)
+
+    @pytest.mark.asyncio
+    async def test_get_all_team_groups(self) -> None:
+        """Test getting all team groups (empty in test data)."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        team_groups = await service.get_all_team_groups()
+        # Test data doesn't have team groups
+        assert isinstance(team_groups, tuple)
+
+    @pytest.mark.asyncio
+    async def test_get_org_members(self) -> None:
+        """Test getting org members."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        members = await service.get_org_members("test-division")
+        assert isinstance(members, tuple)
+
+    @pytest.mark.asyncio
+    async def test_get_version(self) -> None:
+        """Test getting version info (sync method on async service)."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        # get_version is synchronous, not async
+        version = service.get_version()
+        assert version.employee_count == 2
+        assert version.org_count > 0
+
+    @pytest.mark.asyncio
+    async def test_initialize_with_data_source(self) -> None:
+        """Test initializing service with data source."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService(data_source=source)
+        await service.initialize()
+
+        assert service.is_healthy()
+        assert service.is_ready()
+
+    @pytest.mark.asyncio
+    async def test_queries_without_data(self) -> None:
+        """Test that queries return None/empty without data loaded."""
+        service = AsyncService()
+
+        assert await service.get_employee_by_uid("test") is None
+        assert await service.get_employee_by_email("test@test.com") is None
+        assert await service.get_employee_by_slack_id("U123") is None
+        assert await service.get_employee_by_github_id("gh123") is None
+        assert await service.get_team_by_name("test") is None
+        assert await service.get_org_by_name("test") is None
+        assert await service.get_pillar_by_name("test") is None
+        assert await service.get_team_group_by_name("test") is None
+        assert await service.get_user_teams("test") == ()
+        assert await service.get_user_organizations("test") == ()
+        assert await service.get_all_employees() == ()
+        assert await service.get_all_teams() == ()
+        assert await service.get_all_orgs() == ()
+        assert await service.get_all_pillars() == ()
+        assert await service.get_all_team_groups() == ()
+        assert await service.get_team_members("test") == ()
+        assert await service.get_org_members("test") == ()
+

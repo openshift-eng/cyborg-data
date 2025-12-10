@@ -323,3 +323,196 @@ func (s *stringReadCloser) Read(p []byte) (n int, err error) {
 func (s *stringReadCloser) Close() error {
 	return nil
 }
+
+// TestGetAllEmployeeUIDs tests the enumeration method
+func TestGetAllEmployeeUIDs(t *testing.T) {
+	service := setupTestService(t)
+
+	uids := service.GetAllEmployeeUIDs()
+	if len(uids) != 3 {
+		t.Errorf("Expected 3 employee UIDs, got %d", len(uids))
+	}
+
+	// Check expected UIDs are present
+	uidMap := make(map[string]bool)
+	for _, uid := range uids {
+		uidMap[uid] = true
+	}
+	expectedUIDs := []string{"jsmith", "adoe", "bwilson"}
+	for _, expected := range expectedUIDs {
+		if !uidMap[expected] {
+			t.Errorf("Expected UID %q not found", expected)
+		}
+	}
+}
+
+func TestGetAllEmployeeUIDs_EmptyService(t *testing.T) {
+	service := NewService()
+	uids := service.GetAllEmployeeUIDs()
+	if len(uids) != 0 {
+		t.Errorf("Expected 0 UIDs from empty service, got %d", len(uids))
+	}
+}
+
+// TestGetAllTeamNames tests the enumeration method
+func TestGetAllTeamNames(t *testing.T) {
+	service := setupTestService(t)
+
+	names := service.GetAllTeamNames()
+	if len(names) == 0 {
+		t.Error("Expected at least one team name")
+	}
+
+	// Check expected team is present
+	found := false
+	for _, name := range names {
+		if name == "test-team" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'test-team' in team names")
+	}
+}
+
+func TestGetAllTeamNames_EmptyService(t *testing.T) {
+	service := NewService()
+	names := service.GetAllTeamNames()
+	if len(names) != 0 {
+		t.Errorf("Expected 0 team names from empty service, got %d", len(names))
+	}
+}
+
+// TestGetAllOrgNames tests the enumeration method
+func TestGetAllOrgNames(t *testing.T) {
+	service := setupTestService(t)
+
+	names := service.GetAllOrgNames()
+	if len(names) == 0 {
+		t.Error("Expected at least one org name")
+	}
+
+	// Check expected org is present
+	found := false
+	for _, name := range names {
+		if name == "test-org" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'test-org' in org names")
+	}
+}
+
+func TestGetAllOrgNames_EmptyService(t *testing.T) {
+	service := NewService()
+	names := service.GetAllOrgNames()
+	if len(names) != 0 {
+		t.Errorf("Expected 0 org names from empty service, got %d", len(names))
+	}
+}
+
+// TestStartDataSourceWatcher tests watcher functionality
+func TestStartDataSourceWatcher_AlreadyRunning(t *testing.T) {
+	service := NewService()
+
+	// Create a fake data source that blocks
+	blockingSource := &blockingDataSource{
+		blockChan: make(chan struct{}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start watcher in background
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- service.StartDataSourceWatcher(ctx, blockingSource)
+	}()
+
+	// Wait a bit for watcher to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Try to start another watcher - should fail
+	err := service.StartDataSourceWatcher(ctx, blockingSource)
+	if err == nil {
+		t.Error("Expected error when starting second watcher")
+	}
+	if err != ErrWatcherAlreadyRunning {
+		t.Errorf("Expected ErrWatcherAlreadyRunning, got %v", err)
+	}
+
+	// Cancel and cleanup
+	cancel()
+	close(blockingSource.blockChan)
+}
+
+func TestStopWatcher(t *testing.T) {
+	service := NewService()
+
+	// Create a fake data source
+	blockingSource := &blockingDataSource{
+		blockChan: make(chan struct{}),
+	}
+
+	ctx := context.Background()
+
+	// Start watcher in background
+	go func() {
+		_ = service.StartDataSourceWatcher(ctx, blockingSource)
+	}()
+
+	// Wait for watcher to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop the watcher
+	service.StopWatcher()
+
+	// Now starting a new watcher should work
+	// (after a brief delay for the old goroutine to finish)
+	time.Sleep(50 * time.Millisecond)
+	close(blockingSource.blockChan)
+
+	// Verify the watcher flag was reset
+	service.mu.RLock()
+	running := service.watcherRunning
+	service.mu.RUnlock()
+
+	if running {
+		t.Error("Expected watcherRunning to be false after StopWatcher")
+	}
+}
+
+// blockingDataSource is a DataSource that blocks on Watch
+type blockingDataSource struct {
+	blockChan chan struct{}
+}
+
+func (b *blockingDataSource) Load(_ context.Context) (io.ReadCloser, error) {
+	// Return minimal valid JSON data
+	data := `{
+		"metadata": {"generated_at": "2024-01-01T00:00:00Z", "data_version": "test-v1.0"},
+		"lookups": {"employees": {}, "teams": {}, "orgs": {}},
+		"indexes": {
+			"membership": {"membership_index": {}, "relationship_index": {}},
+			"slack_id_mappings": {"slack_uid_to_uid": {}},
+			"github_id_mappings": {"github_id_to_uid": {}}
+		}
+	}`
+	return &stringReadCloser{data: data}, nil
+}
+
+func (b *blockingDataSource) Watch(_ context.Context, _ func() error) error {
+	<-b.blockChan
+	return nil
+}
+
+func (b *blockingDataSource) String() string {
+	return "blocking-data-source"
+}
+
+func (b *blockingDataSource) Close() error {
+	return nil
+}
