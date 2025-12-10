@@ -49,11 +49,6 @@ DEFAULT_RETRY_DELAY = 1.0
 DEFAULT_RETRY_BACKOFF = 2.0
 
 
-# =============================================================================
-# AsyncService
-# =============================================================================
-
-
 class AsyncService:
     """Async implementation of the organizational data service.
 
@@ -275,11 +270,6 @@ class AsyncService:
                 return self._data.lookups.employees.get(uid)
             return None
 
-    # Alias for backwards compatibility
-    async def get_employee_by_slack_uid(self, slack_uid: str) -> Employee | None:
-        """Get an employee by their Slack UID (alias for get_employee_by_slack_id)."""
-        return await self.get_employee_by_slack_id(slack_uid)
-
     async def get_employee_by_github_id(self, github_id: str) -> Employee | None:
         """Get an employee by their GitHub ID."""
         async with self._lock:
@@ -426,11 +416,6 @@ class AsyncService:
         return self._version
 
 
-# =============================================================================
-# Async Retry Helper
-# =============================================================================
-
-
 async def _async_retry_with_backoff(
     operation: Callable[[], Awaitable[BinaryIO]],
     max_retries: int = DEFAULT_MAX_RETRIES,
@@ -468,10 +453,6 @@ async def _async_retry_with_backoff(
 
     raise GCSError(f"{operation_name} failed after {max_retries + 1} attempts: {last_error}")
 
-
-# =============================================================================
-# AsyncGCSDataSource (optional - requires google-cloud-storage)
-# =============================================================================
 
 try:
     from google.cloud import storage  # type: ignore[import-untyped]

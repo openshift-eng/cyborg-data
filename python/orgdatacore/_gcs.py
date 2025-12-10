@@ -32,10 +32,6 @@ Example custom implementation:
 
         def __str__(self) -> str:
             return f"s3://{self.bucket}/{self.key}"
-
-IMPORTANT: File-based data sources have been removed from the public API for
-security reasons. All production deployments should use GCS or a custom
-DataSource implementation with proper access controls.
 """
 
 import threading
@@ -57,11 +53,6 @@ DEFAULT_RETRY_BACKOFF = 2.0  # multiplier
 class GCSDataSource:
     """
     GCSDataSource is a stub for GCS support.
-
-    IMPORTANT: This is the ONLY supported production data source out of the box.
-    File-based data sources have been removed from the public API for security reasons.
-    All production deployments must use GCS with proper access controls, or implement
-    a custom DataSource (e.g., S3, Azure Blob Storage).
 
     To enable actual GCS support, install the google-cloud-storage package
     and use GCSDataSourceWithSDK instead.
@@ -95,9 +86,7 @@ class GCSDataSource:
         """
         raise GCSError(
             "GCS support not enabled: install google-cloud-storage and use "
-            "GCSDataSourceWithSDK(). File-based data sources have been deprecated "
-            "for security reasons. GCS is the only supported production data source. "
-            "Alternatively, implement a custom DataSource for your storage backend."
+            "GCSDataSourceWithSDK(), or implement a custom DataSource."
         )
 
     def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
@@ -175,7 +164,6 @@ def _retry_with_backoff(
     raise GCSError(f"{operation_name} failed after {max_retries + 1} attempts: {last_error}")
 
 
-# Optional: GCS implementation with actual SDK support
 try:
     from google.cloud import storage  # type: ignore[import-untyped]
 
