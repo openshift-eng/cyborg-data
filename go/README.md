@@ -12,13 +12,11 @@ The `orgdatacore` package is designed to be a reusable component that can be con
 
 ## Features
 
-- **Fast Data Access**: Pre-computed indexes enable O(1) lookups for common queries
-- **Thread-Safe**: Concurrent access with read-write mutex protection
-- **Hot Reload**: Support for dynamic data updates without service restart
-- **Secure GCS Storage**: Production data loaded from Google Cloud Storage only
-- **Comprehensive Queries**: Employee, team, organization, pillar, and team group lookups with membership validation
-- **Cross-Cluster Ready**: Designed for distributed deployments with remote data sources
-- **Rich Metadata**: Full support for Slack channels, Jira projects, GitHub repos, roles, and more
+- Pre-computed indexes for O(1) lookups
+- Thread-safe with read-write mutex protection
+- Hot reload via `Watch()` without restart
+- GCS data source with optional SDK
+- Custom data source support via `DataSource` interface
 
 ## Usage
 
@@ -340,34 +338,25 @@ type Group struct {
 
 The package supports pluggable data sources through the `DataSource` interface:
 
-### Production Data Source
+### GCS Data Source
 
-**GCSDataSource** - Google Cloud Storage
-- Requires GCS SDK: `go get cloud.google.com/go/storage`
-- Build with `-tags gcs` for full functionality
-- Supports hot reload with configurable polling interval
-- Uses Application Default Credentials (ADC) or service account JSON
-- Secure remote data access for cross-cluster deployments in GCP
-- Provides proper access controls, encryption, and audit logging
+Requires `-tags gcs` build flag and GCS SDK.
+
+- Hot reload via generation-based polling
+- Uses ADC or service account JSON credentials
 
 ### Custom Data Sources
 
-Implement the `DataSource` interface to create custom sources:
+Implement the `DataSource` interface for custom sources:
 
 ```go
 type DataSource interface {
     Load(ctx context.Context) (io.ReadCloser, error)
     Watch(ctx context.Context, callback func() error) error
     String() string
+    io.Closer
 }
 ```
-
-Examples of custom sources you could implement:
-- HTTP/HTTPS endpoints
-- AWS S3 or other S3-compatible storage
-- Git repositories
-- Database queries
-- Redis/Memcached for caching layers
 
 ## Logging
 
