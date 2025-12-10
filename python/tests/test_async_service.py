@@ -68,13 +68,13 @@ class TestAsyncService:
         assert employee.uid == "testuser1"
 
     @pytest.mark.asyncio
-    async def test_get_employee_by_slack_uid(self) -> None:
-        """Test getting an employee by Slack UID."""
+    async def test_get_employee_by_slack_id(self) -> None:
+        """Test getting an employee by Slack ID."""
         source = AsyncFakeDataSource(data=create_test_data_json())
         service = AsyncService()
         await service.load_from_data_source(source)
 
-        employee = await service.get_employee_by_slack_uid("U111111")
+        employee = await service.get_employee_by_slack_id("U111111")
         assert employee is not None
         assert employee.uid == "testuser1"
 

@@ -5,8 +5,6 @@ from collections.abc import Callable
 from io import BytesIO
 from typing import Any, BinaryIO
 
-# Note: We don't inherit from DataSource - it's a Protocol (structural typing)
-# Just implement the required methods: load(), watch(), __str__()
 from orgdatacore._types import (
     Ancestry,
     Data,

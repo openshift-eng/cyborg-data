@@ -28,9 +28,6 @@ Example with custom DataSource:
 
     service = Service()
     service.load_from_data_source(S3DataSource("my-bucket", "key"))
-
-NOTE: File-based data sources are NOT supported for production use.
-They are only available internally for testing purposes.
 """
 
 from ._async import AsyncService
