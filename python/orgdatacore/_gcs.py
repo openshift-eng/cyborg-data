@@ -3,6 +3,10 @@ Data source implementations for orgdatacore.
 
 This module provides the GCSDataSource for production use with Google Cloud Storage.
 
+IMPORTANT: The caller is responsible for managing the data source lifecycle.
+The reader returned by load() must be closed when done reading. When using
+Service.load_from_data_source(), the service handles closing the reader.
+
 For custom data sources (e.g., S3, Azure Blob, etc.), implement the DataSource
 protocol (just implement load(), watch(), __str__() methods).
 
@@ -351,6 +355,14 @@ try:
             logger = get_logger()
             logger.info("Stopping GCS watcher")
             self._stop_event.set()
+
+        def stop(self) -> None:
+            """Stop the GCS watcher.
+
+            Alias for stop_watching() to support the standard stop interface
+            expected by AsyncService.stop_watcher().
+            """
+            self.stop_watching()
 
         def __str__(self) -> str:
             """Return a description of this data source."""

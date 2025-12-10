@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -491,12 +492,12 @@ type blockingDataSource struct {
 }
 
 func (b *blockingDataSource) Load(_ context.Context) (io.ReadCloser, error) {
-	// Return minimal valid JSON data
+	// Return minimal valid JSON data (must have employees and membership_index)
 	data := `{
 		"metadata": {"generated_at": "2024-01-01T00:00:00Z", "data_version": "test-v1.0"},
-		"lookups": {"employees": {}, "teams": {}, "orgs": {}},
+		"lookups": {"employees": {"test": {"uid": "test"}}, "teams": {}, "orgs": {}},
 		"indexes": {
-			"membership": {"membership_index": {}, "relationship_index": {}},
+			"membership": {"membership_index": {"test": []}, "relationship_index": {}},
 			"slack_id_mappings": {"slack_uid_to_uid": {}},
 			"github_id_mappings": {"github_id_to_uid": {}}
 		}
@@ -515,4 +516,101 @@ func (b *blockingDataSource) String() string {
 
 func (b *blockingDataSource) Close() error {
 	return nil
+}
+
+// TestValidationMissingEmployees tests that empty employees fails validation
+func TestValidationMissingEmployees(t *testing.T) {
+	service := NewService()
+
+	invalidSource := &testDataSource{
+		data: `{
+			"metadata": {"generated_at": "2024-01-01T00:00:00Z"},
+			"lookups": {"employees": {}, "teams": {}, "orgs": {}},
+			"indexes": {
+				"membership": {"membership_index": {"uid": []}, "relationship_index": {}},
+				"slack_id_mappings": {"slack_uid_to_uid": {}},
+				"github_id_mappings": {"github_id_to_uid": {}}
+			}
+		}`,
+	}
+
+	err := service.LoadFromDataSource(context.Background(), invalidSource)
+	if err == nil {
+		t.Error("Expected validation error for empty employees")
+	}
+	if err != nil && !strings.Contains(err.Error(), "employees") {
+		t.Errorf("Error should mention employees, got: %v", err)
+	}
+}
+
+// TestValidationMissingMembershipIndex tests that empty membership_index fails validation
+func TestValidationMissingMembershipIndex(t *testing.T) {
+	service := NewService()
+
+	invalidSource := &testDataSource{
+		data: `{
+			"metadata": {"generated_at": "2024-01-01T00:00:00Z"},
+			"lookups": {"employees": {"test": {"uid": "test"}}, "teams": {}, "orgs": {}},
+			"indexes": {
+				"membership": {"membership_index": {}, "relationship_index": {}},
+				"slack_id_mappings": {"slack_uid_to_uid": {}},
+				"github_id_mappings": {"github_id_to_uid": {}}
+			}
+		}`,
+	}
+
+	err := service.LoadFromDataSource(context.Background(), invalidSource)
+	if err == nil {
+		t.Error("Expected validation error for empty membership_index")
+	}
+	if err != nil && !strings.Contains(err.Error(), "membership_index") {
+		t.Errorf("Error should mention membership_index, got: %v", err)
+	}
+}
+
+// TestWatcherStateClearsOnExit tests that watcher state clears when Watch returns
+func TestWatcherStateClearsOnExit(t *testing.T) {
+	service := NewService()
+
+	// Use context with cancel
+	ctx, cancel := context.WithCancel(context.Background())
+
+	blockingSource := &blockingDataSource{
+		blockChan: make(chan struct{}),
+	}
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- service.StartDataSourceWatcher(ctx, blockingSource)
+	}()
+
+	// Wait for watcher to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify watcher is running
+	service.mu.RLock()
+	running := service.watcherRunning
+	service.mu.RUnlock()
+	if !running {
+		t.Error("Expected watcherRunning to be true while watcher is running")
+	}
+
+	// Cancel context and unblock
+	cancel()
+	close(blockingSource.blockChan)
+
+	// Wait for watcher goroutine to finish
+	select {
+	case <-errChan:
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for watcher to finish")
+	}
+
+	// Verify watcher state is cleared
+	service.mu.RLock()
+	running = service.watcherRunning
+	service.mu.RUnlock()
+	if running {
+		t.Error("Expected watcherRunning to be false after watcher exits")
+	}
 }

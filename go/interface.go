@@ -6,10 +6,21 @@ import (
 	"time"
 )
 
+// DataSource provides organizational data from external storage.
+// The caller is responsible for calling Close() when done with the data source.
 type DataSource interface {
+	// Load returns a reader with the organizational data JSON.
+	// The caller must close the returned ReadCloser when done.
 	Load(ctx context.Context) (io.ReadCloser, error)
+
+	// Watch monitors the data source for changes and calls callback on updates.
+	// Blocks until context is cancelled or an error occurs.
 	Watch(ctx context.Context, callback func() error) error
+
+	// String returns a human-readable description of this data source.
 	String() string
+
+	// Close releases any resources held by this data source.
 	io.Closer
 }
 

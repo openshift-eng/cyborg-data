@@ -76,6 +76,9 @@ class AsyncService:
         self._data: Data | None = None
         self._version = DataVersion()
         self._init_source = data_source
+        self._watcher_running = False
+        self._watcher_task: asyncio.Task[None] | None = None
+        self._watcher_source: Any | None = None
 
     async def initialize(self) -> None:
         """Initialize the service if a data source was provided.
@@ -144,37 +147,94 @@ class AsyncService:
     async def start_data_source_watcher(self, source: Any) -> None:
         """Start watching an async data source for changes.
 
+        This method returns immediately after starting the watcher in the background.
+        Use stop_watcher() to stop the watcher.
+
         Args:
             source: Async data source to watch.
 
         Raises:
             DataLoadError: If initial load fails.
+            RuntimeError: If watcher is already running.
         """
         logger = get_logger()
 
-        # Perform initial load
+        if self._watcher_running:
+            raise RuntimeError("Watcher is already running")
+
+        # Perform initial load (before starting background watcher)
         await self.load_from_data_source(source)
 
-        # Define callback for reload
-        async def callback() -> Exception | None:
-            try:
-                logger.info("Reloading data from async source", extra={"source": str(source)})
-                await self.load_from_data_source(source)
-                return None
-            except Exception as e:
-                logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
-                return e
+        self._watcher_running = True
+        self._watcher_source = source
 
-        # Start watcher if source supports it
-        if hasattr(source, "watch"):
-            logger.info("Starting async data source watcher", extra={"source": str(source)})
-            if asyncio.iscoroutinefunction(source.watch):
-                err = await source.watch(callback)
-            else:
-                err = source.watch(lambda: asyncio.run(callback()))
-            if err:
-                logger.error("Failed to start watcher", extra={"source": str(source), "error": str(err)})
-                raise err
+        async def _run_watcher() -> None:
+            """Background watcher coroutine."""
+            try:
+                async def callback() -> Exception | None:
+                    try:
+                        logger.info("Reloading data from async source", extra={"source": str(source)})
+                        await self.load_from_data_source(source)
+                        return None
+                    except Exception as e:
+                        logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
+                        return e
+
+                if hasattr(source, "watch"):
+                    logger.info("Starting async data source watcher", extra={"source": str(source)})
+                    if asyncio.iscoroutinefunction(source.watch):
+                        err = await source.watch(callback)
+                    else:
+                        # Sync watch - run in thread with async-safe callback
+                        loop = asyncio.get_running_loop()
+
+                        def sync_callback() -> Exception | None:
+                            future = asyncio.run_coroutine_threadsafe(callback(), loop)
+                            try:
+                                return future.result(timeout=60)
+                            except Exception as e:
+                                return e
+
+                        err = await asyncio.to_thread(source.watch, sync_callback)
+                    if err:
+                        logger.error("Watcher error", extra={"source": str(source), "error": str(err)})
+            except asyncio.CancelledError:
+                logger.info("Watcher cancelled", extra={"source": str(source)})
+                raise
+            finally:
+                self._watcher_running = False
+                self._watcher_task = None
+                self._watcher_source = None
+
+        # Start as background task
+        self._watcher_task = asyncio.create_task(_run_watcher())
+
+    async def stop_watcher(self) -> None:
+        """Stop the data source watcher if running.
+
+        For sync data sources running via asyncio.to_thread(), calls source.stop()
+        if available to signal the watch loop to exit. This enables cooperative
+        cancellation since Python threads cannot be forcibly interrupted.
+        """
+        # Signal sync sources to stop (best effort)
+        if self._watcher_source is not None:
+            if hasattr(self._watcher_source, "stop"):
+                try:
+                    self._watcher_source.stop()
+                except Exception:
+                    pass  # Best effort - don't fail stop_watcher if stop() fails
+
+        # Cancel the asyncio task
+        if self._watcher_task is not None:
+            self._watcher_task.cancel()
+            try:
+                await self._watcher_task
+            except asyncio.CancelledError:
+                pass
+            self._watcher_task = None
+
+        self._watcher_running = False
+        self._watcher_source = None
 
     def is_healthy(self) -> bool:
         """Check if the service has data loaded."""

@@ -306,7 +306,7 @@ func TestFakeGCSDataSourceHotReload(t *testing.T) {
 			"teams": {}, "orgs": {}
 		},
 		"indexes": {
-			"membership": {"membership_index": {}, "relationship_index": {}},
+			"membership": {"membership_index": {"user1": []}, "relationship_index": {}},
 			"slack_id_mappings": {"slack_uid_to_uid": {}},
 			"github_id_mappings": {"github_id_to_uid": {}}
 		}
@@ -335,7 +335,7 @@ func TestFakeGCSDataSourceHotReload(t *testing.T) {
 			"teams": {}, "orgs": {}
 		},
 		"indexes": {
-			"membership": {"membership_index": {}, "relationship_index": {}},
+			"membership": {"membership_index": {"user1": [], "user2": []}, "relationship_index": {}},
 			"slack_id_mappings": {"slack_uid_to_uid": {}},
 			"github_id_mappings": {"github_id_to_uid": {}}
 		}

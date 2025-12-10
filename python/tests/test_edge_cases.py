@@ -1,10 +1,15 @@
 """Tests for edge cases and error handling."""
 
+import json
+import tempfile
 import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from orgdatacore import Service
+from orgdatacore._exceptions import DataLoadError
 
 # Import from internal testing module - NOT part of public API
 from orgdatacore._internal.testing import FileDataSource
@@ -235,4 +240,112 @@ class TestEnumerationMethods:
         assert empty_service.get_all_org_names() == []
         assert empty_service.get_all_pillar_names() == []
         assert empty_service.get_all_team_group_names() == []
+
+
+class TestWatcherState:
+    """Tests for watcher state management."""
+
+    def test_stop_watcher_clears_state(self):
+        """Test that stop_watcher() clears watcher state."""
+        service = Service()
+        # Initially not running
+        assert not service._watcher_running
+
+        # Manually set state to simulate running watcher
+        service._watcher_running = True
+        assert service._watcher_running
+
+        # Stop should clear state
+        service.stop_watcher()
+        assert not service._watcher_running
+        assert service._stop_event.is_set()
+
+    def test_watcher_already_running_raises_error(self, test_data_path: Path):
+        """Test that starting watcher when already running raises error."""
+        service = Service()
+        service._watcher_running = True
+
+        file_source = FileDataSource(str(test_data_path))
+
+        try:
+            service.start_data_source_watcher(file_source)
+            assert False, "Should have raised RuntimeError"
+        except RuntimeError as e:
+            assert "already running" in str(e)
+
+
+class TestDataValidation:
+    """Tests for data validation at load time."""
+
+    def test_missing_employees_raises_error(self):
+        """Test that missing employees in data raises validation error."""
+        invalid_data = {
+            "metadata": {"generated_at": "2024-01-01"},
+            "lookups": {
+                "employees": {},  # Empty employees - should fail validation
+                "teams": {},
+                "orgs": {},
+                "pillars": {},
+                "team_groups": {},
+            },
+            "indexes": {
+                "membership": {
+                    "membership_index": {"uid": []},
+                    "relationship_index": {},
+                },
+                "slack_id_mappings": {"slack_uid_to_uid": {}},
+                "github_id_mappings": {"github_id_to_uid": {}},
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as f:
+            json.dump(invalid_data, f)
+            temp_path = f.name
+
+        try:
+            service = Service()
+            file_source = FileDataSource(temp_path)
+            with pytest.raises(DataLoadError) as exc_info:
+                service.load_from_data_source(file_source)
+            assert "lookups.employees" in str(exc_info.value)
+        finally:
+            Path(temp_path).unlink()
+
+    def test_missing_membership_index_raises_error(self):
+        """Test that missing membership_index raises validation error."""
+        invalid_data = {
+            "metadata": {"generated_at": "2024-01-01"},
+            "lookups": {
+                "employees": {"uid1": {"uid": "uid1", "full_name": "Test"}},
+                "teams": {},
+                "orgs": {},
+                "pillars": {},
+                "team_groups": {},
+            },
+            "indexes": {
+                "membership": {
+                    "membership_index": {},  # Empty - should fail
+                    "relationship_index": {},
+                },
+                "slack_id_mappings": {"slack_uid_to_uid": {}},
+                "github_id_mappings": {"github_id_to_uid": {}},
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as f:
+            json.dump(invalid_data, f)
+            temp_path = f.name
+
+        try:
+            service = Service()
+            file_source = FileDataSource(temp_path)
+            with pytest.raises(DataLoadError) as exc_info:
+                service.load_from_data_source(file_source)
+            assert "membership_index" in str(exc_info.value)
+        finally:
+            Path(temp_path).unlink()
 

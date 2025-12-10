@@ -314,3 +314,121 @@ class TestAsyncService:
         assert await service.get_team_members("test") == ()
         assert await service.get_org_members("test") == ()
 
+    @pytest.mark.asyncio
+    async def test_start_watcher_returns_immediately(self) -> None:
+        """Test that start_data_source_watcher returns immediately."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+
+        # This should return immediately, not block
+        await service.start_data_source_watcher(source)
+
+        # Watcher task should be set
+        assert service._watcher_task is not None
+        assert service._watcher_running
+
+        # Clean up
+        await service.stop_watcher()
+
+    @pytest.mark.asyncio
+    async def test_stop_watcher_cancels_task(self) -> None:
+        """Test that stop_watcher() cancels the watcher task."""
+
+        class BlockingDataSource:
+            """Data source with a blocking watch for testing."""
+
+            def __init__(self, data: str) -> None:
+                self.data = data
+                self._stop_event = asyncio.Event()
+
+            async def load(self) -> BinaryIO:
+                return BytesIO(self.data.encode("utf-8"))
+
+            async def watch(
+                self, callback: Callable[[], Exception | None]
+            ) -> Exception | None:
+                # Block until cancelled
+                try:
+                    await self._stop_event.wait()
+                except asyncio.CancelledError:
+                    pass
+                return None
+
+            def __str__(self) -> str:
+                return "blocking-data-source"
+
+        source = BlockingDataSource(data=create_test_data_json())
+        service = AsyncService()
+
+        # Start watcher
+        await service.start_data_source_watcher(source)
+
+        # Verify watcher is running
+        assert service._watcher_task is not None
+        assert service._watcher_running
+        assert not service._watcher_task.done()
+
+        # Stop watcher
+        await service.stop_watcher()
+
+        # Verify watcher is stopped
+        assert service._watcher_task is None
+        assert not service._watcher_running
+
+    @pytest.mark.asyncio
+    async def test_watcher_already_running_raises_error(self) -> None:
+        """Test that starting a watcher when one is running raises error."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+
+        await service.start_data_source_watcher(source)
+
+        with pytest.raises(RuntimeError, match="already running"):
+            await service.start_data_source_watcher(source)
+
+        # Clean up
+        await service.stop_watcher()
+
+    @pytest.mark.asyncio
+    async def test_stop_watcher_calls_source_stop(self) -> None:
+        """Test that stop_watcher() calls source.stop() if available."""
+        stop_called = False
+
+        class StoppableDataSource:
+            """Data source with a stop() method for testing."""
+
+            def __init__(self, data: str) -> None:
+                self.data = data
+                self._block_event = asyncio.Event()
+
+            async def load(self) -> BinaryIO:
+                return BytesIO(self.data.encode("utf-8"))
+
+            async def watch(
+                self, callback: Callable[[], Exception | None]
+            ) -> Exception | None:
+                # Block until stop is called
+                await self._block_event.wait()
+                return None
+
+            def stop(self) -> None:
+                nonlocal stop_called
+                stop_called = True
+                self._block_event.set()
+
+            def __str__(self) -> str:
+                return "stoppable-data-source"
+
+        source = StoppableDataSource(data=create_test_data_json())
+        service = AsyncService()
+
+        await service.start_data_source_watcher(source)
+
+        assert service._watcher_task is not None
+        assert service._watcher_running
+
+        await service.stop_watcher()
+
+        assert stop_called, "source.stop() should have been called"
+        assert service._watcher_task is None
+        assert not service._watcher_running

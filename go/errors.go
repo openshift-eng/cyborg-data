@@ -11,6 +11,7 @@ var (
 	ErrGCSNotEnabled         = errors.New("orgdatacore: GCS support not enabled - build with -tags gcs")
 	ErrInvalidConfig         = errors.New("orgdatacore: invalid configuration")
 	ErrWatcherAlreadyRunning = errors.New("orgdatacore: watcher already running")
+	ErrInvalidData           = errors.New("orgdatacore: invalid data structure")
 )
 
 // NotFoundError wraps ErrNotFound with details about what wasn't found.

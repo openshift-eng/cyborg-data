@@ -42,6 +42,10 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 		return NewLoadError(source.String(), fmt.Errorf("failed to parse JSON: %w", err))
 	}
 
+	if err := validateData(&orgData); err != nil {
+		return NewLoadError(source.String(), err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -72,13 +76,20 @@ func (s *Service) StartDataSourceWatcher(ctx context.Context, source DataSource)
 		return err
 	}
 
-	return source.Watch(ctx, func() error {
+	err := source.Watch(ctx, func() error {
 		if err := s.LoadFromDataSource(ctx, source); err != nil {
 			s.logger.Error("failed to reload data", "source", source.String(), "error", err)
 			return err
 		}
 		return nil
 	})
+
+	// Clear watcher state when Watch exits (context cancelled, error, etc.)
+	s.mu.Lock()
+	s.watcherRunning = false
+	s.mu.Unlock()
+
+	return err
 }
 
 // StopWatcher marks the watcher as stopped. Note that this only updates the
@@ -472,4 +483,15 @@ func (s *Service) GetAllTeamGroupNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// validateData checks that required data structures are present.
+func validateData(data *Data) error {
+	if len(data.Lookups.Employees) == 0 {
+		return fmt.Errorf("%w: missing lookups.employees", ErrInvalidData)
+	}
+	if len(data.Indexes.Membership.MembershipIndex) == 0 {
+		return fmt.Errorf("%w: missing indexes.membership.membership_index", ErrInvalidData)
+	}
+	return nil
 }

@@ -311,6 +311,14 @@ def _parse_data(raw_data: dict[str, Any]) -> Data:
     )
 
 
+def _validate_data(data: Data, source: DataSource) -> None:
+    """Validate that required data structures are present."""
+    if not data.lookups.employees:
+        raise DataLoadError(f"invalid data from {source}: missing lookups.employees")
+    if not data.indexes.membership.membership_index:
+        raise DataLoadError(f"invalid data from {source}: missing indexes.membership.membership_index")
+
+
 class Service:
     """
     Service implements the core organizational data service.
@@ -340,6 +348,8 @@ class Service:
         self._lock = threading.RLock()
         self._data: Data | None = None
         self._version = DataVersion()
+        self._watcher_running = False
+        self._stop_event = threading.Event()
 
         if data_source is not None:
             self.load_from_data_source(data_source)
@@ -376,6 +386,8 @@ class Service:
             logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
             raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
 
+        _validate_data(org_data, source)
+
         with self._lock:
             self._data = org_data
             self._version = DataVersion(
@@ -403,24 +415,42 @@ class Service:
 
         Raises:
             DataLoadError: If initial load fails.
+            RuntimeError: If watcher is already running.
         """
         logger = get_logger()
-        self.load_from_data_source(source)
 
-        def callback() -> Exception | None:
-            try:
-                logger.info("Reloading data from source", extra={"source": str(source)})
-                self.load_from_data_source(source)
-                return None
-            except Exception as e:
-                logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
-                return e
+        if self._watcher_running:
+            raise RuntimeError("Watcher is already running")
 
-        logger.info("Starting data source watcher", extra={"source": str(source)})
-        err = source.watch(callback)
-        if err:
-            logger.error("Failed to start watcher", extra={"source": str(source), "error": str(err)})
-            raise err
+        self._watcher_running = True
+        self._stop_event.clear()
+
+        try:
+            self.load_from_data_source(source)
+
+            def callback() -> Exception | None:
+                if self._stop_event.is_set():
+                    return None
+                try:
+                    logger.info("Reloading data from source", extra={"source": str(source)})
+                    self.load_from_data_source(source)
+                    return None
+                except Exception as e:
+                    logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
+                    return e
+
+            logger.info("Starting data source watcher", extra={"source": str(source)})
+            err = source.watch(callback)
+            if err:
+                logger.error("Failed to start watcher", extra={"source": str(source), "error": str(err)})
+                raise err
+        finally:
+            self._watcher_running = False
+
+    def stop_watcher(self) -> None:
+        """Stop the data source watcher if running."""
+        self._stop_event.set()
+        self._watcher_running = False
 
     def is_healthy(self) -> bool:
         """Check if the service is healthy and has data loaded."""
