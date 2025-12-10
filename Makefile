@@ -1,70 +1,100 @@
-all: test examples
+# Multi-Language Build System for cyborg-data
+# Compatible with OpenShift Prow CI
+#
+# Prow can invoke these targets directly:
+#   make go-test      - Run Go unit tests (Prow job: unit-go)
+#   make python-test  - Run Python unit tests (Prow job: unit-python)
+#   make test         - Run all tests
 
-# Build all examples
-# NOTE: Production deployments require -tags gcs for GCS support
-examples: gcs-example comprehensive-example
-.PHONY: examples
+.PHONY: all test lint clean help go-test python-test go-lint python-lint go-build python-build
 
-# Individual example targets
-gcs-example:
-	cd example/with-gcs && go build -tags gcs -o ./with-gcs .
+# Default target
+all: test
 
-gcs-example-stub:
-	cd example/with-gcs && go build -o ./with-gcs-stub .
-
-comprehensive-example:
-	cd example/comprehensive && go build -o ./comprehensive .
-
-# Test targets
-test:
-	go test ./...
-.PHONY: test
-
-test-with-gcs:
-	go test -tags gcs ./...
-.PHONY: test-with-gcs
-
-# Benchmarks
-bench:
-	go test -bench=. ./...
-.PHONY: bench
-
-# Dependency management
-vendor:
-	go mod tidy
-	go mod vendor
-.PHONY: vendor
-
-# Linting
-lint:
-	golangci-lint run --timeout=20m
-.PHONY: lint
-
-lint-with-gcs:
-	golangci-lint run --timeout=20m --build-tags "gcs"
-.PHONY: lint-with-gcs
-
-# Clean up
-clean:
-	rm -f example/with-gcs/with-gcs example/with-gcs/with-gcs-stub example/comprehensive/comprehensive
-.PHONY: clean
-
-# Help
 help:
-	@echo "Available targets:"
-	@echo "  all                    - Run tests and build all examples"
-	@echo "  examples               - Build all examples (requires -tags gcs for production)"
-	@echo "  gcs-example            - Build GCS example with full SDK support"
-	@echo "  gcs-example-stub       - Build GCS example in stub mode (no tags)"
-	@echo "  comprehensive-example  - Build comprehensive demo"
-	@echo "  test                   - Run unit tests"
-	@echo "  test-with-gcs          - Run unit tests with GCS build tags"
-	@echo "  bench                  - Run benchmarks"
-	@echo "  vendor                 - Update dependencies and vendor"
-	@echo "  lint                   - Run linter"
-	@echo "  lint-with-gcs          - Run linter with GCS build tags"
-	@echo "  clean                  - Remove built binaries"
-	@echo "  help                   - Show this help"
+	@echo "Multi-Language Build System for cyborg-data"
 	@echo ""
-	@echo "NOTE: Production builds require -tags gcs for GCS support"
-.PHONY: help
+	@echo "Available targets:"
+	@echo "  make test          - Run tests for both Go and Python"
+	@echo "  make lint          - Run linters for both Go and Python"
+	@echo "  make build         - Build examples for both languages"
+	@echo "  make clean         - Clean build artifacts"
+	@echo ""
+	@echo "Go-specific targets:"
+	@echo "  make go-test       - Run Go tests"
+	@echo "  make go-lint       - Run Go linter"
+	@echo "  make go-build      - Build Go examples"
+	@echo ""
+	@echo "Python-specific targets:"
+	@echo "  make python-test   - Run Python tests"
+	@echo "  make python-lint   - Run Python linter"
+	@echo "  make python-build  - Build Python package"
+
+# Combined targets
+test: go-test python-test
+	@echo "✅ All tests passed (Go + Python)"
+
+lint: go-lint python-lint
+	@echo "✅ All linters passed (Go + Python)"
+
+build: go-build python-build
+	@echo "✅ All builds completed (Go + Python)"
+
+clean: go-clean python-clean
+	@echo "✅ All artifacts cleaned"
+
+# Go targets
+go-test:
+	@echo "Running Go tests..."
+	cd go && $(MAKE) test
+
+go-test-with-gcs:
+	@echo "Running Go tests with GCS support..."
+	cd go && $(MAKE) test-with-gcs
+
+go-lint:
+	@echo "Running Go linter..."
+	cd go && $(MAKE) lint
+
+go-build:
+	@echo "Building Go examples..."
+	cd go && $(MAKE) examples
+
+go-clean:
+	@echo "Cleaning Go build artifacts..."
+	cd go && $(MAKE) clean
+
+go-bench:
+	@echo "Running Go benchmarks..."
+	cd go && $(MAKE) bench
+
+# Python targets
+python-test:
+	@echo "Running Python tests..."
+	cd python && pytest
+
+python-lint:
+	@echo "Running Python linter..."
+	cd python && ruff check .
+
+python-format:
+	@echo "Formatting Python code..."
+	cd python && ruff format .
+
+python-build:
+	@echo "Building Python package..."
+	cd python && uv build
+
+python-clean:
+	@echo "Cleaning Python build artifacts..."
+	cd python && rm -rf dist/ build/ *.egg-info .pytest_cache .mypy_cache .ruff_cache __pycache__
+
+# Validation targets
+validate-parity:
+	@echo "Validating API parity between Go and Python..."
+	@./scripts/validate-api-parity.sh || echo "Parity validation script not yet implemented"
+
+# Documentation targets
+docs:
+	@echo "Building documentation..."
+	@echo "Documentation build not yet configured"

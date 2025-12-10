@@ -1,0 +1,111 @@
+package testing
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+)
+
+// FileDataSource loads organizational data from local files.
+// INTERNAL USE ONLY: This is kept for test infrastructure.
+// Production code should use GCSDataSourceImpl with -tags gcs.
+type FileDataSource struct {
+	FilePaths []string
+	// PollInterval controls how frequently files are checked for changes.
+	// If zero, a default of 60s is used.
+	PollInterval time.Duration
+}
+
+// NewFileDataSource creates a new file-based data source for testing.
+// INTERNAL USE ONLY: This should only be used in test code.
+// If multiple paths provided, the last one is used (allows for fallback logic)
+func NewFileDataSource(filePaths ...string) *FileDataSource {
+	return &FileDataSource{
+		FilePaths: filePaths,
+	}
+}
+
+// Load returns a reader for the organizational data file
+func (f *FileDataSource) Load(ctx context.Context) (io.ReadCloser, error) {
+	if len(f.FilePaths) == 0 {
+		return nil, fmt.Errorf("no file paths provided")
+	}
+
+	// Load the primary data file (use the last path if multiple provided)
+	filePath := f.FilePaths[len(f.FilePaths)-1]
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
+	}
+
+	return file, nil
+}
+
+// Watch monitors for file changes (basic implementation using polling)
+func (f *FileDataSource) Watch(ctx context.Context, callback func() error) error {
+	if len(f.FilePaths) == 0 {
+		return fmt.Errorf("no file paths to watch")
+	}
+
+	// Get initial modification times
+	modTimes := make(map[string]time.Time)
+	for _, path := range f.FilePaths {
+		if stat, err := os.Stat(path); err == nil {
+			modTimes[path] = stat.ModTime()
+		}
+	}
+
+	// Poll for changes based on configured interval (default 60s)
+	interval := f.PollInterval
+	if interval == 0 {
+		interval = 60 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Check if any files have changed
+				changed := false
+				for _, path := range f.FilePaths {
+					if stat, err := os.Stat(path); err == nil {
+						if lastMod, exists := modTimes[path]; !exists || stat.ModTime().After(lastMod) {
+							modTimes[path] = stat.ModTime()
+							changed = true
+						}
+					}
+				}
+
+				if changed {
+					if err := callback(); err != nil {
+						// Note: We can't use logError here as it's in the parent package
+						// Tests should handle errors appropriately
+						_ = err
+					}
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// String returns a description of this data source
+func (f *FileDataSource) String() string {
+	if len(f.FilePaths) == 1 {
+		return fmt.Sprintf("file:%s", f.FilePaths[0])
+	}
+	return fmt.Sprintf("files:%s", strings.Join(f.FilePaths, ","))
+}
+
+// Close implements io.Closer. FileDataSource has no persistent resources to release.
+func (f *FileDataSource) Close() error {
+	return nil
+}

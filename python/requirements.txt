@@ -1,0 +1,6 @@
+# Runtime dependencies (none required for core functionality)
+
+# Optional: GCS support (uncomment if needed)
+# google-cloud-storage>=2.0.0
+
+
