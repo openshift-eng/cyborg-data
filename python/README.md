@@ -190,16 +190,6 @@ config = GCSConfig(
 source = GCSDataSourceWithSDK(config)
 ```
 
-## Data Source Policy
-
-**IMPORTANT**: File-based data sources have been removed from the public API for security reasons.
-
-For production deployments:
-- Use `GCSDataSourceWithSDK` with proper access controls, or
-- Implement a custom `DataSource` for your storage backend (S3, Azure, etc.)
-
-File-based data sources are only available internally for testing purposes and are not part of the public API.
-
 ## Thread Safety
 
 The `Service` class is thread-safe. All read operations can be performed concurrently, and data reloading is atomic.

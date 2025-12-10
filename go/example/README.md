@@ -1,82 +1,49 @@
-# cyborg-data Examples
+# Examples
 
-This directory contains examples demonstrating different usage patterns of the cyborg-data library.
+## comprehensive/
 
-## Examples
+Full-featured example showing GCS usage, queries, and data source patterns.
 
-### `file-only/` - Lightweight File-Based Usage
-**No external dependencies required**
-
-**Build & Run:**
-```bash
-cd file-only
-go build .
-./file-only
-```
-
-### `with-gcs/` - Google Cloud Storage Integration
-**Full functionality requires GCS SDK and build tags**
-
-**Build & Run (Stub Mode - Always Works):**
-```bash
-cd with-gcs
-go build .              # Shows warning, demonstrates API
-./with-gcs
-```
-
-**Build & Run (Full GCS Mode):**
-```bash
-go get cloud.google.com/go/storage
-cd with-gcs
-go build -tags gcs .    # Real GCS implementation
-./with-gcs
-```
-
-### `comprehensive/` - Full-Featured Demo
-Shows both file and GCS usage patterns in a single example with automatic feature detection and advanced queries.
-
-**Build & Run:**
 ```bash
 cd comprehensive
 go build .
 ./comprehensive
 ```
 
----
+## with-gcs/
 
-## Key Differences
+GCS-specific example with hot reload.
 
-| Feature | file-only/ | with-gcs/ |
-|---------|-----------|-----------|
-| **Dependencies** | None (stdlib only) | GCS SDK (~50+ packages) |
-| **Build Command** | `go build .` | `go build -tags gcs .` |
-| **Data Source** | Local files | Google Cloud Storage |
-| **Hot Reload** | File system polling | GCS metadata polling |
-| **Authentication** | Not needed | Service account or ADC |
-| **Binary Size** | Smaller | Larger (includes GCS SDK) |
+**Stub mode (no GCS SDK):**
+```bash
+cd with-gcs
+go build .
+./with-gcs
+```
 
-## Architecture Benefits
+**Full GCS mode:**
+```bash
+cd with-gcs
+go build -tags gcs .
+./with-gcs
+```
 
-The build tag approach provides:
+## Build Tags
 
-1. **Flexibility**: Teams choose their deployment model
-2. **Lightweight Default**: No cloud dependencies unless needed
-3. **Pluggable Design**: Easy to add other data sources (HTTP, databases, etc.)
-4. **Production Ready**: Both patterns support hot reload and structured logging
+| Build | Dependencies | Data Source |
+|-------|-------------|-------------|
+| `go build .` | stdlib only | Stub (errors on use) |
+| `go build -tags gcs .` | GCS SDK | Google Cloud Storage |
 
-## Integration Examples
+## Query API
 
-Both examples show identical query APIs:
+Both examples use the same query interface:
 
 ```go
-// Same code works with any data source
 service := orgdatacore.NewService()
-service.LoadFromDataSource(ctx, dataSource) // File or GCS
+service.LoadFromDataSource(ctx, dataSource)
 
-// Identical queries regardless of source
 employee := service.GetEmployeeByUID("jsmith")
 teams := service.GetTeamsForSlackID("U123456")
 orgs := service.GetUserOrganizations("U123456")
 ```
-
-This demonstrates the power of the `DataSource` interface abstraction.

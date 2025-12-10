@@ -1,17 +1,14 @@
 # cyborg-data
 
-High-performance organizational data access library with **O(1) lookups** for employee, team, organization, pillar, and team group queries.
+Organizational data access library with O(1) lookups for employee, team, organization, pillar, and team group queries.
 
-Available in **Go** and **Python** with identical APIs.
+Available in Go and Python with identical APIs.
 
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Go
 
 ```bash
-cd go
 go get github.com/openshift-eng/cyborg-data/go
 ```
 
@@ -19,18 +16,17 @@ go get github.com/openshift-eng/cyborg-data/go
 import orgdatacore "github.com/openshift-eng/cyborg-data/go"
 
 service := orgdatacore.NewService()
-// Load data from GCS, file, etc.
+// Load from GCS or custom data source
 employee := service.GetEmployeeByUID("user123")
 ```
 
-👉 **[Full Go Documentation](go/README.md)**
+See [go/README.md](go/README.md) for full documentation.
 
 ### Python
 
 ```bash
-cd python
 pip install -e .
-# or with GCS support:
+# With GCS support:
 pip install -e ".[gcs]"
 ```
 
@@ -38,202 +34,132 @@ pip install -e ".[gcs]"
 from orgdatacore import Service
 
 service = Service()
-# Load data from GCS, file, etc.
+# Load from GCS or custom data source
 employee = service.get_employee_by_uid("user123")
 ```
 
-👉 **[Full Python Documentation](python/README.md)**
+See [python/README.md](python/README.md) for full documentation.
 
----
-
-## 📦 Repository Structure
-
-This is a **multi-language monorepo** containing identical implementations in Go and Python:
+## Repository Structure
 
 ```
 cyborg-data/
-├── go/                          # Go implementation
-│   ├── service.go               # Core service
-│   ├── types.go                 # Data structures
-│   ├── example/                 # Example applications
-│   ├── go.mod                   # Go module
-│   └── README.md                # Go-specific docs
+├── go/                     # Go implementation
+│   ├── service.go          # Core service
+│   ├── types.go            # Data structures
+│   ├── example/            # Examples
+│   └── README.md
 │
-├── python/                      # Python implementation
-│   ├── orgdatacore/             # Package source
-│   ├── tests/                   # Python tests
-│   ├── examples/                # Example applications
-│   ├── pyproject.toml           # Python package config
-│   └── README.md                # Python-specific docs
+├── python/                 # Python implementation
+│   ├── orgdatacore/        # Package source
+│   ├── tests/
+│   └── README.md
 │
-├── testdata/                    # Shared test fixtures
-│   └── test_org_data.json       # Test dataset
-│
-├── docs/                        # Shared documentation
-│   └── PROW_CI.md               # Prow CI integration guide
-│
-├── .ci-operator.yaml            # OpenShift Prow CI configuration
-│
-└── Makefile                     # Multi-language build orchestration
+├── testdata/               # Shared test fixtures
+└── Makefile                # Build orchestration
 ```
 
----
+## Architecture
 
-## 🏗️ Architecture
+All organizational relationships are pre-computed during indexing. No tree traversals at query time.
 
-Both implementations share the same architecture:
-
-### Key Principle
-**All organizational relationships are pre-computed during indexing.** No expensive tree traversals occur at query time.
-
-### Data Flow
 ```
 Data Source (GCS) → LoadFromDataSource() → In-memory indexes → O(1) queries
 ```
 
-### Performance Characteristics
-- **GetEmployeeByUID**: O(1) direct map lookup
-- **GetEmployeeBySlackID**: O(1) index lookup + map lookup
-- **GetEmployeeByGitHubID**: O(1) index lookup + map lookup
-- **GetTeamsForUID**: O(1) index lookup (no traversal)
-- **IsEmployeeInTeam**: O(1) index scan (pre-computed memberships)
+### Performance
 
----
+| Operation | Complexity |
+|-----------|------------|
+| GetEmployeeByUID | O(1) |
+| GetEmployeeBySlackID | O(1) |
+| GetEmployeeByGitHubID | O(1) |
+| GetTeamsForUID | O(1) |
+| IsEmployeeInTeam | O(n) where n = user's teams |
+| GetEmployeeByEmail | O(n) where n = employees |
 
-## 🔧 Building & Testing
-
-### Multi-Language Commands
+## Build Commands
 
 ```bash
 # Test both implementations
 make test
 
-# Lint both implementations
+# Lint both
 make lint
 
-# Build both implementations
+# Build both
 make build
-
-# Clean all artifacts
-make clean
 ```
 
-### Go-Specific Commands
+### Go
 
 ```bash
 cd go
-
-# Run tests
-make test
-
-# Run tests with GCS support
-make test-with-gcs
-
-# Build examples
-make examples
-
-# Run benchmarks
-make bench
-
-# Lint code
-make lint
+make test              # Run tests
+make test-with-gcs     # With GCS support
+make examples          # Build examples
+make bench             # Benchmarks
 ```
 
-### Python-Specific Commands
+### Python
 
 ```bash
 cd python
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=orgdatacore
-
-# Lint code
-ruff check .
-
-# Format code
-ruff format .
-
-# Build package
-uv build
+pytest                          # Run tests
+pytest --cov=orgdatacore        # With coverage
+ruff check .                    # Lint
+ruff format .                   # Format
 ```
 
----
+## API
 
-## 📚 API Reference
-
-Both Go and Python implementations provide the same interface:
+Both implementations provide identical interfaces:
 
 ### Employee Queries
-- `GetEmployeeByUID(uid) → Employee`
-- `GetEmployeeBySlackID(slackID) → Employee`
-- `GetEmployeeByGitHubID(githubID) → Employee`
-- `GetManagerForEmployee(uid) → Employee`
+- `GetEmployeeByUID(uid)` / `get_employee_by_uid(uid)`
+- `GetEmployeeBySlackID(slackID)` / `get_employee_by_slack_id(slack_id)`
+- `GetEmployeeByGitHubID(githubID)` / `get_employee_by_github_id(github_id)`
+- `GetManagerForEmployee(uid)` / `get_manager_for_employee(uid)`
 
 ### Entity Queries
-- `GetTeamByName(teamName) → Team`
-- `GetOrgByName(orgName) → Org`
-- `GetPillarByName(pillarName) → Pillar`
-- `GetTeamGroupByName(teamGroupName) → TeamGroup`
+- `GetTeamByName(name)` / `get_team_by_name(name)`
+- `GetOrgByName(name)` / `get_org_by_name(name)`
+- `GetPillarByName(name)` / `get_pillar_by_name(name)`
+- `GetTeamGroupByName(name)` / `get_team_group_by_name(name)`
 
 ### Membership Queries
-- `GetTeamsForUID(uid) → []string`
-- `GetTeamsForSlackID(slackID) → []string`
-- `GetTeamMembers(teamName) → []Employee`
-- `IsEmployeeInTeam(uid, teamName) → bool`
-- `IsSlackUserInTeam(slackID, teamName) → bool`
-
-### Organization Queries
-- `IsEmployeeInOrg(uid, orgName) → bool`
-- `IsSlackUserInOrg(slackID, orgName) → bool`
-- `GetUserOrganizations(slackUserID) → []OrgInfo`
+- `GetTeamsForUID(uid)` / `get_teams_for_uid(uid)`
+- `GetTeamMembers(teamName)` / `get_team_members(team_name)`
+- `IsEmployeeInTeam(uid, teamName)` / `is_employee_in_team(uid, team_name)`
+- `IsEmployeeInOrg(uid, orgName)` / `is_employee_in_org(uid, org_name)`
+- `GetUserOrganizations(slackUserID)` / `get_user_organizations(slack_user_id)`
 
 ### Enumeration
-- `GetAllEmployeeUIDs() → []string`
-- `GetAllTeamNames() → []string`
-- `GetAllOrgNames() → []string`
-- `GetAllPillarNames() → []string`
-- `GetAllTeamGroupNames() → []string`
+- `GetAllEmployeeUIDs()` / `get_all_employee_uids()`
+- `GetAllTeamNames()` / `get_all_team_names()`
+- `GetAllOrgNames()` / `get_all_org_names()`
+- `GetAllPillarNames()` / `get_all_pillar_names()`
+- `GetAllTeamGroupNames()` / `get_all_team_group_names()`
 
----
-
-## 🎯 Use Cases
-
-- **Slack Bots**: Query employee data by Slack ID
-- **REST APIs**: Expose organizational data endpoints
-- **CLI Tools**: Build command-line utilities for org queries
-- **Data Pipelines**: Process organizational hierarchies
-- **Access Control**: Validate team/org membership
-
----
-
-## 🔄 Data Source Support
-
-Both implementations support:
+## Data Sources
 
 ### GCS (Google Cloud Storage)
-- **Go**: Requires `-tags gcs` build flag
-- **Python**: Install with `pip install -e ".[gcs]"`
-- Hot-reload via `Watch()` for automatic updates
+- Go: Build with `-tags gcs`
+- Python: Install with `pip install -e ".[gcs]"`
+- Supports hot-reload via `Watch()`
 
-### File (Development/Testing)
-- Internal testing support
-- Fast local development
-- Shared test fixtures in `testdata/`
+### Custom Sources
+Implement the `DataSource` interface for other backends (S3, Azure, HTTP, etc.).
 
----
+## Data Format
 
-## 📖 Data Format
-
-Both implementations consume the same JSON format generated by the upstream Python `orglib` in the cyborg project:
+JSON format generated by Python `orglib` in the cyborg project:
 
 ```json
 {
   "metadata": { "generated_at": "...", "total_employees": 100 },
   "lookups": {
-    "employees": { "uid": { "uid": "...", "full_name": "...", ... } },
+    "employees": { "uid": { ... } },
     "teams": { "team_name": { ... } },
     "orgs": { "org_name": { ... } },
     "pillars": { "pillar_name": { ... } },
@@ -247,38 +173,14 @@ Both implementations consume the same JSON format generated by the upstream Pyth
 }
 ```
 
----
+## Contributing
 
-## 🤝 Contributing
+When adding features, update both Go and Python implementations to maintain API parity.
 
-### For Go
-See [go/README.md](go/README.md) for Go-specific development guidelines.
+- [Go documentation](go/README.md)
+- [Python documentation](python/README.md)
+- [CLAUDE.md](CLAUDE.md) - AI assistant guidance
 
-### For Python
-See [python/README.md](python/README.md) for Python-specific development guidelines.
+## License
 
-### API Parity
-When adding features, ensure both Go and Python implementations are updated to maintain API parity.
-
----
-
-## 📄 License
-
-Apache 2.0 - See [LICENSE](LICENSE) for details.
-
----
-
-## 🔗 Links
-
-- **Repository**: https://github.com/openshift-eng/cyborg-data
-- **Go Module**: `github.com/openshift-eng/cyborg-data/go`
-- **Python Package**: `orgdatacore` (PyPI)
-- **Issues**: https://github.com/openshift-eng/cyborg-data/issues
-
----
-
-## 🎓 Language-Specific Documentation
-
-- **[Go Documentation](go/README.md)** - Go module usage, build tags, examples
-- **[Python Documentation](python/README.md)** - Python package usage, async support, examples
-- **[CLAUDE.md](CLAUDE.md)** - AI assistant guidance for both languages
+Apache 2.0
