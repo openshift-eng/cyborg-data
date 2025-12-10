@@ -3,7 +3,7 @@
 import pytest
 
 from orgdatacore import Service
-from orgdatacore._exceptions import ConfigurationError, GCSError
+from orgdatacore._exceptions import GCSError
 from orgdatacore._gcs import GCSDataSource, _retry_with_backoff
 from orgdatacore._internal.testing import (
     FakeGCSClient,
