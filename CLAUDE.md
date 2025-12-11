@@ -1,684 +1,94 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-`cyborg-data` (package name: `orgdatacore`) is a **multi-language library** for high-performance organizational data access, available in **Go** and **Python**. It provides O(1) lookups for employee, team, organization, pillar, and team group queries through pre-computed indexes. The library is designed to be consumed by multiple services (Slack bots, REST APIs, CLI tools) and supports hot-reload from pluggable data sources.
+`cyborg-data` (`orgdatacore`) is a multi-language library for high-performance organizational data access, available in **Go** and **Python**. It provides O(1) lookups for employee, team, organization, pillar, and team group queries through pre-computed indexes.
 
-**Key Architecture Principle**: All organizational relationships are pre-computed during indexing. No expensive tree traversals occur at query time.
+**Key Principle**: All organizational relationships are pre-computed during indexing. No tree traversals at query time.
 
-### Repository Structure
-
-This is a multi-language monorepo:
-- `go/` - Go implementation (module: `github.com/openshift-eng/cyborg-data/go`)
-- `python/` - Python implementation (package: `orgdatacore`)
-- `testdata/` - Shared test fixtures
-- `docs/` - Shared documentation
-- Root `Makefile` - Multi-language build orchestration
-
-**When working on features, ensure API parity between Go and Python implementations.**
-
-## Build Commands
-
-### Multi-Language Commands (Root)
-```bash
-# Test both Go and Python
-make test
-
-# Lint both implementations
-make lint
-
-# Build both implementations
-make build
-
-# Clean all artifacts
-make clean
-
-# Test Go only
-make go-test
-
-# Test Python only
-make python-test
-```
-
-### Go Development (in go/ directory)
-```bash
-cd go
-
-# Run all tests
-make test
-
-# Run tests with GCS support (requires build tag)
-make test-with-gcs
-
-# Run benchmarks
-make bench
-
-# Build all examples
-make examples
-
-# Lint code
-make lint
-
-# Lint with GCS build tags
-make lint-with-gcs
-
-# Update dependencies
-make vendor
-
-# Clean built binaries
-make clean
-```
-
-### Python Development (in python/ directory)
-```bash
-cd python
-
-# Run all tests
-pytest
-
-# Run tests with coverage
-pytest --cov=orgdatacore --cov-report=html
-
-# Run specific test file
-pytest tests/test_service.py
-
-# Run specific test
-pytest tests/test_employee.py::test_get_employee_by_uid
-
-# Lint code
-ruff check .
-
-# Format code
-ruff format .
-
-# Type check
-mypy orgdatacore
-
-# Build package
-uv build
-
-# Install in development mode
-pip install -e .
-
-# Install with GCS support
-pip install -e ".[gcs]"
-
-# Install dev dependencies
-pip install -e ".[dev]"
-```
-
-### Single Go Test Execution (from go/ directory)
-```bash
-cd go
-
-# Run a specific test
-go test -run TestEmployeeQueries
-
-# Run with verbose output
-go test -v -run TestEmployeeQueries
-
-# Run tests in a specific file (by pattern)
-go test -run TestService
-
-# Run with GCS tags
-go test -tags gcs -run TestGCS
-
-# Run specific entity tests
-go test -run TestEmployee  # Employee tests
-go test -run TestTeam      # Team tests
-go test -run TestPillar    # Pillar tests
-go test -run TestTeamGroup # Team group tests
-```
-
-### Building Go Examples (from go/ directory)
-```bash
-cd go
-
-# Comprehensive example (shows GCS usage)
-cd example/comprehensive && go build -o ./comprehensive .
-
-# GCS example with full SDK support (requires build tag)
-cd example/with-gcs && go build -tags gcs -o ./with-gcs .
-
-# GCS example in stub mode (demonstrates API without SDK)
-cd example/with-gcs && go build -o ./with-gcs-stub .
-```
-
-## Build Tags System
-
-This codebase uses Go build tags to optionally include GCS support:
-
-- **Default (no tags)**: GCS stub only (errors on use), suitable for testing/development
-- **With `-tags gcs`**: Includes full GCS SDK (~50+ packages), enables GCSDataSourceImpl
-
-### Files Affected by Build Tags
-- `gcs_datasource.go` - Only compiled with `//go:build gcs` tag (includes GCS options)
-- `datasources.go` - Contains stub GCSDataSource that always errors without the tag
-- `internal/testing/filesource.go` - Internal test-only FileDataSource (not public API)
-
-**Production builds must use `-tags gcs`** to enable the real GCS implementation.
-
-When adding GCS functionality, use the `gcs` build tag to avoid forcing heavy dependencies on all consumers.
-
-## Core Architecture
-
-### Data Flow
-1. **Data Source** (GCS) → **Service.LoadFromDataSource()** → **In-memory indexes**
-2. Queries use pre-computed indexes (no traversal needed)
-3. Hot reload via Watch() updates indexes atomically with RWMutex
-
-Production deployments use GCS as the data source.
-
-### Key Types
-
-**Service** (`service.go`):
-- Main entry point with RWMutex for thread-safe access
-- Implements `ServiceInterface`
-- Methods: `LoadFromDataSource()`, `StartDataSourceWatcher()`, `GetEmployeeByUID()`, `GetEmployeeBySlackID()`, `GetEmployeeByGitHubID()`, etc.
-
-**Data Structure** (`types.go`):
-- `Data`: Top-level containing Metadata, Lookups, Indexes
-- `Lookups`: Direct O(1) maps (Employees, Teams, Orgs, Pillars, TeamGroups)
-- `Indexes`: Pre-computed relationships (Membership, SlackIDMappings, GitHubIDMappings)
-
-**DataSource Interface** (`interface.go`):
-- `Load(ctx)`: Returns io.ReadCloser with JSON data
-- `Watch(ctx, callback)`: Monitors for changes
-- **Production Implementation**: GCSDataSourceImpl (requires `-tags gcs`)
-- **Test-only**: FileDataSource (in `internal/testing` package, not public API)
-
-### Index Types
-
-**MembershipIndex**:
-- `MembershipIndex[uid]` → list of teams/orgs/pillars/team_groups user belongs to
-- `RelationshipIndex["teams"][teamName]` → team's ancestry (orgs, pillars, team_groups)
-- `RelationshipIndex["orgs"][orgName]` → org's ancestry
-- `RelationshipIndex["pillars"][pillarName]` → pillar's ancestry
-- `RelationshipIndex["team_groups"][teamGroupName]` → team group's ancestry
-
-**SlackIDMappings**:
-- `SlackUIDToUID[slackID]` → employee UID
-
-**GitHubIDMappings**:
-- `GitHubIDToUID[githubID]` → employee UID
-
-All lookups are O(1) - relationships are flattened at load time.
-
-## Testing Strategy
-
-### Test Data Location
-- `testdata/test_org_data.json` - Minimal test dataset
-- Tests use `setupTestService(t)` helper to load test data
-- **Internal FileDataSource**: Tests use `internal/testing.NewFileDataSource()` (not part of public API)
-
-### Test Files Organization
-- `service_test.go` - Core service functionality
-- `employee_test.go` - Employee query tests (including new fields: RhatGeo, CostCenter, etc.)
-- `team_test.go` - Team membership tests and Group extended fields
-- `organization_test.go` - Organization hierarchy tests
-- `pillar_test.go` - Pillar query tests
-- `team_group_test.go` - Team group query tests
-- `service_edge_cases_test.go` - Edge cases and error scenarios
-- `datasource_test.go` - DataSource implementations
-- `benchmark_test.go` - Performance benchmarks
-
-### Running Specific Tests
-When modifying employee lookups, run: `go test -run TestEmployee`
-When modifying team queries, run: `go test -run TestTeam`
-When modifying pillar queries, run: `go test -run TestPillar`
-When modifying team group queries, run: `go test -run TestTeamGroup`
-When modifying GCS code, run: `go test -tags gcs -run TestGCS`
-
-## Logging
-
-The package uses Go's standard library `log/slog` for structured logging:
-- Default: `slog.Default()`
-- Set custom logger: `orgdatacore.SetLogger(myLogger)`
-- Per-service logger: `orgdatacore.NewService(orgdatacore.WithLogger(logger))`
-
-When adding logging, use structured key-value pairs:
-```go
-s.logger.Info("Data reloaded", "source", source.String(), "employee_count", count)
-s.logger.Error("Failed to load data", "source", source.String(), "error", err)
-```
-
-## Common Development Patterns
-
-### Adding a New Query Method
-1. Add method to `ServiceInterface` in `interface.go`
-2. Implement in `service.go` with `s.mu.RLock()` for thread safety
-3. Check if `s.data` is nil before accessing
-4. Use existing indexes for O(1) performance
-5. Add tests in appropriate `*_test.go` file (follow the pattern: entity tests go in entity_test.go)
-
-### Adding a New DataSource
-1. Implement `DataSource` interface (Load, Watch, String)
-2. If it requires external dependencies, consider using build tags
-3. Add example in `example/` directory
-4. Update README.md with usage instructions
-
-### Modifying Indexes
-The indexes are **loaded from JSON** (generated by Python `orglib` in the cyborg project). This package does **not** compute indexes - it only consumes them. If you need to change index structure:
-1. Modify the upstream Python indexing system
-2. Update `types.go` to match new JSON structure
-3. Update query methods in `service.go` to use new indexes
-
-## Data Format
-
-Expected JSON structure from `comprehensive_index_dump.json`:
-```json
-{
-  "metadata": { "generated_at": "...", "total_employees": 100, ... },
-  "lookups": {
-    "employees": {
-      "uid": {
-        "uid": "...",
-        "full_name": "...",
-        "email": "...",
-        "job_title": "...",
-        "slack_uid": "...",
-        "github_id": "...",
-        "rhat_geo": "NA",
-        "cost_center": 12345,
-        "manager_uid": "...",
-        "is_people_manager": false
-      }
-    },
-    "teams": {
-      "team_name": {
-        "name": "...",
-        "tab_name": "...",
-        "description": "...",
-        "type": "team",
-        "group": {
-          "type": { "name": "team" },
-          "resolved_people_uid_list": [...],
-          "slack": {
-            "channels": [{"channel": "...", "channel_id": "...", "types": [...]}],
-            "aliases": [{"alias": "...", "description": "..."}]
-          },
-          "roles": [{"people": [...], "types": ["manager", "qe", ...]}],
-          "jiras": [{"project": "...", "component": "...", "types": ["main"]}],
-          "repos": [{"repo": "...", "types": ["source"]}],
-          "keywords": [...],
-          "emails": [{"address": "...", "name": "..."}],
-          "resources": [{"name": "...", "url": "..."}],
-          "component_roles": [{"component": "...", "types": ["owner"]}]
-        }
-      }
-    },
-    "orgs": { "org_name": { ... } },
-    "pillars": { "pillar_name": { ... } },
-    "team_groups": { "team_group_name": { ... } }
-  },
-  "indexes": {
-    "membership": {
-      "membership_index": { "uid": [{"name": "team", "type": "team"}] },
-      "relationship_index": {
-        "teams": { "team_name": { "ancestry": {"orgs": [...], "pillars": [...], "team_groups": [...]} } },
-        "orgs": { "org_name": { "ancestry": {...} } },
-        "pillars": { "pillar_name": { "ancestry": {...} } },
-        "team_groups": { "team_group_name": { "ancestry": {...} } }
-      }
-    },
-    "slack_id_mappings": { "slack_uid_to_uid": { "U123": "uid" } },
-    "github_id_mappings": { "github_id_to_uid": { "octocat": "uid" } }
-  }
-}
-```
-
-### Employee Fields
-The Employee struct includes:
-- **Core Identity**: `UID`, `FullName`, `Email`, `JobTitle`
-- **External IDs**: `SlackUID`, `GitHubID`
-- **Organization Data**: `RhatGeo`, `CostCenter`, `ManagerUID`, `IsPeopleManager`
-
-### Organizational Types
-All organizational entities (Team, Org, Pillar, TeamGroup) share the same structure:
-- **Basic Fields**: `UID`, `Name`, `TabName`, `Description`, `Type`
-- **Group Configuration**: Contains people, Slack channels, roles, Jira mappings, repos, etc.
-
-### Group Configuration
-The `Group` struct contains rich metadata about teams/orgs:
-- **Slack Integration**: Channels with IDs, types, and aliases
-- **Roles**: People assignments to roles (manager, qe, team_lead, etc.)
-- **Jira Projects**: Project/component mappings with types
-- **Repositories**: GitHub repos with ownership roles
-- **Communication**: Email addresses and keywords
-- **Resources**: Documentation links and other resources
-- **Component Ownership**: Component role mappings
-
-## Service Interface Methods
-
-All methods available on `ServiceInterface`:
-
-### Employee Queries
-- `GetEmployeeByUID(uid string) *Employee` - Lookup by UID
-- `GetEmployeeBySlackID(slackID string) *Employee` - Lookup by Slack ID
-- `GetEmployeeByGitHubID(githubID string) *Employee` - Lookup by GitHub username
-- `GetManagerForEmployee(uid string) *Employee` - Get employee's manager
-
-### Entity Queries
-- `GetTeamByName(teamName string) *Team` - Get team details
-- `GetOrgByName(orgName string) *Org` - Get organization details
-- `GetPillarByName(pillarName string) *Pillar` - Get pillar details
-- `GetTeamGroupByName(teamGroupName string) *TeamGroup` - Get team group details
-
-### Membership Queries
-- `GetTeamsForUID(uid string) []string` - Get all teams for a user
-- `GetTeamsForSlackID(slackID string) []string` - Get all teams for a Slack user
-- `GetTeamMembers(teamName string) []Employee` - Get all members of a team
-- `IsEmployeeInTeam(uid string, teamName string) bool` - Check team membership
-- `IsSlackUserInTeam(slackID string, teamName string) bool` - Check team membership by Slack ID
-
-### Organization Queries
-- `IsEmployeeInOrg(uid string, orgName string) bool` - Check org membership
-- `IsSlackUserInOrg(slackID string, orgName string) bool` - Check org membership by Slack ID
-- `GetUserOrganizations(slackUserID string) []OrgInfo` - Get all orgs for a user
-
-### Enumeration Methods
-- `GetAllEmployeeUIDs() []string` - Get all employee UIDs
-- `GetAllTeamNames() []string` - Get all team names
-- `GetAllOrgNames() []string` - Get all organization names
-- `GetAllPillarNames() []string` - Get all pillar names
-- `GetAllTeamGroupNames() []string` - Get all team group names
-
-### Data Management
-- `GetVersion() DataVersion` - Get current data version
-- `LoadFromDataSource(ctx context.Context, source DataSource) error` - Load data from a source
-- `StartDataSourceWatcher(ctx context.Context, source DataSource) error` - Start watching for changes
-
-## Performance Characteristics
-
-All queries are O(1) via pre-computed indexes:
-- `GetEmployeeByUID`: Direct map lookup
-- `GetEmployeeBySlackID`: Index lookup + map lookup
-- `GetEmployeeByGitHubID`: Index lookup + map lookup
-- `GetManagerForEmployee`: Two direct map lookups (employee + manager)
-- `GetTeamByName`, `GetOrgByName`, `GetPillarByName`, `GetTeamGroupByName`: Direct map lookups
-- `GetTeamsForUID`: Index lookup (no traversal)
-- `IsEmployeeInTeam`: Index scan (pre-computed memberships only)
-- `GetUserOrganizations`: Index lookup with flattened ancestry
-- `GetAllEmployeeUIDs`, `GetAllTeamNames`, `GetAllOrgNames`, `GetAllPillarNames`, `GetAllTeamGroupNames`: Map key iteration
-
-When adding new queries, ensure they use existing indexes rather than traversing data structures.
-
-## Dependencies
-
-- Go 1.23.0+
-- Standard library only (default build) - uses `log/slog` for logging
-- Optional with `-tags gcs`:
-  - `cloud.google.com/go/storage` - GCS client
-
-Avoid adding new required dependencies. Optional dependencies should use build tags.
-
-## Modern Go Patterns
-
-This codebase uses idiomatic Go 1.23+ patterns:
-
-- **Sentinel Errors** (`errors.go`): Use `errors.Is()` and `errors.As()` for error handling
-- **Functional Options** (`options.go`): `NewService(opts...)` and `NewGCSDataSourceWithSDK(ctx, bucket, path, opts...)`
-- **Type-safe Enums** (`enums.go`): `MembershipType`, `OrgInfoType`, `EntityType` with validation
-- **Iterators** (`iterators.go`): Go 1.23+ `iter.Seq` for lazy iteration over large datasets
-- **Version Info** (`version.go`): Runtime version information via `GetVersionInfo()`
-
----
-
-## Python Implementation Guide
-
-### Python Project Structure
+## Repository Structure
 
 ```
-python/
-├── orgdatacore/            # Package directory
-│   ├── __init__.py         # Public API exports
-│   ├── _service.py         # Service implementation
-│   ├── _async.py           # Async service wrapper
-│   ├── _types.py           # Data structures
-│   ├── _gcs.py             # GCS data source (optional)
-│   ├── _log.py             # Logging utilities
-│   ├── _exceptions.py      # Custom exceptions
-│   ├── _internal/          # Internal utilities
-│   └── py.typed            # PEP 561 marker for type hints
-├── tests/                  # Test files
-│   ├── test_service.py
-│   ├── test_employee.py
-│   ├── test_team.py
-│   ├── test_async.py
-│   └── conftest.py         # Pytest fixtures
-├── examples/               # Example scripts
-├── pyproject.toml          # Package configuration
-├── requirements.txt        # Runtime dependencies
-└── requirements-dev.txt    # Dev dependencies
+├── go/           # Go implementation (see go/CLAUDE.md)
+├── python/       # Python implementation (see python/CLAUDE.md)
+├── testdata/     # Shared test fixtures
+└── Makefile      # Multi-language orchestration
 ```
 
-### Python Testing Strategy
+## API Parity Rules
 
-Test files mirror the Go test structure:
-- `tests/test_service.py` - Core service functionality
-- `tests/test_employee.py` - Employee query tests
-- `tests/test_team.py` - Team membership tests
-- `tests/test_organization.py` - Organization hierarchy tests
-- `tests/test_pillar.py` - Pillar query tests
-- `tests/test_team_group.py` - Team group query tests
-- `tests/test_async.py` - Async functionality tests
-- `tests/test_edge_cases.py` - Edge cases and error scenarios
+**CRITICAL**: Go and Python implementations MUST maintain API parity. When adding or modifying any API method:
 
-### Running Specific Python Tests
-```bash
-cd python
+### Parity Checklist
 
-# Run employee tests
-pytest tests/test_employee.py
+1. **Implement in both languages** - Every public method must exist in both
+2. **Match semantics exactly** - Same parameters, same return behavior, same edge cases
+3. **Port tests to both** - Test coverage must be equivalent
+4. **Run both test suites** - `make test` from root (runs Go and Python)
 
-# Run team tests
-pytest tests/test_team.py
+### Naming Convention Mapping
 
-# Run async tests
-pytest tests/test_async.py
-
-# Run with verbose output
-pytest -v tests/test_service.py
-
-# Run specific test function
-pytest tests/test_employee.py::test_get_employee_by_uid -v
-```
-
-### Python Naming Conventions
-
-Python uses snake_case (PEP 8), while Go uses PascalCase/camelCase:
-
-| Go | Python |
-|----|--------|
+| Go (PascalCase) | Python (snake_case) |
+|-----------------|---------------------|
 | `GetEmployeeByUID(uid)` | `get_employee_by_uid(uid)` |
-| `GetTeamByName(name)` | `get_team_by_name(name)` |
 | `IsEmployeeInTeam(uid, team)` | `is_employee_in_team(uid, team)` |
 | `LoadFromDataSource(ctx, src)` | `load_from_data_source(source)` |
 
-### Python Type Hints
-
-All Python code is fully typed with type hints:
-- Use `from typing import Optional, List, Dict` for type annotations
-- All public methods have type signatures
-- `mypy --strict` passes without errors
-- PEP 561 compliant with `py.typed` marker
-
-Example:
-```python
-def get_employee_by_uid(self, uid: str) -> Optional[Employee]:
-    """Get employee by UID."""
-    ...
-```
-
-### Python Async Support
-
-Python implementation includes async variants:
-```python
-from orgdatacore import AsyncService
-
-async def main():
-    service = AsyncService()
-    await service.load_from_data_source(source)
-    employee = await service.get_employee_by_uid("user123")
-```
-
-The async implementation wraps the synchronous service using `asyncio.to_thread()` for I/O operations.
-
-### Python Optional Dependencies
-
-Like Go's build tags, Python uses extras for optional dependencies:
+### When Adding a New Method
 
 ```bash
-# Base install (no GCS)
-pip install orgdatacore
-
-# With GCS support
-pip install orgdatacore[gcs]
-
-# With dev tools
-pip install orgdatacore[dev]
+# 1. Implement in Go (see go/CLAUDE.md for patterns)
+# 2. Implement in Python (see python/CLAUDE.md for patterns)
+# 3. Run parity verification
+make test
 ```
 
-In `pyproject.toml`:
-```toml
-[project.optional-dependencies]
-gcs = ["google-cloud-storage>=2.0.0"]
-dev = ["pytest>=7.0.0", "mypy>=1.0.0", "ruff>=0.1.0"]
-```
-
-### Python Logging
-
-Python uses standard library `logging`:
-```python
-import logging
-
-logger = logging.getLogger("orgdatacore")
-logger.setLevel(logging.INFO)
-
-# In code:
-logger.info("Data loaded", extra={"source": source, "count": count})
-logger.error("Failed to load", exc_info=True)
-```
-
-### Python Development Patterns
-
-#### Adding a New Query Method
-1. Add method to `Service` class in `_service.py`
-2. Add async variant to `AsyncService` in `_async.py`
-3. Add type hints for all parameters and return types
-4. Use `self._lock` for thread safety (RLock)
-5. Check if `self._data` is None before accessing
-6. Add tests in appropriate `test_*.py` file
-7. Add docstring with description and examples
-
-#### Python Data Source Interface
-```python
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Callable
-
-class DataSource(ABC):
-    @abstractmethod
-    def load(self) -> Dict[str, Any]:
-        """Load and return JSON data."""
-        pass
-
-    @abstractmethod
-    def watch(self, callback: Callable[[Dict[str, Any]], None]) -> None:
-        """Watch for changes and call callback with new data."""
-        pass
-```
-
-### Ensuring API Parity
-
-When adding features to one implementation:
-
-1. **Update both Go and Python** - Feature changes must be atomic across languages
-2. **Match method signatures** - Same parameters (adjusted for naming conventions)
-3. **Same return types** - Equivalent data structures
-4. **Identical test coverage** - Port tests to both languages
-5. **Update both READMEs** - Document in `go/README.md` and `python/README.md`
-6. **Update CLAUDE.md** - Add guidance for both implementations
-
-### Python Package Version Management
-
-Python package versioning is in `pyproject.toml`:
-```toml
-[project]
-name = "orgdatacore"
-version = "1.0.0"
-```
-
-Go and Python versions can be independent:
-- Go: Tagged as `go/v1.0.0`
-- Python: Tagged as `python/v1.0.0`
-
-Or synchronized if APIs match perfectly:
-- Both: Tagged as `v1.0.0`
-
-### Python Code Quality Tools
-
-- **ruff**: Linting and formatting (replaces black, isort, flake8)
-- **mypy**: Static type checking
-- **pytest**: Testing framework
-- **pytest-cov**: Coverage reporting
-- **pytest-asyncio**: Async test support
-
-All configured in `pyproject.toml`:
-```toml
-[tool.ruff]
-line-length = 88
-target-version = "py311"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-```
-
-### Working in the Python Codebase
+## Build Commands
 
 ```bash
-# Navigate to Python directory
-cd python
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install in editable mode with dev dependencies
-pip install -e ".[dev,gcs]"
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=orgdatacore --cov-report=html
-
-# Lint and format
-ruff check .
-ruff format .
-
-# Type check
-mypy orgdatacore
-
-# Build distribution
-uv build
+# From repository root
+make test        # Test both Go and Python
+make lint        # Lint both implementations
+make go-test     # Test Go only
+make python-test # Test Python only
 ```
 
-### Test Data Path
+## Language-Specific Documentation
 
-Python tests use the shared `testdata/` directory:
-```python
-import os
-from pathlib import Path
+For implementation details and extension patterns:
+- **Go**: See `go/CLAUDE.md`
+- **Python**: See `python/CLAUDE.md`
 
-# From python/tests/
-test_data_path = Path(__file__).parent.parent.parent / "testdata" / "test_org_data.json"
+## Architecture (Both Languages)
+
+### Data Flow
+```
+DataSource (GCS) → Service.LoadFromDataSource() → In-memory indexes
+                                                        ↓
+                              Queries use O(1) pre-computed lookups
 ```
 
-This mirrors the Go approach of using `../testdata/` from the `go/` directory.
+### Core Types (equivalent in both)
+- `Service` - Main entry point with thread-safe access
+- `Employee`, `Team`, `Org`, `Pillar`, `TeamGroup` - Entity types
+- `DataSource` - Interface/Protocol for data loading
+
+### Indexes (consumed, not computed)
+- `MembershipIndex[uid]` → teams/orgs the user belongs to
+- `SlackUIDToUID[slackID]` → employee UID
+- `GitHubIDToUID[githubID]` → employee UID
+- `RelationshipIndex[category][name]` → ancestry hierarchy
+
+**Note**: Indexes are generated upstream. This library only consumes them.
+
+## Test Data
+
+Both implementations use shared test fixtures:
+- `testdata/test_org_data.json` - Minimal test dataset
+
+## Dependencies Policy
+
+- **Go**: Standard library only (default), GCS via `-tags gcs`
+- **Python**: Minimal deps, GCS via `pip install orgdatacore[gcs]`
+
+Avoid adding required dependencies. Optional features use build tags (Go) or extras (Python).
