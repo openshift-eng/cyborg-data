@@ -55,7 +55,7 @@ func CreateTestData() *Data {
 				"testuser2": {UID: "testuser2", FullName: "Test User Two", Email: "testuser2@example.com", JobTitle: "Test Manager", SlackUID: "U222222"},
 			},
 			Teams: map[string]Team{
-				"test-squad": {UID: "team1", Name: "test-squad", Type: "team", Group: Group{Type: GroupType{Name: "team"}, ResolvedPeopleUIDList: []string{"testuser1", "testuser2"}}},
+				"test-squad": {UID: "team1", Name: "test-squad", Type: "team", Parent: &ParentInfo{Name: "test-division", Type: "org"}, Group: Group{Type: GroupType{Name: "team"}, ResolvedPeopleUIDList: []string{"testuser1", "testuser2"}}},
 			},
 			Orgs: map[string]Org{
 				"test-division": {UID: "org1", Name: "test-division", Type: "organization", Group: Group{Type: GroupType{Name: "organization"}, ResolvedPeopleUIDList: []string{"testuser1", "testuser2"}}},
@@ -66,16 +66,6 @@ func CreateTestData() *Data {
 				MembershipIndex: map[string][]MembershipInfo{
 					"testuser1": {{Name: "test-squad", Type: "team"}, {Name: "test-division", Type: "org"}},
 					"testuser2": {{Name: "test-squad", Type: "team"}, {Name: "test-division", Type: "org"}},
-				},
-				RelationshipIndex: map[string]map[string]RelationshipInfo{
-					"teams": {
-						"test-squad": {Ancestry: struct {
-							Orgs       []string `json:"orgs"`
-							Teams      []string `json:"teams"`
-							Pillars    []string `json:"pillars"`
-							TeamGroups []string `json:"team_groups"`
-						}{Orgs: []string{"test-division"}, Teams: []string{}, Pillars: []string{}, TeamGroups: []string{}}},
-					},
 				},
 			},
 			SlackIDMappings:  SlackIDMappings{SlackUIDToUID: map[string]string{"U111111": "testuser1", "U222222": "testuser2"}},
@@ -95,7 +85,7 @@ func CreateEmptyTestData() string {
 		Metadata: Metadata{GeneratedAt: "2024-01-01T00:00:00Z", DataVersion: "empty-v1.0"},
 		Lookups:  Lookups{Employees: map[string]Employee{}, Teams: map[string]Team{}, Orgs: map[string]Org{}},
 		Indexes: Indexes{
-			Membership:       MembershipIndex{MembershipIndex: map[string][]MembershipInfo{}, RelationshipIndex: map[string]map[string]RelationshipInfo{}},
+			Membership:       MembershipIndex{MembershipIndex: map[string][]MembershipInfo{}},
 			SlackIDMappings:  SlackIDMappings{SlackUIDToUID: map[string]string{}},
 			GitHubIDMappings: GitHubIDMappings{GitHubIDToUID: map[string]string{}},
 		},

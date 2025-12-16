@@ -6,20 +6,22 @@ from io import BytesIO
 from typing import Any, BinaryIO
 
 from orgdatacore._types import (
-    Ancestry,
+    Component,
     Data,
     Employee,
     GitHubIDMappings,
     Group,
     GroupType,
     Indexes,
+    JiraIndex,
+    JiraOwnerInfo,
     Lookups,
     MembershipIndex,
     MembershipInfo,
     Metadata,
     Org,
+    ParentInfo,
     Pillar,
-    RelationshipInfo,
     SlackIDMappings,
     Team,
     TeamGroup,
@@ -70,7 +72,7 @@ class FakeDataSource:
 
 
 def create_test_data() -> Data:
-    """Create minimal valid test data for testing."""
+    """Create comprehensive test data for testing."""
     return Data(
         metadata=Metadata(
             generated_at="2024-01-01T00:00:00Z",
@@ -87,6 +89,8 @@ def create_test_data() -> Data:
                     email="testuser1@example.com",
                     job_title="Test Engineer",
                     slack_uid="U111111",
+                    github_id="ghuser1",
+                    manager_uid="testuser2",
                 ),
                 "testuser2": Employee(
                     uid="testuser2",
@@ -94,6 +98,8 @@ def create_test_data() -> Data:
                     email="testuser2@example.com",
                     job_title="Test Manager",
                     slack_uid="U222222",
+                    github_id="ghuser2",
+                    is_people_manager=True,
                 ),
             },
             teams={
@@ -101,6 +107,7 @@ def create_test_data() -> Data:
                     uid="team1",
                     name="test-squad",
                     type="team",
+                    parent=ParentInfo(name="test-team-group", type="team_group"),
                     group=Group(
                         type=GroupType(name="team"),
                         resolved_people_uid_list=("testuser1", "testuser2"),
@@ -118,6 +125,37 @@ def create_test_data() -> Data:
                     ),
                 ),
             },
+            pillars={
+                "test-pillar": Pillar(
+                    uid="pillar1",
+                    name="test-pillar",
+                    type="pillar",
+                    parent=ParentInfo(name="test-division", type="org"),
+                    group=Group(
+                        type=GroupType(name="pillar"),
+                        resolved_people_uid_list=("testuser1", "testuser2"),
+                    ),
+                ),
+            },
+            team_groups={
+                "test-team-group": TeamGroup(
+                    uid="tg1",
+                    name="test-team-group",
+                    type="team_group",
+                    parent=ParentInfo(name="test-pillar", type="pillar"),
+                    group=Group(
+                        type=GroupType(name="team_group"),
+                        resolved_people_uid_list=("testuser1", "testuser2"),
+                    ),
+                ),
+            },
+            components={
+                "test-component": Component(
+                    name="test-component",
+                    type="system",
+                    description="Test component",
+                ),
+            },
         ),
         indexes=Indexes(
             membership=MembershipIndex(
@@ -131,18 +169,6 @@ def create_test_data() -> Data:
                         MembershipInfo(name="test-division", type="org"),
                     ),
                 },
-                relationship_index={
-                    "teams": {
-                        "test-squad": RelationshipInfo(
-                            ancestry=Ancestry(
-                                orgs=("test-division",),
-                                teams=(),
-                                pillars=(),
-                                team_groups=(),
-                            ),
-                        ),
-                    },
-                },
             ),
             slack_id_mappings=SlackIDMappings(
                 slack_uid_to_uid={
@@ -154,6 +180,17 @@ def create_test_data() -> Data:
                 github_id_to_uid={
                     "ghuser1": "testuser1",
                     "ghuser2": "testuser2",
+                },
+            ),
+            jira=JiraIndex(
+                project_component_owners={
+                    "TEST": {
+                        "Core": (JiraOwnerInfo(name="test-squad", type="team"),),
+                        "_project_level": (JiraOwnerInfo(name="test-squad", type="team"),),
+                    },
+                    "PLAT": {
+                        "API": (JiraOwnerInfo(name="test-squad", type="team"),),
+                    },
                 },
             ),
         ),
@@ -173,7 +210,7 @@ def _data_to_json(data: Data) -> str:
 
 def _data_to_dict(data: Data) -> dict[str, Any]:
     """Convert Data to dictionary for JSON serialization."""
-    return {
+    result: dict[str, Any] = {
         "metadata": {
             "generated_at": data.metadata.generated_at,
             "data_version": data.metadata.data_version,
@@ -191,26 +228,15 @@ def _data_to_dict(data: Data) -> dict[str, Any]:
             "team_groups": {
                 k: _team_group_to_dict(v) for k, v in data.lookups.team_groups.items()
             },
+            "components": {
+                k: _component_to_dict(v) for k, v in data.lookups.components.items()
+            },
         },
         "indexes": {
             "membership": {
                 "membership_index": {
                     k: [{"name": m.name, "type": m.type} for m in v]
                     for k, v in data.indexes.membership.membership_index.items()
-                },
-                "relationship_index": {
-                    cat: {
-                        k: {
-                            "ancestry": {
-                                "orgs": list(v.ancestry.orgs),
-                                "teams": list(v.ancestry.teams),
-                                "pillars": list(v.ancestry.pillars),
-                                "team_groups": list(v.ancestry.team_groups),
-                            }
-                        }
-                        for k, v in items.items()
-                    }
-                    for cat, items in data.indexes.membership.relationship_index.items()
                 },
             },
             "slack_id_mappings": {
@@ -221,6 +247,28 @@ def _data_to_dict(data: Data) -> dict[str, Any]:
             },
         },
     }
+    # Add jira index if present
+    if data.indexes.jira.project_component_owners:
+        result["indexes"]["jira"] = {
+            project: {
+                component: [{"name": o.name, "type": o.type} for o in owners]
+                for component, owners in components.items()
+            }
+            for project, components in data.indexes.jira.project_component_owners.items()
+        }
+    return result
+
+
+def _component_to_dict(component: Component) -> dict[str, Any]:
+    """Convert Component to dictionary."""
+    d: dict[str, Any] = {
+        "name": component.name,
+    }
+    if component.type:
+        d["type"] = component.type
+    if component.description:
+        d["description"] = component.description
+    return d
 
 
 def _employee_to_dict(emp: Employee) -> dict[str, Any]:
@@ -325,6 +373,8 @@ def _team_to_dict(team: Team) -> dict[str, Any]:
         d["tab_name"] = team.tab_name
     if team.description:
         d["description"] = team.description
+    if team.parent:
+        d["parent"] = {"name": team.parent.name, "type": team.parent.type}
     return d
 
 
@@ -340,6 +390,8 @@ def _org_to_dict(org: Org) -> dict[str, Any]:
         d["tab_name"] = org.tab_name
     if org.description:
         d["description"] = org.description
+    if org.parent:
+        d["parent"] = {"name": org.parent.name, "type": org.parent.type}
     return d
 
 
@@ -355,6 +407,8 @@ def _pillar_to_dict(pillar: Pillar) -> dict[str, Any]:
         d["tab_name"] = pillar.tab_name
     if pillar.description:
         d["description"] = pillar.description
+    if pillar.parent:
+        d["parent"] = {"name": pillar.parent.name, "type": pillar.parent.type}
     return d
 
 
@@ -370,4 +424,6 @@ def _team_group_to_dict(team_group: TeamGroup) -> dict[str, Any]:
         d["tab_name"] = team_group.tab_name
     if team_group.description:
         d["description"] = team_group.description
+    if team_group.parent:
+        d["parent"] = {"name": team_group.parent.name, "type": team_group.parent.type}
     return d

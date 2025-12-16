@@ -304,7 +304,7 @@ class TestAsyncService:
         assert await service.get_org_by_name("test") is None
         assert await service.get_pillar_by_name("test") is None
         assert await service.get_team_group_by_name("test") is None
-        assert await service.get_user_teams("test") == ()
+        assert await service.get_user_teams("test") == []
         assert await service.get_user_organizations("test") == ()
         assert await service.get_all_employees() == ()
         assert await service.get_all_teams() == ()
@@ -313,6 +313,250 @@ class TestAsyncService:
         assert await service.get_all_team_groups() == ()
         assert await service.get_team_members("test") == ()
         assert await service.get_org_members("test") == ()
+        assert await service.get_manager_for_employee("test") is None
+        assert await service.is_employee_in_team("test", "team") is False
+        assert await service.is_slack_user_in_team("U123", "team") is False
+        assert await service.is_employee_in_org("test", "org") is False
+        assert await service.is_slack_user_in_org("U123", "org") is False
+        assert await service.get_all_employee_uids() == []
+        assert await service.get_all_pillar_names() == []
+        assert await service.get_all_team_group_names() == []
+        assert await service.get_hierarchy_path("test", "team") == []
+        assert await service.get_descendants_tree("test") is None
+        assert await service.get_component_by_name("test") is None
+        assert await service.get_all_components() == ()
+        assert await service.get_jira_projects() == []
+        assert await service.get_jira_components("TEST") == []
+        assert await service.get_teams_by_jira_project("TEST") == []
+        assert await service.get_teams_by_jira_component("TEST", "Core") == []
+        assert await service.get_jira_ownership_for_team("test") == []
+
+    @pytest.mark.asyncio
+    async def test_get_manager_for_employee(self) -> None:
+        """Test getting an employee's manager."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        manager = await service.get_manager_for_employee("testuser1")
+        assert manager is not None
+        assert manager.uid == "testuser2"
+
+        # testuser2 has no manager
+        manager2 = await service.get_manager_for_employee("testuser2")
+        assert manager2 is None
+
+    @pytest.mark.asyncio
+    async def test_get_teams_for_uid(self) -> None:
+        """Test getting teams for a UID."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        teams = await service.get_teams_for_uid("testuser1")
+        assert "test-squad" in teams
+
+    @pytest.mark.asyncio
+    async def test_get_teams_for_slack_id(self) -> None:
+        """Test getting teams for a Slack ID."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        teams = await service.get_teams_for_slack_id("U111111")
+        assert "test-squad" in teams
+
+        # Nonexistent Slack ID
+        teams2 = await service.get_teams_for_slack_id("U999999")
+        assert teams2 == []
+
+    @pytest.mark.asyncio
+    async def test_is_employee_in_team(self) -> None:
+        """Test checking if employee is in team."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        assert await service.is_employee_in_team("testuser1", "test-squad") is True
+        assert await service.is_employee_in_team("testuser1", "nonexistent") is False
+        assert await service.is_employee_in_team("nonexistent", "test-squad") is False
+
+    @pytest.mark.asyncio
+    async def test_is_slack_user_in_team(self) -> None:
+        """Test checking if Slack user is in team."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        assert await service.is_slack_user_in_team("U111111", "test-squad") is True
+        assert await service.is_slack_user_in_team("U111111", "nonexistent") is False
+        assert await service.is_slack_user_in_team("U999999", "test-squad") is False
+
+    @pytest.mark.asyncio
+    async def test_is_employee_in_org(self) -> None:
+        """Test checking if employee is in org."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        assert await service.is_employee_in_org("testuser1", "test-division") is True
+        assert await service.is_employee_in_org("testuser1", "nonexistent") is False
+
+    @pytest.mark.asyncio
+    async def test_is_slack_user_in_org(self) -> None:
+        """Test checking if Slack user is in org."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        assert await service.is_slack_user_in_org("U111111", "test-division") is True
+        assert await service.is_slack_user_in_org("U999999", "test-division") is False
+
+    @pytest.mark.asyncio
+    async def test_get_all_employee_uids(self) -> None:
+        """Test getting all employee UIDs."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        uids = await service.get_all_employee_uids()
+        assert len(uids) == 2
+        assert "testuser1" in uids
+        assert "testuser2" in uids
+
+    @pytest.mark.asyncio
+    async def test_get_all_pillar_names(self) -> None:
+        """Test getting all pillar names."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        names = await service.get_all_pillar_names()
+        assert "test-pillar" in names
+
+    @pytest.mark.asyncio
+    async def test_get_all_team_group_names(self) -> None:
+        """Test getting all team group names."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        names = await service.get_all_team_group_names()
+        assert "test-team-group" in names
+
+    @pytest.mark.asyncio
+    async def test_get_hierarchy_path(self) -> None:
+        """Test getting hierarchy path for an entity."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        path = await service.get_hierarchy_path("test-squad", "team")
+        assert len(path) > 0
+        assert path[0].name == "test-squad"
+        assert path[0].type == "team"
+
+    @pytest.mark.asyncio
+    async def test_get_descendants_tree(self) -> None:
+        """Test getting descendants tree for an entity."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        tree = await service.get_descendants_tree("test-division")
+        assert tree is not None
+        assert tree.name == "test-division"
+        assert tree.type == "org"
+
+    @pytest.mark.asyncio
+    async def test_get_component_by_name(self) -> None:
+        """Test getting a component by name."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        component = await service.get_component_by_name("test-component")
+        assert component is not None
+        assert component.name == "test-component"
+
+        # Nonexistent
+        assert await service.get_component_by_name("nonexistent") is None
+
+    @pytest.mark.asyncio
+    async def test_get_all_components(self) -> None:
+        """Test getting all components."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        components = await service.get_all_components()
+        assert len(components) == 1
+        assert components[0].name == "test-component"
+
+    @pytest.mark.asyncio
+    async def test_get_jira_projects(self) -> None:
+        """Test getting all Jira projects."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        projects = await service.get_jira_projects()
+        assert "TEST" in projects
+        assert "PLAT" in projects
+
+    @pytest.mark.asyncio
+    async def test_get_jira_components(self) -> None:
+        """Test getting Jira components for a project."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        components = await service.get_jira_components("TEST")
+        assert "Core" in components
+        assert "_project_level" in components
+
+        # Nonexistent project
+        assert await service.get_jira_components("NONEXISTENT") == []
+
+    @pytest.mark.asyncio
+    async def test_get_teams_by_jira_project(self) -> None:
+        """Test getting teams that own a Jira project."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        teams = await service.get_teams_by_jira_project("TEST")
+        assert len(teams) > 0
+        assert any(t.name == "test-squad" for t in teams)
+
+    @pytest.mark.asyncio
+    async def test_get_teams_by_jira_component(self) -> None:
+        """Test getting teams that own a Jira component."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        teams = await service.get_teams_by_jira_component("TEST", "Core")
+        assert len(teams) == 1
+        assert teams[0].name == "test-squad"
+
+        # Nonexistent
+        assert await service.get_teams_by_jira_component("TEST", "Nonexistent") == []
+
+    @pytest.mark.asyncio
+    async def test_get_jira_ownership_for_team(self) -> None:
+        """Test getting Jira ownership for a team."""
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        ownership = await service.get_jira_ownership_for_team("test-squad")
+        assert len(ownership) > 0
+        projects = [o["project"] for o in ownership]
+        assert "TEST" in projects
+
+        # Nonexistent team
+        assert await service.get_jira_ownership_for_team("nonexistent") == []
 
     @pytest.mark.asyncio
     async def test_start_watcher_returns_immediately(self) -> None:

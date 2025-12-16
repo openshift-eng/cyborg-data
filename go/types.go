@@ -84,14 +84,21 @@ type ComponentRoleInfo struct {
 	Types     []string `json:"types"`
 }
 
+// ParentInfo represents parent reference for hierarchy traversal
+type ParentInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // Team represents a team in the organizational data
 type Team struct {
-	UID         string `json:"uid"`
-	Name        string `json:"name"`
-	TabName     string `json:"tab_name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type"`
-	Group       Group  `json:"group"`
+	UID         string      `json:"uid"`
+	Name        string      `json:"name"`
+	TabName     string      `json:"tab_name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	Group       Group       `json:"group"`
 }
 
 // Group contains group metadata and configuration
@@ -136,36 +143,52 @@ type Lookups struct {
 	Orgs       map[string]Org       `json:"orgs"`
 	Pillars    map[string]Pillar    `json:"pillars,omitempty"`
 	TeamGroups map[string]TeamGroup `json:"team_groups,omitempty"`
+	Components map[string]Component `json:"components,omitempty"`
 }
 
 // Org represents an organization in the organizational data
 type Org struct {
-	UID         string `json:"uid"`
-	Name        string `json:"name"`
-	TabName     string `json:"tab_name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type"`
-	Group       Group  `json:"group"`
+	UID         string      `json:"uid"`
+	Name        string      `json:"name"`
+	TabName     string      `json:"tab_name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	Group       Group       `json:"group"`
 }
 
 // Pillar represents a pillar in the organizational hierarchy
 type Pillar struct {
-	UID         string `json:"uid"`
-	Name        string `json:"name"`
-	TabName     string `json:"tab_name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type"`
-	Group       Group  `json:"group"`
+	UID         string      `json:"uid"`
+	Name        string      `json:"name"`
+	TabName     string      `json:"tab_name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	Group       Group       `json:"group"`
 }
 
 // TeamGroup represents a team group in the organizational hierarchy
 type TeamGroup struct {
-	UID         string `json:"uid"`
-	Name        string `json:"name"`
-	TabName     string `json:"tab_name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type"`
-	Group       Group  `json:"group"`
+	UID         string      `json:"uid"`
+	Name        string      `json:"name"`
+	TabName     string      `json:"tab_name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Type        string      `json:"type"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	Group       Group       `json:"group"`
+}
+
+// Component represents a component in the organizational data
+type Component struct {
+	Name        string      `json:"name"`
+	Type        string      `json:"type"`
+	Description string      `json:"description,omitempty"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentPath  string      `json:"parent_path,omitempty"`
+	Repos       []RepoInfo  `json:"repos,omitempty"`
+	Jiras       []JiraInfo  `json:"jiras,omitempty"`
+	ReposList   []string    `json:"repos_list,omitempty"`
 }
 
 // Indexes contains pre-computed lookup tables
@@ -173,6 +196,7 @@ type Indexes struct {
 	Membership       MembershipIndex  `json:"membership"`
 	SlackIDMappings  SlackIDMappings  `json:"slack_id_mappings"`
 	GitHubIDMappings GitHubIDMappings `json:"github_id_mappings,omitempty"`
+	Jira             JiraIndex        `json:"jira,omitempty"`
 }
 
 // SlackIDMappings contains Slack ID to UID mappings
@@ -187,8 +211,7 @@ type GitHubIDMappings struct {
 
 // MembershipIndex represents the membership index structure
 type MembershipIndex struct {
-	MembershipIndex   map[string][]MembershipInfo            `json:"membership_index"`
-	RelationshipIndex map[string]map[string]RelationshipInfo `json:"relationship_index"`
+	MembershipIndex map[string][]MembershipInfo `json:"membership_index"`
 }
 
 // MembershipInfo represents a membership entry with name and type
@@ -197,14 +220,35 @@ type MembershipInfo struct {
 	Type string `json:"type"`
 }
 
-// RelationshipInfo represents relationship information with ancestry
-type RelationshipInfo struct {
-	Ancestry struct {
-		Orgs       []string `json:"orgs"`
-		Teams      []string `json:"teams"`
-		Pillars    []string `json:"pillars"`
-		TeamGroups []string `json:"team_groups"`
-	} `json:"ancestry"`
+// HierarchyPathEntry represents a single entry in a hierarchy path
+type HierarchyPathEntry struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// HierarchyNode represents a node in the descendants tree with nested children
+type HierarchyNode struct {
+	Name     string          `json:"name"`
+	Type     string          `json:"type"`
+	Children []HierarchyNode `json:"children"`
+}
+
+// JiraOwnerInfo represents an entity that owns a Jira project/component
+type JiraOwnerInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// JiraIndex contains Jira project/component to team mappings
+// Structure: project -> component -> list of owner entities
+// Special key "_project_level" indicates project-level ownership
+// Note: In JSON, projects are directly under indexes.jira (no wrapper object)
+type JiraIndex map[string]map[string][]JiraOwnerInfo
+
+// JiraOwnership represents a project/component ownership entry
+type JiraOwnership struct {
+	Project   string `json:"project"`
+	Component string `json:"component"`
 }
 
 // DataVersion tracks the version of loaded data for hot reload

@@ -141,6 +141,24 @@ The main class providing access to organizational data.
 - `load_from_data_source(source: DataSource) -> None`
 - `start_data_source_watcher(source: DataSource) -> None`
 
+#### Hierarchy Queries
+
+- `get_hierarchy_path(entity_name: str, entity_type: str) -> list[HierarchyPathEntry]`
+- `get_descendants_tree(entity_name: str) -> HierarchyNode | None`
+
+#### Jira Queries
+
+- `get_jira_projects() -> list[str]`
+- `get_jira_components(project: str) -> list[str]`
+- `get_teams_by_jira_project(project: str) -> list[JiraOwnerInfo]`
+- `get_teams_by_jira_component(project: str, component: str) -> list[JiraOwnerInfo]`
+- `get_jira_ownership_for_team(team_name: str) -> list[dict]`
+
+#### Component Queries
+
+- `get_component_by_name(name: str) -> Component | None`
+- `get_all_components() -> list[Component]`
+
 #### Enumeration
 
 - `get_all_employee_uids() -> list[str]`
@@ -190,9 +208,141 @@ config = GCSConfig(
 source = GCSDataSourceWithSDK(config)
 ```
 
+## Async API
+
+For asyncio-based applications (FastAPI, aiohttp, etc.), use `AsyncService`:
+
+### Basic Async Usage
+
+```python
+import asyncio
+from orgdatacore import AsyncService, GCSConfig
+from orgdatacore._async import AsyncGCSDataSource
+
+async def main():
+    # Configure async GCS data source
+    config = GCSConfig(
+        bucket="your-bucket",
+        object_path="path/to/org_data.json",
+        project_id="your-project",
+    )
+    source = AsyncGCSDataSource(config)
+
+    # Create and initialize async service
+    service = AsyncService()
+    await service.load_from_data_source(source)
+
+    # Query employees (all methods are async)
+    employee = await service.get_employee_by_uid("jsmith")
+    if employee:
+        print(f"Found: {employee.full_name}")
+
+    # Check team membership
+    is_member = await service.is_employee_in_team("jsmith", "platform-team")
+
+    # Get hierarchy path
+    path = await service.get_hierarchy_path("platform-team", "team")
+    for entry in path:
+        print(f"  {entry.type}: {entry.name}")
+
+asyncio.run(main())
+```
+
+### Using with Data Watcher
+
+```python
+import asyncio
+from orgdatacore import AsyncService, GCSConfig
+from orgdatacore._async import AsyncGCSDataSource
+
+async def run_with_auto_reload():
+    config = GCSConfig(
+        bucket="your-bucket",
+        object_path="org_data.json",
+        project_id="your-project",
+    )
+    source = AsyncGCSDataSource(config)
+    service = AsyncService()
+
+    # Start watcher - loads data and monitors for changes
+    await service.start_data_source_watcher(source)
+
+    try:
+        # Service auto-reloads when data changes
+        while True:
+            teams = await service.get_all_team_names()
+            print(f"Currently tracking {len(teams)} teams")
+            await asyncio.sleep(60)
+    finally:
+        await service.stop_watcher()
+
+asyncio.run(run_with_auto_reload())
+```
+
+### AsyncService API Reference
+
+The `AsyncService` has the same methods as `Service`, but all are async:
+
+#### Core Data Access
+- `await get_employee_by_uid(uid)` → `Employee | None`
+- `await get_employee_by_email(email)` → `Employee | None`
+- `await get_employee_by_slack_id(slack_id)` → `Employee | None`
+- `await get_employee_by_github_id(github_id)` → `Employee | None`
+- `await get_manager_for_employee(uid)` → `Employee | None`
+- `await get_team_by_name(name)` → `Team | None`
+- `await get_org_by_name(name)` → `Org | None`
+- `await get_pillar_by_name(name)` → `Pillar | None`
+- `await get_team_group_by_name(name)` → `TeamGroup | None`
+- `await get_component_by_name(name)` → `Component | None`
+
+#### Membership Queries
+- `await get_teams_for_uid(uid)` → `list[str]`
+- `await get_teams_for_slack_id(slack_id)` → `list[str]`
+- `await get_team_members(team_name)` → `tuple[Employee, ...]`
+- `await get_org_members(org_name)` → `tuple[Employee, ...]`
+- `await is_employee_in_team(uid, team_name)` → `bool`
+- `await is_slack_user_in_team(slack_id, team_name)` → `bool`
+- `await is_employee_in_org(uid, org_name)` → `bool`
+- `await is_slack_user_in_org(slack_id, org_name)` → `bool`
+
+#### Hierarchy Queries
+- `await get_hierarchy_path(entity_name, entity_type)` → `list[HierarchyPathEntry]`
+- `await get_descendants_tree(entity_name)` → `HierarchyNode | None`
+- `await get_user_organizations(uid)` → `tuple[OrgInfo, ...]`
+
+#### Jira Queries
+- `await get_jira_projects()` → `list[str]`
+- `await get_jira_components(project)` → `list[str]`
+- `await get_teams_by_jira_project(project)` → `list[JiraOwnerInfo]`
+- `await get_teams_by_jira_component(project, component)` → `list[JiraOwnerInfo]`
+- `await get_jira_ownership_for_team(team_name)` → `list[dict]`
+
+#### Enumeration
+- `await get_all_employee_uids()` → `list[str]`
+- `await get_all_team_names()` → `list[str]`
+- `await get_all_org_names()` → `list[str]`
+- `await get_all_pillar_names()` → `list[str]`
+- `await get_all_team_group_names()` → `list[str]`
+- `await get_all_employees()` → `tuple[Employee, ...]`
+- `await get_all_teams()` → `tuple[Team, ...]`
+- `await get_all_orgs()` → `tuple[Org, ...]`
+- `await get_all_pillars()` → `tuple[Pillar, ...]`
+- `await get_all_team_groups()` → `tuple[TeamGroup, ...]`
+- `await get_all_components()` → `tuple[Component, ...]`
+
+#### Data Management
+- `await load_from_data_source(source)` → `None`
+- `await start_data_source_watcher(source)` → `None`
+- `await stop_watcher()` → `None`
+- `is_healthy()` → `bool` (sync)
+- `is_ready()` → `bool` (sync)
+- `get_version()` → `DataVersion` (sync)
+
 ## Thread Safety
 
 The `Service` class is thread-safe. All read operations can be performed concurrently, and data reloading is atomic.
+
+The `AsyncService` class is asyncio-safe, using `asyncio.Lock` to protect data access during concurrent async operations.
 
 ## Development
 

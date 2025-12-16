@@ -54,6 +54,22 @@ type ServiceInterface interface {
 	GetAllOrgNames() []string
 	GetAllPillarNames() []string
 	GetAllTeamGroupNames() []string
+
+	// Hierarchy queries
+	GetHierarchyPath(entityName string, entityType string) []HierarchyPathEntry
+	GetDescendantsTree(entityName string) *HierarchyNode
+
+	// Component queries
+	GetComponentByName(name string) *Component
+	GetAllComponents() []Component
+	GetAllComponentNames() []string
+
+	// Jira queries
+	GetJiraProjects() []string
+	GetJiraComponents(project string) []string
+	GetTeamsByJiraProject(project string) []JiraOwnerInfo
+	GetTeamsByJiraComponent(project, component string) []JiraOwnerInfo
+	GetJiraOwnershipForTeam(teamName string) []JiraOwnership
 }
 
 type OrgInfo struct {

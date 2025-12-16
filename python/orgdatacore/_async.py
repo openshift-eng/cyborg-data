@@ -27,10 +27,14 @@ from ._exceptions import ConfigurationError, DataLoadError, GCSError
 from ._log import get_logger
 from ._service import _parse_data
 from ._types import (
+    Component,
     Data,
     DataVersion,
     Employee,
     GCSConfig,
+    HierarchyNode,
+    HierarchyPathEntry,
+    JiraOwnerInfo,
     MembershipInfo,
     MembershipType,
     Org,
@@ -308,6 +312,13 @@ class AsyncService:
                 return None
             return self._data.lookups.team_groups.get(name)
 
+    async def get_component_by_name(self, name: str) -> Component | None:
+        """Get a component by name."""
+        async with self._lock:
+            if self._data is None:
+                return None
+            return self._data.lookups.components.get(name)
+
     async def get_user_memberships(self, uid: str) -> tuple[MembershipInfo, ...]:
         """Get all memberships for a user."""
         async with self._lock:
@@ -315,10 +326,188 @@ class AsyncService:
                 return ()
             return self._data.indexes.membership.membership_index.get(uid, ())
 
-    async def get_user_teams(self, uid: str) -> tuple[str, ...]:
+    async def get_user_teams(self, uid: str) -> list[str]:
         """Get team names for a user."""
         memberships = await self.get_user_memberships(uid)
-        return tuple(m.name for m in memberships if m.type == MembershipType.TEAM)
+        return [m.name for m in memberships if m.type == MembershipType.TEAM]
+
+    async def get_teams_for_uid(self, uid: str) -> list[str]:
+        """Get all teams a UID is a member of."""
+        return await self.get_user_teams(uid)
+
+    async def get_teams_for_slack_id(self, slack_id: str) -> list[str]:
+        """Get all teams a Slack user is a member of."""
+        uid = await self._get_uid_from_slack_id(slack_id)
+        if not uid:
+            return []
+        return await self.get_teams_for_uid(uid)
+
+    async def _get_uid_from_slack_id(self, slack_id: str) -> str:
+        """Get the UID for a given Slack ID."""
+        async with self._lock:
+            if self._data is None:
+                return ""
+            return self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id, "")
+
+    async def get_manager_for_employee(self, uid: str) -> Employee | None:
+        """Get the manager for a given employee UID."""
+        async with self._lock:
+            if self._data is None:
+                return None
+            emp = self._data.lookups.employees.get(uid)
+            if not emp or not emp.manager_uid:
+                return None
+            return self._data.lookups.employees.get(emp.manager_uid)
+
+    async def is_employee_in_team(self, uid: str, team_name: str) -> bool:
+        """Check if an employee is in a specific team."""
+        teams = await self.get_teams_for_uid(uid)
+        return team_name in teams
+
+    async def is_slack_user_in_team(self, slack_id: str, team_name: str) -> bool:
+        """Check if a Slack user is in a specific team."""
+        uid = await self._get_uid_from_slack_id(slack_id)
+        if not uid:
+            return False
+        return await self.is_employee_in_team(uid, team_name)
+
+    async def is_employee_in_org(self, uid: str, org_name: str) -> bool:
+        """Check if an employee is in a specific organization."""
+        async with self._lock:
+            if self._data is None:
+                return False
+
+            memberships = self._data.indexes.membership.membership_index.get(uid, ())
+
+            for membership in memberships:
+                if membership.type == MembershipType.ORG and membership.name == org_name:
+                    return True
+                elif membership.type == MembershipType.TEAM:
+                    hierarchy_path = self._get_hierarchy_path(membership.name, "team")
+                    for entry in hierarchy_path:
+                        if entry.type == "org" and entry.name == org_name:
+                            return True
+
+            return False
+
+    async def is_slack_user_in_org(self, slack_id: str, org_name: str) -> bool:
+        """Check if a Slack user is in a specific organization."""
+        uid = await self._get_uid_from_slack_id(slack_id)
+        if not uid:
+            return False
+        return await self.is_employee_in_org(uid, org_name)
+
+    def _get_entity_by_type(
+            self, entity_name: str, entity_type: str
+    ) -> Team | Org | Pillar | TeamGroup | None:
+        """Get entity from lookups by name and type."""
+        if self._data is None:
+            return None
+        type_to_lookup = {
+            "team": self._data.lookups.teams,
+            "org": self._data.lookups.orgs,
+            "pillar": self._data.lookups.pillars,
+            "team_group": self._data.lookups.team_groups,
+        }
+        lookup = type_to_lookup.get(entity_type.lower())
+        if not lookup:
+            return None
+        return lookup.get(entity_name)
+
+    def _get_hierarchy_path(self, entity_name: str, entity_type: str) -> list[HierarchyPathEntry]:
+        """Compute hierarchy path by walking parent references."""
+        if self._data is None:
+            return []
+
+        entity = self._get_entity_by_type(entity_name, entity_type)
+        if entity is None:
+            return []
+
+        path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
+        visited = {entity_name}
+        current = entity
+
+        while current and current.parent:
+            parent = current.parent
+            if parent.name in visited:
+                break
+            visited.add(parent.name)
+            path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
+            current = self._get_entity_by_type(parent.name, parent.type)
+
+        return path
+
+    async def get_hierarchy_path(
+            self, entity_name: str, entity_type: str = "team"
+    ) -> list[HierarchyPathEntry]:
+        """Get ordered hierarchy path from entity to root.
+
+        Computes path by walking parent references in entities.
+
+        Args:
+            entity_name: Name of the team/org/pillar/team_group
+            entity_type: Type of entity ("team", "org", "pillar", "team_group")
+
+        Returns:
+            Ordered list from entity to root. Empty list if not found.
+        """
+        async with self._lock:
+            return self._get_hierarchy_path(entity_name, entity_type)
+
+    async def get_descendants_tree(self, entity_name: str) -> HierarchyNode | None:
+        """Get all descendants of an entity as a nested tree.
+
+        Computes tree by scanning all entities for children.
+
+        Args:
+            entity_name: Name of the org/pillar/team_group/team
+
+        Returns:
+            Nested tree structure with all descendants, or None if not found.
+        """
+        async with self._lock:
+            if self._data is None:
+                return None
+
+            # Look up entity type
+            entity_type = ""
+            for type_name, lookup in [
+                ("team", self._data.lookups.teams),
+                ("org", self._data.lookups.orgs),
+                ("pillar", self._data.lookups.pillars),
+                ("team_group", self._data.lookups.team_groups),
+            ]:
+                if entity_name in lookup:
+                    entity_type = type_name
+                    break
+
+            if not entity_type:
+                return None
+
+            # Build children map by scanning all entities
+            children_map: dict[str, list[tuple[str, str]]] = {}
+            all_entities: list[tuple[str, Team | Org | Pillar | TeamGroup, str]] = [
+                *((name, info, "team") for name, info in self._data.lookups.teams.items()),
+                *((name, info, "org") for name, info in self._data.lookups.orgs.items()),
+                *((name, info, "pillar") for name, info in self._data.lookups.pillars.items()),
+                *((name, info, "team_group") for name, info in self._data.lookups.team_groups.items()),
+            ]
+
+            for name, info, etype in all_entities:
+                if info.parent:
+                    if info.parent.name not in children_map:
+                        children_map[info.parent.name] = []
+                    children_map[info.parent.name].append((name, etype))
+
+            def build_node(name: str, type_: str, visited: set[str]) -> HierarchyNode:
+                if name in visited:
+                    return HierarchyNode(name=name, type=type_, children=())
+                visited.add(name)
+                children = children_map.get(name, [])
+                child_nodes = tuple(build_node(n, t, visited) for n, t in children)
+                return HierarchyNode(name=name, type=type_, children=child_nodes)
+
+            return build_node(entity_name, entity_type, set())
 
     async def get_user_organizations(self, uid: str) -> tuple[OrgInfo, ...]:
         """Get organization info for a user."""
@@ -328,21 +517,31 @@ class AsyncService:
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
+            seen: set[str] = set()
+
+            type_to_org_info_type = {
+                "org": OrgInfoType.ORGANIZATION,
+                "pillar": OrgInfoType.PILLAR,
+                "team_group": OrgInfoType.TEAM_GROUP,
+                "team": OrgInfoType.PARENT_TEAM,
+            }
 
             for m in memberships:
                 if m.type == MembershipType.ORG:
-                    result.append(OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION))
+                    if m.name not in seen:
+                        result.append(OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION))
+                        seen.add(m.name)
                 elif m.type == MembershipType.TEAM:
-                    result.append(OrgInfo(name=m.name, type=OrgInfoType.TEAM))
-                    # Add ancestry
-                    rel_info = self._data.indexes.membership.relationship_index.get("teams", {}).get(m.name)
-                    if rel_info:
-                        for org in rel_info.ancestry.orgs:
-                            result.append(OrgInfo(name=org, type=OrgInfoType.ORGANIZATION))
-                        for pillar in rel_info.ancestry.pillars:
-                            result.append(OrgInfo(name=pillar, type=OrgInfoType.PILLAR))
-                        for tg in rel_info.ancestry.team_groups:
-                            result.append(OrgInfo(name=tg, type=OrgInfoType.TEAM_GROUP))
+                    if m.name not in seen:
+                        result.append(OrgInfo(name=m.name, type=OrgInfoType.TEAM))
+                        seen.add(m.name)
+
+                    hierarchy_path = self._get_hierarchy_path(m.name, "team")
+                    for entry in hierarchy_path[1:]:
+                        if entry.name not in seen:
+                            org_type = type_to_org_info_type.get(entry.type.lower(), OrgInfoType.ORGANIZATION)
+                            result.append(OrgInfo(name=entry.name, type=org_type))
+                            seen.add(entry.name)
 
             return tuple(result)
 
@@ -381,6 +580,48 @@ class AsyncService:
                 return ()
             return tuple(self._data.lookups.team_groups.values())
 
+    async def get_all_components(self) -> tuple[Component, ...]:
+        """Get all components."""
+        async with self._lock:
+            if self._data is None:
+                return ()
+            return tuple(self._data.lookups.components.values())
+
+    async def get_all_team_names(self) -> list[str]:
+        """Get all team names."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.teams.keys())
+
+    async def get_all_org_names(self) -> list[str]:
+        """Get all organization names."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.orgs.keys())
+
+    async def get_all_pillar_names(self) -> list[str]:
+        """Get all pillar names."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.pillars.keys())
+
+    async def get_all_team_group_names(self) -> list[str]:
+        """Get all team group names."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.team_groups.keys())
+
+    async def get_all_employee_uids(self) -> list[str]:
+        """Get all employee UIDs in the system."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.employees.keys())
+
     async def get_team_members(self, team_name: str) -> tuple[Employee, ...]:
         """Get all members of a team."""
         async with self._lock:
@@ -415,13 +656,97 @@ class AsyncService:
         """Get the current data version (sync - no lock needed for read)."""
         return self._version
 
+    async def get_jira_projects(self) -> list[str]:
+        """Get all Jira project keys."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.indexes.jira.project_component_owners.keys())
+
+    async def get_jira_components(self, project: str) -> list[str]:
+        """Get all components for a Jira project.
+
+        Args:
+            project: Jira project key (e.g., "OCPBUGS")
+
+        Returns:
+            List of component names. "_project_level" indicates project-level ownership.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            return list(components.keys())
+
+    async def get_teams_by_jira_project(self, project: str) -> list[JiraOwnerInfo]:
+        """Get all teams/entities that own any component in a Jira project.
+
+        Args:
+            project: Jira project key (e.g., "OCPBUGS")
+
+        Returns:
+            Deduplicated list of owner entities across all components.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            seen: set[str] = set()
+            result: list[JiraOwnerInfo] = []
+            for owners in components.values():
+                for owner in owners:
+                    if owner.name not in seen:
+                        seen.add(owner.name)
+                        result.append(owner)
+            return result
+
+    async def get_teams_by_jira_component(
+            self, project: str, component: str
+    ) -> list[JiraOwnerInfo]:
+        """Get teams/entities that own a specific Jira component.
+
+        Args:
+            project: Jira project key (e.g., "OCPBUGS")
+            component: Component name (or "_project_level" for project ownership)
+
+        Returns:
+            List of owner entities for the component.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            owners = components.get(component, ())
+            return list(owners)
+
+    async def get_jira_ownership_for_team(self, team_name: str) -> list[dict[str, str]]:
+        """Get all Jira projects and components owned by a team.
+
+        Args:
+            team_name: Team name to look up
+
+        Returns:
+            List of dicts with "project" and "component" keys.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            result: list[dict[str, str]] = []
+            for project, components in self._data.indexes.jira.project_component_owners.items():
+                for component, owners in components.items():
+                    for owner in owners:
+                        if owner.name == team_name:
+                            result.append({"project": project, "component": component})
+                            break
+            return result
+
 
 async def _async_retry_with_backoff(
-    operation: Callable[[], Awaitable[BinaryIO]],
-    max_retries: int = DEFAULT_MAX_RETRIES,
-    initial_delay: float = DEFAULT_RETRY_DELAY,
-    backoff: float = DEFAULT_RETRY_BACKOFF,
-    operation_name: str = "operation",
+        operation: Callable[[], Awaitable[BinaryIO]],
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        initial_delay: float = DEFAULT_RETRY_DELAY,
+        backoff: float = DEFAULT_RETRY_BACKOFF,
+        operation_name: str = "operation",
 ) -> BinaryIO:
     """Execute an async operation with exponential backoff retry."""
     logger = get_logger()
@@ -457,6 +782,7 @@ async def _async_retry_with_backoff(
 try:
     from google.cloud import storage  # type: ignore[import-untyped]
 
+
     class AsyncGCSDataSource:
         """Async GCS data source using google-cloud-storage.
 
@@ -474,12 +800,12 @@ try:
         """
 
         def __init__(
-            self,
-            config: GCSConfig,
-            *,
-            max_retries: int = DEFAULT_MAX_RETRIES,
-            retry_delay: float = DEFAULT_RETRY_DELAY,
-            retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+                self,
+                config: GCSConfig,
+                *,
+                max_retries: int = DEFAULT_MAX_RETRIES,
+                retry_delay: float = DEFAULT_RETRY_DELAY,
+                retry_backoff: float = DEFAULT_RETRY_BACKOFF,
         ) -> None:
             """Create an async GCS data source.
 
@@ -550,7 +876,7 @@ try:
             )
 
         async def watch(
-            self, callback: Callable[[], Awaitable[Exception | None]]
+                self, callback: Callable[[], Awaitable[Exception | None]]
         ) -> Exception | None:
             """Monitor for changes and call async callback when data is updated.
 
