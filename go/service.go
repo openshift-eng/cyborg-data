@@ -312,18 +312,15 @@ func (s *Service) IsEmployeeInOrg(uid string, orgName string) bool {
 		return false
 	}
 
-	teamsIndex := s.data.Indexes.Membership.RelationshipIndex["teams"]
-
 	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
 		if m.Type == string(MembershipOrg) && m.Name == orgName {
 			return true
 		}
 		if m.Type == string(MembershipTeam) {
-			if rel, exists := teamsIndex[m.Name]; exists {
-				for _, org := range rel.Ancestry.Orgs {
-					if org == orgName {
-						return true
-					}
+			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
+			for _, entry := range hierarchyPath {
+				if strings.ToLower(entry.Type) == "org" && entry.Name == orgName {
+					return true
 				}
 			}
 		}
@@ -354,7 +351,6 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 
 	var orgs []OrgInfo
 	seen := make(map[string]bool)
-	teamsIndex := s.data.Indexes.Membership.RelationshipIndex["teams"]
 
 	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
 		switch m.Type {
@@ -368,42 +364,32 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 				orgs = append(orgs, OrgInfo{Name: m.Name, Type: OrgTypeTeam})
 				seen[m.Name] = true
 			}
-			if rel, exists := teamsIndex[m.Name]; exists {
-				addAncestryItems(&orgs, &seen, rel.Ancestry)
-			}
+			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
+			addHierarchyPathItems(&orgs, &seen, hierarchyPath)
 		}
 	}
 	return orgs
 }
 
-func addAncestryItems(orgs *[]OrgInfo, seen *map[string]bool, ancestry struct {
-	Orgs       []string `json:"orgs"`
-	Teams      []string `json:"teams"`
-	Pillars    []string `json:"pillars"`
-	TeamGroups []string `json:"team_groups"`
-}) {
-	for _, name := range ancestry.Orgs {
-		if !(*seen)[name] {
-			*orgs = append(*orgs, OrgInfo{Name: name, Type: OrgTypeOrganization})
-			(*seen)[name] = true
-		}
+func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[string]bool, hierarchyPath []HierarchyPathEntry) {
+	typeToOrgInfoType := map[string]OrgInfoType{
+		"org":        OrgTypeOrganization,
+		"pillar":     OrgTypePillar,
+		"team_group": OrgTypeTeamGroup,
+		"team":       OrgTypeParentTeam,
 	}
-	for _, name := range ancestry.Pillars {
-		if !(*seen)[name] {
-			*orgs = append(*orgs, OrgInfo{Name: name, Type: OrgTypePillar})
-			(*seen)[name] = true
+
+	for i, entry := range hierarchyPath {
+		if i == 0 {
+			continue
 		}
-	}
-	for _, name := range ancestry.TeamGroups {
-		if !(*seen)[name] {
-			*orgs = append(*orgs, OrgInfo{Name: name, Type: OrgTypeTeamGroup})
-			(*seen)[name] = true
-		}
-	}
-	for _, name := range ancestry.Teams {
-		if !(*seen)[name] {
-			*orgs = append(*orgs, OrgInfo{Name: name, Type: OrgTypeParentTeam})
-			(*seen)[name] = true
+		if !(*seen)[entry.Name] {
+			orgType, ok := typeToOrgInfoType[strings.ToLower(entry.Type)]
+			if !ok {
+				orgType = OrgTypeOrganization
+			}
+			*orgs = append(*orgs, OrgInfo{Name: entry.Name, Type: orgType})
+			(*seen)[entry.Name] = true
 		}
 	}
 }
@@ -413,6 +399,101 @@ func (s *Service) getUIDFromSlackID(slackID string) string {
 		return ""
 	}
 	return s.data.Indexes.SlackIDMappings.SlackUIDToUID[slackID]
+}
+
+// getEntityParent returns the parent info for an entity by name and type.
+// Must be called with s.mu held.
+func (s *Service) getEntityParent(entityName, entityType string) *ParentInfo {
+	if s.data == nil {
+		return nil
+	}
+
+	switch strings.ToLower(entityType) {
+	case "team":
+		if team, ok := s.data.Lookups.Teams[entityName]; ok {
+			return team.Parent
+		}
+	case "org":
+		if org, ok := s.data.Lookups.Orgs[entityName]; ok {
+			return org.Parent
+		}
+	case "pillar":
+		if pillar, ok := s.data.Lookups.Pillars[entityName]; ok {
+			return pillar.Parent
+		}
+	case "team_group":
+		if tg, ok := s.data.Lookups.TeamGroups[entityName]; ok {
+			return tg.Parent
+		}
+	}
+	return nil
+}
+
+// getEntityType looks up the type for an entity by scanning all lookups.
+// Must be called with s.mu held.
+func (s *Service) getEntityType(entityName string) string {
+	if s.data == nil {
+		return ""
+	}
+	if _, ok := s.data.Lookups.Teams[entityName]; ok {
+		return "team"
+	}
+	if _, ok := s.data.Lookups.Orgs[entityName]; ok {
+		return "org"
+	}
+	if _, ok := s.data.Lookups.Pillars[entityName]; ok {
+		return "pillar"
+	}
+	if _, ok := s.data.Lookups.TeamGroups[entityName]; ok {
+		return "team_group"
+	}
+	return ""
+}
+
+// computeHierarchyPath builds the hierarchy path by walking parent references.
+// Must be called with s.mu held.
+func (s *Service) computeHierarchyPath(entityName, entityType string) []HierarchyPathEntry {
+	if s.data == nil {
+		return []HierarchyPathEntry{}
+	}
+
+	// Check entity exists - either infer type or validate provided type
+	if entityType == "" {
+		entityType = s.getEntityType(entityName)
+		if entityType == "" {
+			return []HierarchyPathEntry{}
+		}
+	} else {
+		// Validate entity exists with given type
+		actualType := s.getEntityType(entityName)
+		if actualType == "" || !strings.EqualFold(actualType, entityType) {
+			return []HierarchyPathEntry{}
+		}
+		entityType = actualType
+	}
+
+	path := []HierarchyPathEntry{{Name: entityName, Type: entityType}}
+	visited := make(map[string]bool)
+	visited[entityName] = true
+
+	currentName := entityName
+	currentType := entityType
+
+	for {
+		parent := s.getEntityParent(currentName, currentType)
+		if parent == nil {
+			break
+		}
+		if visited[parent.Name] {
+			break
+		}
+		visited[parent.Name] = true
+		path = append(path, HierarchyPathEntry{Name: parent.Name, Type: parent.Type})
+		currentName = parent.Name
+		currentType = parent.Type
+	}
+
+	return path
 }
 
 func (s *Service) GetAllEmployeeUIDs() []string {
@@ -483,6 +564,222 @@ func (s *Service) GetAllTeamGroupNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// GetHierarchyPath returns the ordered hierarchy path from entity to root.
+func (s *Service) GetHierarchyPath(entityName string, entityType string) []HierarchyPathEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.computeHierarchyPath(entityName, entityType)
+}
+
+// GetDescendantsTree returns all descendants of an entity as a nested tree.
+func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil {
+		return nil
+	}
+
+	entityType := s.getEntityType(entityName)
+	if entityType == "" {
+		return nil
+	}
+
+	// Build children map by scanning all entities
+	childrenMap := make(map[string][]struct{ name, typ string })
+
+	for name, team := range s.data.Lookups.Teams {
+		if team.Parent != nil {
+			childrenMap[team.Parent.Name] = append(childrenMap[team.Parent.Name], struct{ name, typ string }{name, "team"})
+		}
+	}
+	for name, org := range s.data.Lookups.Orgs {
+		if org.Parent != nil {
+			childrenMap[org.Parent.Name] = append(childrenMap[org.Parent.Name], struct{ name, typ string }{name, "org"})
+		}
+	}
+	for name, pillar := range s.data.Lookups.Pillars {
+		if pillar.Parent != nil {
+			childrenMap[pillar.Parent.Name] = append(childrenMap[pillar.Parent.Name], struct{ name, typ string }{name, "pillar"})
+		}
+	}
+	for name, tg := range s.data.Lookups.TeamGroups {
+		if tg.Parent != nil {
+			childrenMap[tg.Parent.Name] = append(childrenMap[tg.Parent.Name], struct{ name, typ string }{name, "team_group"})
+		}
+	}
+
+	// Build tree recursively
+	var buildNode func(name, typ string, visited map[string]bool) HierarchyNode
+	buildNode = func(name, typ string, visited map[string]bool) HierarchyNode {
+		if visited[name] {
+			return HierarchyNode{Name: name, Type: typ, Children: []HierarchyNode{}}
+		}
+		visited[name] = true
+
+		children := childrenMap[name]
+		childNodes := make([]HierarchyNode, 0, len(children))
+		for _, c := range children {
+			childNodes = append(childNodes, buildNode(c.name, c.typ, visited))
+		}
+
+		return HierarchyNode{Name: name, Type: typ, Children: childNodes}
+	}
+
+	node := buildNode(entityName, entityType, make(map[string]bool))
+	return &node
+}
+
+// GetComponentByName returns a component by name.
+func (s *Service) GetComponentByName(name string) *Component {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Components == nil {
+		return nil
+	}
+	if component, exists := s.data.Lookups.Components[name]; exists {
+		return &component
+	}
+	return nil
+}
+
+// GetAllComponents returns all components.
+func (s *Service) GetAllComponents() []Component {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Components == nil {
+		return []Component{}
+	}
+	components := make([]Component, 0, len(s.data.Lookups.Components))
+	for _, component := range s.data.Lookups.Components {
+		components = append(components, component)
+	}
+	return components
+}
+
+// GetAllComponentNames returns all component names.
+func (s *Service) GetAllComponentNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Components == nil {
+		return []string{}
+	}
+	names := make([]string, 0, len(s.data.Lookups.Components))
+	for name := range s.data.Lookups.Components {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetJiraProjects returns all Jira project keys.
+func (s *Service) GetJiraProjects() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Jira == nil {
+		return []string{}
+	}
+	projects := make([]string, 0, len(s.data.Indexes.Jira))
+	for project := range s.data.Indexes.Jira {
+		projects = append(projects, project)
+	}
+	return projects
+}
+
+// GetJiraComponents returns all components for a Jira project.
+func (s *Service) GetJiraComponents(project string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Jira == nil {
+		return []string{}
+	}
+	components, exists := s.data.Indexes.Jira[project]
+	if !exists {
+		return []string{}
+	}
+	result := make([]string, 0, len(components))
+	for component := range components {
+		result = append(result, component)
+	}
+	return result
+}
+
+// GetTeamsByJiraProject returns all teams/entities that own any component in a Jira project.
+func (s *Service) GetTeamsByJiraProject(project string) []JiraOwnerInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Jira == nil {
+		return []JiraOwnerInfo{}
+	}
+	components, exists := s.data.Indexes.Jira[project]
+	if !exists {
+		return []JiraOwnerInfo{}
+	}
+
+	seen := make(map[string]bool)
+	var result []JiraOwnerInfo
+	for _, owners := range components {
+		for _, owner := range owners {
+			if !seen[owner.Name] {
+				seen[owner.Name] = true
+				result = append(result, owner)
+			}
+		}
+	}
+	return result
+}
+
+// GetTeamsByJiraComponent returns teams/entities that own a specific Jira component.
+func (s *Service) GetTeamsByJiraComponent(project, component string) []JiraOwnerInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Jira == nil {
+		return []JiraOwnerInfo{}
+	}
+	components, exists := s.data.Indexes.Jira[project]
+	if !exists {
+		return []JiraOwnerInfo{}
+	}
+	owners, exists := components[component]
+	if !exists {
+		return []JiraOwnerInfo{}
+	}
+	// Return a copy to avoid external modification
+	result := make([]JiraOwnerInfo, len(owners))
+	copy(result, owners)
+	return result
+}
+
+// GetJiraOwnershipForTeam returns all Jira projects and components owned by a team.
+func (s *Service) GetJiraOwnershipForTeam(teamName string) []JiraOwnership {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Jira == nil {
+		return []JiraOwnership{}
+	}
+
+	var result []JiraOwnership
+	for project, components := range s.data.Indexes.Jira {
+		for component, owners := range components {
+			for _, owner := range owners {
+				if owner.Name == teamName {
+					result = append(result, JiraOwnership{Project: project, Component: component})
+					break
+				}
+			}
+		}
+	}
+	return result
 }
 
 // validateData checks that required data structures are present.

@@ -1,12 +1,12 @@
 {
   "metadata": {
+    "generated_at": "2024-01-15T12:00:00.000000",
+    "data_version": "test-abc123",
     "total_employees": 3,
-    "total_teams": 2,
     "total_orgs": 2,
+    "total_teams": 2,
     "total_pillars": 1,
-    "total_team_groups": 1,
-    "generation_timestamp": "2024-01-01T00:00:00Z",
-    "data_version": "v1.0"
+    "total_team_groups": 1
   },
   "lookups": {
     "employees": {
@@ -17,7 +17,8 @@
         "job_title": "Software Engineer",
         "slack_uid": "U12345678",
         "github_id": "jsmith-dev",
-        "manager_uid": "adoe"
+        "manager_uid": "adoe",
+        "timezone": "America/New_York"
       },
       "adoe": {
         "uid": "adoe",
@@ -26,7 +27,8 @@
         "job_title": "Team Lead",
         "slack_uid": "U87654321",
         "github_id": "alice-codes",
-        "is_people_manager": true
+        "is_people_manager": true,
+        "timezone": "America/Los_Angeles"
       },
       "bwilson": {
         "uid": "bwilson",
@@ -34,72 +36,138 @@
         "email": "bwilson@example.com",
         "job_title": "Senior Engineer",
         "slack_uid": "U98765432",
-        "github_id": "bobw"
+        "github_id": "bobw",
+        "timezone": "Europe/London"
       }
     },
     "teams": {
       "test-team": {
-        "uid": "team1",
+        "uid": "team-001",
         "name": "test-team",
+        "description": "Core testing and QA team",
         "type": "team",
+        "parent": {"name": "test-org", "type": "org"},
         "group": {
-          "type": {
-            "name": "team"
+          "type": {"name": "team", "visualize": true},
+          "resolved_people_uid_list": ["jsmith", "adoe"],
+          "resolved_roles": [
+            {"people": ["adoe"], "roles": ["manager"]},
+            {"people": ["jsmith"], "roles": ["tech_lead"]}
+          ],
+          "slack": {
+            "channels": [
+              {"channel": "#test-team", "channel_id": "C001", "types": ["main"]},
+              {"channel": "#test-alerts", "channel_id": "C002", "types": ["alerts"]}
+            ]
           },
-          "resolved_people_uid_list": ["jsmith", "adoe"]
-        },
-        "resolved_people_uid_list": ["jsmith", "adoe"]
+          "jiras": [
+            {"project": "TEST", "types": ["main"]},
+            {"project": "TEST", "component": "Core", "types": ["bugs"]}
+          ],
+          "repos": [
+            {"repo_name": "https://github.com/example/test-repo", "description": "Main test repository"}
+          ],
+          "keywords": ["testing", "qa"]
+        }
       },
       "platform-team": {
-        "uid": "team2", 
+        "uid": "team-002",
         "name": "platform-team",
+        "description": "Platform infrastructure team",
         "type": "team",
+        "parent": {"name": "backend-teams", "type": "team_group"},
         "group": {
-          "type": {
-            "name": "team"
+          "type": {"name": "team", "visualize": true},
+          "resolved_people_uid_list": ["bwilson"],
+          "resolved_roles": [
+            {"people": ["bwilson"], "roles": ["tech_lead"]}
+          ],
+          "slack": {
+            "channels": [
+              {"channel": "#platform", "channel_id": "C003", "types": ["main"]}
+            ]
           },
-          "resolved_people_uid_list": ["bwilson"]
-        },
-        "resolved_people_uid_list": ["bwilson"]
+          "jiras": [
+            {"project": "PLAT", "types": ["main"]},
+            {"project": "PLAT", "component": "Infrastructure", "types": ["bugs"]}
+          ],
+          "repos": [
+            {"repo_name": "https://github.com/example/platform", "description": "Platform monorepo"}
+          ]
+        }
       }
     },
     "orgs": {
       "test-org": {
-        "uid": "org1",
+        "uid": "org-001",
         "name": "test-org",
-        "type": "organization",
+        "description": "Test organization",
+        "type": "org",
         "group": {
+          "type": {"name": "org", "visualize": true},
           "resolved_people_uid_list": ["jsmith", "adoe", "bwilson"]
         }
       },
       "platform-org": {
-        "uid": "org2",
+        "uid": "org-002",
         "name": "platform-org",
-        "type": "organization",
+        "description": "Platform organization",
+        "type": "org",
+        "parent": {"name": "test-org", "type": "org"},
         "group": {
+          "type": {"name": "org", "visualize": true},
           "resolved_people_uid_list": ["bwilson"]
         }
       }
     },
     "pillars": {
       "engineering": {
+        "uid": "pillar-001",
         "name": "engineering",
+        "description": "Engineering pillar",
+        "type": "pillar",
+        "parent": {"name": "platform-org", "type": "org"},
         "group": {
-          "type": {
-            "name": "pillar"
-          },
-          "resolved_people_uid_list": ["bwilson"]
+          "type": {"name": "pillar", "visualize": true},
+          "resolved_people_uid_list": ["bwilson"],
+          "resolved_roles": [
+            {"people": ["bwilson"], "roles": ["staff_engineer"]}
+          ]
         }
       }
     },
     "team_groups": {
       "backend-teams": {
+        "uid": "tg-001",
         "name": "backend-teams",
+        "description": "Backend engineering teams",
+        "type": "team_group",
+        "parent": {"name": "engineering", "type": "pillar"},
         "group": {
-          "type": {
-            "name": "team_group"
-          },
+          "type": {"name": "team_group", "visualize": true},
           "resolved_people_uid_list": ["bwilson"]
+        }
+      }
+    },
+    "components": {
+      "platform-api": {
+        "name": "platform-api",
+        "description": "Platform API component",
+        "component": {
+          "type": {"name": "system", "visualize": true},
+          "repos": [
+            {"repo_name": "https://github.com/example/platform-api", "description": "API service"}
+          ]
+        }
+      },
+      "auth-service": {
+        "name": "auth-service",
+        "description": "Authentication service",
+        "component": {
+          "type": {"name": "system", "visualize": true},
+          "repos": [
+            {"repo_name": "https://github.com/example/auth", "description": "Auth service"}
+          ]
         }
       }
     }
@@ -120,26 +188,6 @@
           {"name": "platform-org", "type": "org"},
           {"name": "test-org", "type": "org"}
         ]
-      },
-      "relationship_index": {
-        "teams": {
-          "test-team": {
-            "ancestry": {
-              "orgs": ["test-org"],
-              "pillars": [],
-              "team_groups": [],
-              "teams": []
-            }
-          },
-          "platform-team": {
-            "ancestry": {
-              "orgs": ["platform-org", "test-org"],
-              "pillars": ["engineering"],
-              "team_groups": ["backend-teams"],
-              "teams": []
-            }
-          }
-        }
       }
     },
     "slack_id_mappings": {
@@ -154,6 +202,24 @@
         "jsmith-dev": "jsmith",
         "alice-codes": "adoe",
         "bobw": "bwilson"
+      }
+    },
+    "jira": {
+      "TEST": {
+        "Core": [
+          {"name": "test-team", "type": "team"}
+        ],
+        "_project_level": [
+          {"name": "test-team", "type": "team"}
+        ]
+      },
+      "PLAT": {
+        "Infrastructure": [
+          {"name": "platform-team", "type": "team"}
+        ],
+        "_project_level": [
+          {"name": "platform-team", "type": "team"}
+        ]
       }
     }
   }

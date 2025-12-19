@@ -178,6 +178,14 @@ class Group:
 
 
 @dataclass(frozen=True, slots=True)
+class ParentInfo:
+    """Parent reference for hierarchy traversal."""
+
+    name: str = ""
+    type: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Team:
     """Represents a team in the organizational data."""
 
@@ -186,6 +194,7 @@ class Team:
     tab_name: str = ""
     description: str = ""
     type: str = ""
+    parent: ParentInfo | None = None
     group: Group = field(default_factory=Group)
 
 
@@ -198,6 +207,7 @@ class Org:
     tab_name: str = ""
     description: str = ""
     type: str = ""
+    parent: ParentInfo | None = None
     group: Group = field(default_factory=Group)
 
 
@@ -210,6 +220,7 @@ class Pillar:
     tab_name: str = ""
     description: str = ""
     type: str = ""
+    parent: ParentInfo | None = None
     group: Group = field(default_factory=Group)
 
 
@@ -222,7 +233,22 @@ class TeamGroup:
     tab_name: str = ""
     description: str = ""
     type: str = ""
+    parent: ParentInfo | None = None
     group: Group = field(default_factory=Group)
+
+
+@dataclass(frozen=True, slots=True)
+class Component:
+    """Represents a component in the organizational data."""
+
+    name: str = ""
+    type: str = ""
+    description: str = ""
+    parent: ParentInfo | None = None
+    parent_path: str = ""
+    repos: tuple[RepoInfo, ...] = ()
+    jiras: tuple[JiraInfo, ...] = ()
+    repos_list: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +271,7 @@ class Lookups:
     orgs: dict[str, Org] = field(default_factory=dict)
     pillars: dict[str, Pillar] = field(default_factory=dict)
     team_groups: dict[str, TeamGroup] = field(default_factory=dict)
+    components: dict[str, Component] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,20 +283,11 @@ class MembershipInfo:
 
 
 @dataclass(frozen=True, slots=True)
-class Ancestry:
-    """Represents ancestry information."""
+class HierarchyPathEntry:
+    """Single entry in a hierarchy path (name and type)."""
 
-    orgs: tuple[str, ...] = ()
-    teams: tuple[str, ...] = ()
-    pillars: tuple[str, ...] = ()
-    team_groups: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class RelationshipInfo:
-    """Represents relationship information with ancestry."""
-
-    ancestry: Ancestry = field(default_factory=Ancestry)
+    name: str = ""
+    type: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,7 +295,6 @@ class MembershipIndex:
     """Represents the membership index structure."""
 
     membership_index: dict[str, tuple[MembershipInfo, ...]] = field(default_factory=dict)
-    relationship_index: dict[str, dict[str, RelationshipInfo]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,12 +312,43 @@ class GitHubIDMappings:
 
 
 @dataclass(frozen=True, slots=True)
+class HierarchyNode:
+    """Node in the descendants tree with nested children."""
+
+    name: str = ""
+    type: str = ""
+    children: tuple["HierarchyNode", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class JiraOwnerInfo:
+    """Represents an entity that owns a Jira project/component."""
+
+    name: str = ""
+    type: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class JiraIndex:
+    """Contains Jira project/component to team mappings.
+
+    Structure: project -> component -> list of owner entities.
+    Special key "_project_level" indicates project-level ownership.
+    """
+
+    project_component_owners: dict[str, dict[str, tuple[JiraOwnerInfo, ...]]] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class Indexes:
     """Contains pre-computed lookup tables."""
 
     membership: MembershipIndex = field(default_factory=MembershipIndex)
     slack_id_mappings: SlackIDMappings = field(default_factory=SlackIDMappings)
     github_id_mappings: GitHubIDMappings = field(default_factory=GitHubIDMappings)
+    jira: JiraIndex = field(default_factory=JiraIndex)
 
 
 @dataclass(frozen=True, slots=True)

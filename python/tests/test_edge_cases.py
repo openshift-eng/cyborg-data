@@ -291,7 +291,6 @@ class TestDataValidation:
             "indexes": {
                 "membership": {
                     "membership_index": {"uid": []},
-                    "relationship_index": {},
                 },
                 "slack_id_mappings": {"slack_uid_to_uid": {}},
                 "github_id_mappings": {"github_id_to_uid": {}},
@@ -327,7 +326,6 @@ class TestDataValidation:
             "indexes": {
                 "membership": {
                     "membership_index": {},  # Empty - should fail
-                    "relationship_index": {},
                 },
                 "slack_id_mappings": {"slack_uid_to_uid": {}},
                 "github_id_mappings": {"github_id_to_uid": {}},
