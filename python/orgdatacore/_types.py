@@ -266,12 +266,12 @@ class Metadata:
 class Lookups:
     """Contains the main data objects."""
 
-    employees: dict[str, Employee] = field(default_factory=dict)
-    teams: dict[str, Team] = field(default_factory=dict)
-    orgs: dict[str, Org] = field(default_factory=dict)
-    pillars: dict[str, Pillar] = field(default_factory=dict)
-    team_groups: dict[str, TeamGroup] = field(default_factory=dict)
-    components: dict[str, Component] = field(default_factory=dict)
+    employees: dict[str, Employee] = field(default_factory=lambda: {})
+    teams: dict[str, Team] = field(default_factory=lambda: {})
+    orgs: dict[str, Org] = field(default_factory=lambda: {})
+    pillars: dict[str, Pillar] = field(default_factory=lambda: {})
+    team_groups: dict[str, TeamGroup] = field(default_factory=lambda: {})
+    components: dict[str, Component] = field(default_factory=lambda: {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,21 +294,21 @@ class HierarchyPathEntry:
 class MembershipIndex:
     """Represents the membership index structure."""
 
-    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(default_factory=dict)
+    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(default_factory=lambda: {})
 
 
 @dataclass(frozen=True, slots=True)
 class SlackIDMappings:
     """Contains Slack ID to UID mappings."""
 
-    slack_uid_to_uid: dict[str, str] = field(default_factory=dict)
+    slack_uid_to_uid: dict[str, str] = field(default_factory=lambda: {})
 
 
 @dataclass(frozen=True, slots=True)
 class GitHubIDMappings:
     """Contains GitHub ID to UID mappings."""
 
-    github_id_to_uid: dict[str, str] = field(default_factory=dict)
+    github_id_to_uid: dict[str, str] = field(default_factory=lambda: {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,7 +337,7 @@ class JiraIndex:
     """
 
     project_component_owners: dict[str, dict[str, tuple[JiraOwnerInfo, ...]]] = field(
-        default_factory=dict
+        default_factory=lambda: {}
     )
 
 
@@ -373,7 +373,7 @@ class DataVersion:
     """Tracks the version of loaded data for hot reload."""
 
     load_time: datetime = field(default_factory=lambda: datetime.min)
-    config_maps: dict[str, str] = field(default_factory=dict)
+    config_maps: dict[str, str] = field(default_factory=lambda: {})
     org_count: int = 0
     employee_count: int = 0
 

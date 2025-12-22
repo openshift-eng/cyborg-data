@@ -178,65 +178,65 @@ class TestGroupExtendedFields:
                         type="team",
                         group=Group(
                             type=GroupType(name="team"),
-                            resolved_people_uid_list=["user1"],
+                            resolved_people_uid_list=("user1",),
                             slack=SlackConfig(
-                                channels=[
+                                channels=(
                                     ChannelInfo(
                                         channel="team-backend",
                                         channel_id="C123",
                                         description="Main channel",
-                                        types=["team-internal"],
+                                        types=("team-internal",),
                                     ),
-                                ],
-                                aliases=[
+                                ),
+                                aliases=(
                                     AliasInfo(
                                         alias="@backend-team",
                                         description="Team alias",
                                     ),
-                                ],
-                            ),
-                            roles=[
-                                RoleInfo(
-                                    people=["manager1"],
-                                    types=["manager"],
                                 ),
-                            ],
-                            jiras=[
+                            ),
+                            roles=(
+                                RoleInfo(
+                                    people=("manager1",),
+                                    types=("manager",),
+                                ),
+                            ),
+                            jiras=(
                                 JiraInfo(
                                     project="BACKEND",
                                     component="API",
                                     description="Backend API",
-                                    types=["main"],
+                                    types=("main",),
                                 ),
-                            ],
-                            repos=[
+                            ),
+                            repos=(
                                 RepoInfo(
                                     repo="https://github.com/org/backend",
                                     description="Main backend repo",
-                                    types=["source"],
+                                    types=("source",),
                                 ),
-                            ],
-                            keywords=["backend", "api"],
-                            emails=[
+                            ),
+                            keywords=("backend", "api"),
+                            emails=(
                                 EmailInfo(
                                     address="backend@example.com",
                                     name="Team Email",
                                     description="Backend team email",
                                 ),
-                            ],
-                            resources=[
+                            ),
+                            resources=(
                                 ResourceInfo(
                                     name="Wiki",
                                     url="https://wiki.example.com",
                                     description="Team wiki",
                                 ),
-                            ],
-                            component_roles=[
+                            ),
+                            component_roles=(
                                 ComponentRoleInfo(
                                     component="/component/path",
-                                    types=["owner"],
+                                    types=("owner",),
                                 ),
-                            ],
+                            ),
                         ),
                     ),
                 },

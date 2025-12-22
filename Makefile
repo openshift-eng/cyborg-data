@@ -6,7 +6,7 @@
 #   make python-test  - Run Python unit tests (Prow job: unit-python)
 #   make test         - Run all tests
 
-.PHONY: all test lint clean help go-test python-test go-lint python-lint go-build python-build
+.PHONY: all test lint clean help go-test python-test go-lint python-lint go-build python-build python-typing
 
 # Default target
 all: test
@@ -28,6 +28,7 @@ help:
 	@echo "Python-specific targets:"
 	@echo "  make python-test   - Run Python tests"
 	@echo "  make python-lint   - Run Python linter"
+	@echo "  make python-typing - Run Python type checker (pyright strict)"
 	@echo "  make python-build  - Build Python package"
 
 # Combined targets
@@ -76,6 +77,10 @@ python-test:
 python-lint:
 	@echo "Running Python linter..."
 	cd python && ruff check .
+
+python-typing:
+	@echo "Running Python type checker..."
+	cd python && pyright
 
 python-format:
 	@echo "Formatting Python code..."

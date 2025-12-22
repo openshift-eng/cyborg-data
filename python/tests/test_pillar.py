@@ -30,7 +30,7 @@ class TestGetPillarByName:
                         type="pillar",
                         group=Group(
                             type=GroupType(name="pillar"),
-                            resolved_people_uid_list=["user1", "user2"],
+                            resolved_people_uid_list=("user1", "user2"),
                         ),
                     ),
                 },
@@ -58,7 +58,7 @@ class TestGetPillarByName:
                         type="pillar",
                         group=Group(
                             type=GroupType(name="pillar"),
-                            resolved_people_uid_list=["user1", "user2"],
+                            resolved_people_uid_list=("user1", "user2"),
                         ),
                     ),
                 },

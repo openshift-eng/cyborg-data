@@ -2,11 +2,13 @@
 
 import pytest
 
+from orgdatacore import Service
+
 
 class TestHierarchyPathAPI:
     """Tests for get_hierarchy_path API."""
 
-    def test_team_hierarchy_path_not_empty(self, service):
+    def test_team_hierarchy_path_not_empty(self, service: Service) -> None:
         """Teams should have a hierarchy path."""
         teams = service.get_all_team_names()
         assert len(teams) > 0, "Expected at least one team"
@@ -18,7 +20,7 @@ class TestHierarchyPathAPI:
         assert path[0].name == team_name, "First entry should be the team itself"
         assert path[0].type == "team"
 
-    def test_hierarchy_path_ends_at_root(self, service):
+    def test_hierarchy_path_ends_at_root(self, service: Service) -> None:
         """Hierarchy path should end at a root org."""
         teams = service.get_all_team_names()
         path = service.get_hierarchy_path(teams[0], "team")
@@ -31,7 +33,7 @@ class TestHierarchyPathAPI:
         assert root_org is not None
         assert root_org.parent is None, "Root org should have no parent"
 
-    def test_hierarchy_path_types_valid(self, service):
+    def test_hierarchy_path_types_valid(self, service: Service) -> None:
         """All entries in path should have valid types."""
         valid_types = {"team", "team_group", "pillar", "org"}
 
@@ -40,14 +42,14 @@ class TestHierarchyPathAPI:
             for entry in path:
                 assert entry.type in valid_types, f"Invalid type: {entry.type}"
 
-    def test_hierarchy_path_no_duplicates(self, service):
+    def test_hierarchy_path_no_duplicates(self, service: Service) -> None:
         """Hierarchy path should not contain duplicates."""
         for team_name in service.get_all_team_names():
             path = service.get_hierarchy_path(team_name, "team")
             names = [e.name for e in path]
             assert len(names) == len(set(names)), f"Duplicate in path: {names}"
 
-    def test_pillar_hierarchy_path(self, service):
+    def test_pillar_hierarchy_path(self, service: Service) -> None:
         """Pillars should have a hierarchy path to root org."""
         pillars = service.get_all_pillar_names()
         if not pillars:
@@ -58,12 +60,12 @@ class TestHierarchyPathAPI:
         assert path[0].type == "pillar"
         assert path[-1].type == "org"
 
-    def test_nonexistent_entity_returns_empty(self, service):
+    def test_nonexistent_entity_returns_empty(self, service: Service) -> None:
         """Nonexistent entity should return empty path."""
         path = service.get_hierarchy_path("nonexistent-entity-xyz", "team")
         assert path == []
 
-    def test_invalid_type_returns_empty(self, service):
+    def test_invalid_type_returns_empty(self, service: Service) -> None:
         """Invalid entity type should return empty path."""
         teams = service.get_all_team_names()
         path = service.get_hierarchy_path(teams[0], "invalid_type")
@@ -73,7 +75,7 @@ class TestHierarchyPathAPI:
 class TestDescendantsTreeAPI:
     """Tests for get_descendants_tree API."""
 
-    def test_root_org_has_descendants(self, service):
+    def test_root_org_has_descendants(self, service: Service) -> None:
         """Root orgs should have descendants."""
         orgs = service.get_all_org_names()
         assert len(orgs) > 0
@@ -93,7 +95,7 @@ class TestDescendantsTreeAPI:
         assert tree.name == root_org
         assert tree.type == "org"
 
-    def test_leaf_team_has_no_children(self, service):
+    def test_leaf_team_has_no_children(self, service: Service) -> None:
         """Leaf teams should have no children in descendants tree."""
         teams = service.get_all_team_names()
 
@@ -106,14 +108,16 @@ class TestDescendantsTreeAPI:
 
         pytest.skip("No leaf teams found in test data")
 
-    def test_descendants_tree_structure(self, service):
+    def test_descendants_tree_structure(self, service: Service) -> None:
         """Descendants tree should have valid structure."""
+        from orgdatacore import HierarchyNode
+
         orgs = service.get_all_org_names()
         tree = service.get_descendants_tree(orgs[0])
         if not tree:
             pytest.skip(f"No tree for {orgs[0]}")
 
-        def validate_node(node, visited=None):
+        def validate_node(node: HierarchyNode, visited: set[str] | None = None) -> None:
             if visited is None:
                 visited = set()
 
@@ -129,7 +133,7 @@ class TestDescendantsTreeAPI:
 
         validate_node(tree)
 
-    def test_nonexistent_entity_returns_none(self, service):
+    def test_nonexistent_entity_returns_none(self, service: Service) -> None:
         """Nonexistent entity should return None."""
         tree = service.get_descendants_tree("nonexistent-entity-xyz")
         assert tree is None
@@ -138,7 +142,7 @@ class TestDescendantsTreeAPI:
 class TestHierarchyConsistency:
     """Tests for consistency between hierarchy APIs."""
 
-    def test_parent_child_consistency(self, service):
+    def test_parent_child_consistency(self, service: Service) -> None:
         """Parent in hierarchy path should list entity as child in descendants."""
         for team_name in service.get_all_team_names():
             path = service.get_hierarchy_path(team_name, "team")

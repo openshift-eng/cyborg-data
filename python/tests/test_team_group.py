@@ -30,7 +30,7 @@ class TestGetTeamGroupByName:
                         type="team_group",
                         group=Group(
                             type=GroupType(name="team_group"),
-                            resolved_people_uid_list=["user1", "user2"],
+                            resolved_people_uid_list=("user1", "user2"),
                         ),
                     ),
                 },
@@ -58,7 +58,7 @@ class TestGetTeamGroupByName:
                         type="team_group",
                         group=Group(
                             type=GroupType(name="team_group"),
-                            resolved_people_uid_list=["user1", "user2"],
+                            resolved_people_uid_list=("user1", "user2"),
                         ),
                     ),
                 },

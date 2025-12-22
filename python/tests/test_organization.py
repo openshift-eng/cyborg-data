@@ -107,11 +107,11 @@ class TestGetUserOrganizations:
         result = service.get_user_organizations("U99999999")
         assert len(result) == 0
 
-    def test_no_duplicate_organizations(self, service: Service):
+    def test_no_duplicate_organizations(self, service: Service) -> None:
         """Test that no duplicate organizations are returned."""
         result = service.get_user_organizations("U98765432")  # bwilson
 
-        seen = set()
+        seen: set[str] = set()
         for org in result:
             key = f"{org.name}:{org.type}"
             assert key not in seen, f"Duplicate organization: {org}"

@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 """Async service and data source implementations for orgdatacore.
 
 This module provides async-compatible versions of Service and GCS data source
@@ -25,7 +26,7 @@ from typing import Any, BinaryIO
 
 from ._exceptions import ConfigurationError, DataLoadError, GCSError
 from ._log import get_logger
-from ._service import _parse_data
+from ._service import parse_data
 from ._types import (
     Component,
     Data,
@@ -121,7 +122,7 @@ class AsyncService:
             reader.close()
 
         try:
-            org_data = _parse_data(raw_data)
+            org_data = parse_data(raw_data)
         except Exception as e:
             logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
             raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
@@ -243,7 +244,8 @@ class AsyncService:
         """Check if the service is ready to serve requests."""
         if self._data is None:
             return False
-        return self._data.lookups is not None and self._data.indexes is not None
+        # Data has lookups and indexes (always present when data is loaded)
+        return bool(self._data.lookups.employees)
 
     # Async lookup methods
 
@@ -630,7 +632,7 @@ class AsyncService:
             team = self._data.lookups.teams.get(team_name)
             if not team:
                 return ()
-            result = []
+            result: list[Employee] = []
             for uid in team.group.resolved_people_uid_list:
                 emp = self._data.lookups.employees.get(uid)
                 if emp:
@@ -645,7 +647,7 @@ class AsyncService:
             org = self._data.lookups.orgs.get(org_name)
             if not org:
                 return ()
-            result = []
+            result: list[Employee] = []
             for uid in org.group.resolved_people_uid_list:
                 emp = self._data.lookups.employees.get(uid)
                 if emp:
@@ -781,7 +783,6 @@ async def _async_retry_with_backoff(
 
 try:
     from google.cloud import storage  # type: ignore[import-untyped]
-
 
     class AsyncGCSDataSource:
         """Async GCS data source using google-cloud-storage.

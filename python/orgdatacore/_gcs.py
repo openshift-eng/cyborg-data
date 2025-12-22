@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 """
 Data source implementations for orgdatacore.
 
@@ -38,11 +39,13 @@ import threading
 import time
 from collections.abc import Callable
 from io import BytesIO
-from typing import BinaryIO
+from typing import BinaryIO, TypeVar
 
 from ._exceptions import ConfigurationError, GCSError
 from ._log import get_logger
 from ._types import GCSConfig
+
+_T = TypeVar("_T")
 
 # Default retry configuration
 DEFAULT_MAX_RETRIES = 3
@@ -110,12 +113,12 @@ class GCSDataSource:
 
 
 def _retry_with_backoff(
-    operation: Callable[[], BinaryIO],
+    operation: Callable[[], _T],
     max_retries: int = DEFAULT_MAX_RETRIES,
     initial_delay: float = DEFAULT_RETRY_DELAY,
     backoff: float = DEFAULT_RETRY_BACKOFF,
     operation_name: str = "operation",
-) -> BinaryIO:
+) -> _T:
     """Execute an operation with exponential backoff retry.
 
     Args:
