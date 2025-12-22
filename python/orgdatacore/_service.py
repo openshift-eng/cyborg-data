@@ -3,7 +3,7 @@
 import json
 import threading
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from ._exceptions import DataLoadError
 from ._log import get_logger
@@ -275,16 +275,18 @@ def _parse_jira_index(jira_raw: dict[str, Any]) -> JiraIndex:
         if not isinstance(components, dict):
             continue
         project_component_owners[project] = {}
-        for component, owners in components.items():
+        components_dict = cast(dict[str, Any], components)
+        for component, owners in components_dict.items():
             if isinstance(owners, list):
+                owners_list = cast(list[dict[str, Any]], owners)
                 project_component_owners[project][component] = tuple(
-                    _parse_jira_owner_info(o) for o in owners
+                    _parse_jira_owner_info(o) for o in owners_list
                 )
 
     return JiraIndex(project_component_owners=project_component_owners)
 
 
-def _parse_data(raw_data: dict[str, Any]) -> Data:
+def parse_data(raw_data: dict[str, Any]) -> Data:
     """Parse the complete Data structure from JSON."""
     metadata_raw = raw_data.get("metadata", {})
     metadata = Metadata(
@@ -415,7 +417,7 @@ class Service:
             reader.close()
 
         try:
-            org_data = _parse_data(raw_data)
+            org_data = parse_data(raw_data)
         except Exception as e:
             logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
             raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
@@ -496,7 +498,8 @@ class Service:
         with self._lock:
             if self._data is None:
                 return False
-            return self._data.lookups is not None and self._data.indexes is not None
+            # Data has lookups and indexes (always present when data is loaded)
+            return bool(self._data.lookups.employees)
 
     def get_version(self) -> DataVersion:
         """Get the current data version."""
@@ -614,7 +617,7 @@ class Service:
                 return []
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
-            teams = []
+            teams: list[str] = []
             for membership in memberships:
                 if membership.type == MembershipType.TEAM:
                     teams.append(membership.name)

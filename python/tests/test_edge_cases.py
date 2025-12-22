@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -93,10 +94,10 @@ class TestServiceErrorHandling:
 class TestConcurrentAccess:
     """Tests for thread safety of the service."""
 
-    def test_concurrent_reads(self, service: Service):
+    def test_concurrent_reads(self, service: Service) -> None:
         """Test that concurrent reads are safe."""
-        results = []
-        errors = []
+        results: list[int] = []
+        errors: list[Exception] = []
 
         def reader(thread_id: int) -> None:
             try:
@@ -121,7 +122,7 @@ class TestConcurrentAccess:
         assert len(errors) == 0, f"Errors occurred: {errors}"
         assert len(results) == 10
 
-    def test_concurrent_read_write(self, test_data_path: Path):
+    def test_concurrent_read_write(self, test_data_path: Path) -> None:
         """Test that concurrent reads and writes are safe."""
         service = Service()
         file_source = FileDataSource(str(test_data_path))
@@ -129,8 +130,8 @@ class TestConcurrentAccess:
         # Initial load
         service.load_from_data_source(file_source)
 
-        results = []
-        errors = []
+        results: list[str] = []
+        errors: list[Exception] = []
 
         def reader() -> None:
             try:
@@ -277,9 +278,9 @@ class TestWatcherState:
 class TestDataValidation:
     """Tests for data validation at load time."""
 
-    def test_missing_employees_raises_error(self):
+    def test_missing_employees_raises_error(self) -> None:
         """Test that missing employees in data raises validation error."""
-        invalid_data = {
+        invalid_data: dict[str, Any] = {
             "metadata": {"generated_at": "2024-01-01"},
             "lookups": {
                 "employees": {},  # Empty employees - should fail validation
@@ -312,9 +313,9 @@ class TestDataValidation:
         finally:
             Path(temp_path).unlink()
 
-    def test_missing_membership_index_raises_error(self):
+    def test_missing_membership_index_raises_error(self) -> None:
         """Test that missing membership_index raises validation error."""
-        invalid_data = {
+        invalid_data: dict[str, Any] = {
             "metadata": {"generated_at": "2024-01-01"},
             "lookups": {
                 "employees": {"uid1": {"uid": "uid1", "full_name": "Test"}},

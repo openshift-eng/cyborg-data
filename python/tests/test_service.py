@@ -25,7 +25,7 @@ class TestNewService:
         assert version.employee_count == 0
         assert version.org_count == 0
 
-    def test_constructor_injection(self, test_data_path):
+    def test_constructor_injection(self, test_data_path: Path) -> None:
         """Service should support constructor injection of data source (keyword-only)."""
         file_source = FileDataSource(str(test_data_path))
 
