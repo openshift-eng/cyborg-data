@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 """Async service and data source implementations for orgdatacore.
 
 This module provides async-compatible versions of Service and GCS data source
@@ -405,16 +404,16 @@ class AsyncService:
         """Get entity from lookups by name and type."""
         if self._data is None:
             return None
-        type_to_lookup = {
-            "team": self._data.lookups.teams,
-            "org": self._data.lookups.orgs,
-            "pillar": self._data.lookups.pillars,
-            "team_group": self._data.lookups.team_groups,
-        }
-        lookup = type_to_lookup.get(entity_type.lower())
-        if not lookup:
-            return None
-        return lookup.get(entity_name)
+        entity_type_lower = entity_type.lower()
+        if entity_type_lower == "team":
+            return self._data.lookups.teams.get(entity_name)
+        elif entity_type_lower == "org":
+            return self._data.lookups.orgs.get(entity_name)
+        elif entity_type_lower == "pillar":
+            return self._data.lookups.pillars.get(entity_name)
+        elif entity_type_lower == "team_group":
+            return self._data.lookups.team_groups.get(entity_name)
+        return None
 
     def _get_hierarchy_path(self, entity_name: str, entity_type: str) -> list[HierarchyPathEntry]:
         """Compute hierarchy path by walking parent references."""
@@ -427,7 +426,7 @@ class AsyncService:
 
         path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
         visited = {entity_name}
-        current = entity
+        current: Team | Org | Pillar | TeamGroup | None = entity
 
         while current and current.parent:
             parent = current.parent
@@ -473,15 +472,14 @@ class AsyncService:
 
             # Look up entity type
             entity_type = ""
-            for type_name, lookup in [
-                ("team", self._data.lookups.teams),
-                ("org", self._data.lookups.orgs),
-                ("pillar", self._data.lookups.pillars),
-                ("team_group", self._data.lookups.team_groups),
-            ]:
-                if entity_name in lookup:
-                    entity_type = type_name
-                    break
+            if entity_name in self._data.lookups.teams:
+                entity_type = "team"
+            elif entity_name in self._data.lookups.orgs:
+                entity_type = "org"
+            elif entity_name in self._data.lookups.pillars:
+                entity_type = "pillar"
+            elif entity_name in self._data.lookups.team_groups:
+                entity_type = "team_group"
 
             if not entity_type:
                 return None

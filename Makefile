@@ -11,6 +11,8 @@
 # Default target
 all: test
 
+PYTHON ?= python
+
 help:
 	@echo "Multi-Language Build System for cyborg-data"
 	@echo ""
@@ -28,7 +30,7 @@ help:
 	@echo "Python-specific targets:"
 	@echo "  make python-test   - Run Python tests"
 	@echo "  make python-lint   - Run Python linter"
-	@echo "  make python-typing - Run Python type checker (pyright strict)"
+	@echo "  make python-typing - Run Python type checker (mypy strict)"
 	@echo "  make python-build  - Build Python package"
 
 # Combined targets
@@ -79,8 +81,8 @@ python-lint:
 	cd python && ruff check .
 
 python-typing:
-	@echo "Running Python type checker..."
-	cd python && pyright
+	@echo "Running Python type checker (mypy strict)..."
+	cd python && $(PYTHON) -m mypy orgdatacore
 
 python-format:
 	@echo "Formatting Python code..."
