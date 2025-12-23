@@ -780,29 +780,29 @@ class Service:
         """Get entity from lookups by name and type."""
         if self._data is None:
             return None
-        type_to_lookup = {
-            "team": self._data.lookups.teams,
-            "org": self._data.lookups.orgs,
-            "pillar": self._data.lookups.pillars,
-            "team_group": self._data.lookups.team_groups,
-        }
-        lookup = type_to_lookup.get(entity_type.lower())
-        if not lookup:
-            return None
-        return lookup.get(entity_name)
+        entity_type_lower = entity_type.lower()
+        if entity_type_lower == "team":
+            return self._data.lookups.teams.get(entity_name)
+        elif entity_type_lower == "org":
+            return self._data.lookups.orgs.get(entity_name)
+        elif entity_type_lower == "pillar":
+            return self._data.lookups.pillars.get(entity_name)
+        elif entity_type_lower == "team_group":
+            return self._data.lookups.team_groups.get(entity_name)
+        return None
 
     def _get_entity_type(self, entity_name: str) -> str:
         """Look up entity type by scanning lookups."""
         if self._data is None:
             return ""
-        for type_name, lookup in [
-            ("team", self._data.lookups.teams),
-            ("org", self._data.lookups.orgs),
-            ("pillar", self._data.lookups.pillars),
-            ("team_group", self._data.lookups.team_groups),
-        ]:
-            if entity_name in lookup:
-                return type_name
+        if entity_name in self._data.lookups.teams:
+            return "team"
+        if entity_name in self._data.lookups.orgs:
+            return "org"
+        if entity_name in self._data.lookups.pillars:
+            return "pillar"
+        if entity_name in self._data.lookups.team_groups:
+            return "team_group"
         return ""
 
     def get_hierarchy_path(
@@ -829,7 +829,7 @@ class Service:
 
             path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
             visited = {entity_name}
-            current = entity
+            current: Team | Org | Pillar | TeamGroup | None = entity
 
             while current and current.parent:
                 parent = current.parent
