@@ -17,9 +17,10 @@ Example:
 """
 
 import asyncio
+import inspect
 import json
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any, BinaryIO
 
@@ -101,7 +102,7 @@ class AsyncService:
 
         try:
             # Support both sync and async data sources
-            if asyncio.iscoroutinefunction(source.load):
+            if inspect.iscoroutinefunction(source.load):
                 reader = await source.load()
             else:
                 reader = await asyncio.to_thread(source.load)
@@ -181,7 +182,7 @@ class AsyncService:
 
                 if hasattr(source, "watch"):
                     logger.info("Starting async data source watcher", extra={"source": str(source)})
-                    if asyncio.iscoroutinefunction(source.watch):
+                    if inspect.iscoroutinefunction(source.watch):
                         err = await source.watch(callback)
                     else:
                         # Sync watch - run in thread with async-safe callback
@@ -245,6 +246,31 @@ class AsyncService:
             return False
         # Data has lookups and indexes (always present when data is loaded)
         return bool(self._data.lookups.employees)
+
+    def get_data_age(self) -> timedelta:
+        """Get the duration since data was last loaded.
+
+        Returns:
+            timedelta since last load, or timedelta(0) if no data loaded.
+        """
+        if self._version.load_time == datetime.min:
+            return timedelta(0)
+        return datetime.now() - self._version.load_time
+
+    def is_data_stale(self, max_age: timedelta) -> bool:
+        """Check if data is older than max_age, or if no data is loaded.
+
+        Use this in health checks to detect stale data from failed reloads.
+
+        Args:
+            max_age: Maximum acceptable age for the data.
+
+        Returns:
+            True if data is stale or not loaded, False otherwise.
+        """
+        if self._data is None or self._version.load_time == datetime.min:
+            return True
+        return (datetime.now() - self._version.load_time) > max_age
 
     # Async lookup methods
 
@@ -320,12 +346,12 @@ class AsyncService:
                 return None
             return self._data.lookups.components.get(name)
 
-    async def get_user_memberships(self, uid: str) -> tuple[MembershipInfo, ...]:
+    async def get_user_memberships(self, uid: str) -> list[MembershipInfo]:
         """Get all memberships for a user."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return self._data.indexes.membership.membership_index.get(uid, ())
+                return []
+            return list(self._data.indexes.membership.membership_index.get(uid, ()))
 
     async def get_user_teams(self, uid: str) -> list[str]:
         """Get team names for a user."""
@@ -509,11 +535,11 @@ class AsyncService:
 
             return build_node(entity_name, entity_type, set())
 
-    async def get_user_organizations(self, uid: str) -> tuple[OrgInfo, ...]:
+    async def get_user_organizations(self, uid: str) -> list[OrgInfo]:
         """Get organization info for a user."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
@@ -543,49 +569,49 @@ class AsyncService:
                             result.append(OrgInfo(name=entry.name, type=org_type))
                             seen.add(entry.name)
 
-            return tuple(result)
+            return result
 
-    async def get_all_employees(self) -> tuple[Employee, ...]:
+    async def get_all_employees(self) -> list[Employee]:
         """Get all employees."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.employees.values())
+                return []
+            return list(self._data.lookups.employees.values())
 
-    async def get_all_teams(self) -> tuple[Team, ...]:
+    async def get_all_teams(self) -> list[Team]:
         """Get all teams."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.teams.values())
+                return []
+            return list(self._data.lookups.teams.values())
 
-    async def get_all_orgs(self) -> tuple[Org, ...]:
+    async def get_all_orgs(self) -> list[Org]:
         """Get all organizations."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.orgs.values())
+                return []
+            return list(self._data.lookups.orgs.values())
 
-    async def get_all_pillars(self) -> tuple[Pillar, ...]:
+    async def get_all_pillars(self) -> list[Pillar]:
         """Get all pillars."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.pillars.values())
+                return []
+            return list(self._data.lookups.pillars.values())
 
-    async def get_all_team_groups(self) -> tuple[TeamGroup, ...]:
+    async def get_all_team_groups(self) -> list[TeamGroup]:
         """Get all team groups."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.team_groups.values())
+                return []
+            return list(self._data.lookups.team_groups.values())
 
-    async def get_all_components(self) -> tuple[Component, ...]:
+    async def get_all_components(self) -> list[Component]:
         """Get all components."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.components.values())
+                return []
+            return list(self._data.lookups.components.values())
 
     async def get_all_team_names(self) -> list[str]:
         """Get all team names."""
@@ -622,35 +648,33 @@ class AsyncService:
                 return []
             return list(self._data.lookups.employees.keys())
 
-    async def get_team_members(self, team_name: str) -> tuple[Employee, ...]:
+    async def get_team_members(self, team_name: str) -> list[Employee]:
         """Get all members of a team."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
             team = self._data.lookups.teams.get(team_name)
             if not team:
-                return ()
-            result: list[Employee] = []
-            for uid in team.group.resolved_people_uid_list:
-                emp = self._data.lookups.employees.get(uid)
-                if emp:
-                    result.append(emp)
-            return tuple(result)
+                return []
+            return [
+                emp
+                for uid in team.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
 
-    async def get_org_members(self, org_name: str) -> tuple[Employee, ...]:
+    async def get_org_members(self, org_name: str) -> list[Employee]:
         """Get all members of an organization."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
             org = self._data.lookups.orgs.get(org_name)
             if not org:
-                return ()
-            result: list[Employee] = []
-            for uid in org.group.resolved_people_uid_list:
-                emp = self._data.lookups.employees.get(uid)
-                if emp:
-                    result.append(emp)
-            return tuple(result)
+                return []
+            return [
+                emp
+                for uid in org.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
 
     def get_version(self) -> DataVersion:
         """Get the current data version (sync - no lock needed for read)."""

@@ -46,8 +46,11 @@ type ServiceInterface interface {
 	GetUserOrganizations(slackUserID string) []OrgInfo
 
 	GetVersion() DataVersion
+	GetDataAge() time.Duration
+	IsDataStale(maxAge time.Duration) bool
 	LoadFromDataSource(ctx context.Context, source DataSource) error
 	StartDataSourceWatcher(ctx context.Context, source DataSource) error
+	StopWatcher()
 
 	GetAllEmployeeUIDs() []string
 	GetAllTeamNames() []string

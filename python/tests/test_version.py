@@ -19,9 +19,9 @@ class TestVersion:
         assert isinstance(__version__, str)
 
     def test_version_format(self) -> None:
-        """__version__ should follow semver format."""
-        # Basic semver pattern (major.minor.patch with optional prerelease/build)
-        pattern = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$"
+        """__version__ should follow semver or PEP 440 format."""
+        # Supports semver (1.0.0-dev.1) and PEP 440 (1.0.0.dev0) formats
+        pattern = r"^\d+\.\d+\.\d+([-.]?[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$"
         assert re.match(pattern, __version__), f"Invalid version format: {__version__}"
 
     def test_version_info_is_tuple(self) -> None:

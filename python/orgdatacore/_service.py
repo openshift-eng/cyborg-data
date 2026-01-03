@@ -2,7 +2,7 @@
 
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from ._exceptions import DataLoadError
@@ -506,6 +506,33 @@ class Service:
         with self._lock:
             return self._version
 
+    def get_data_age(self) -> timedelta:
+        """Get the duration since data was last loaded.
+
+        Returns:
+            timedelta since last load, or timedelta(0) if no data loaded.
+        """
+        with self._lock:
+            if self._version.load_time == datetime.min:
+                return timedelta(0)
+            return datetime.now() - self._version.load_time
+
+    def is_data_stale(self, max_age: timedelta) -> bool:
+        """Check if data is older than max_age, or if no data is loaded.
+
+        Use this in health checks to detect stale data from failed reloads.
+
+        Args:
+            max_age: Maximum acceptable age for the data.
+
+        Returns:
+            True if data is stale or not loaded, False otherwise.
+        """
+        with self._lock:
+            if self._data is None or self._version.load_time == datetime.min:
+                return True
+            return (datetime.now() - self._version.load_time) > max_age
+
     def get_employee_by_uid(self, uid: str) -> Employee | None:
         """Get an employee by UID."""
         with self._lock:
@@ -613,22 +640,27 @@ class Service:
     def get_teams_for_uid(self, uid: str) -> list[str]:
         """Get all teams a UID is a member of."""
         with self._lock:
-            if self._data is None or not self._data.indexes.membership.membership_index:
-                return []
+            return self._get_teams_for_uid(uid)
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, ())
-            teams: list[str] = []
-            for membership in memberships:
-                if membership.type == MembershipType.TEAM:
-                    teams.append(membership.name)
-            return teams
+    def _get_teams_for_uid(self, uid: str) -> list[str]:
+        """Internal: Get all teams a UID is a member of. Caller must hold lock."""
+        if self._data is None or not self._data.indexes.membership.membership_index:
+            return []
+
+        memberships = self._data.indexes.membership.membership_index.get(uid, ())
+        teams: list[str] = []
+        for membership in memberships:
+            if membership.type == MembershipType.TEAM:
+                teams.append(membership.name)
+        return teams
 
     def get_teams_for_slack_id(self, slack_id: str) -> list[str]:
         """Get all teams a Slack user is a member of."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return []
-        return self.get_teams_for_uid(uid)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return []
+            return self._get_teams_for_uid(uid)
 
     def get_team_members(self, team_name: str) -> list[Employee]:
         """Get all members of a team."""
@@ -648,41 +680,52 @@ class Service:
 
     def is_employee_in_team(self, uid: str, team_name: str) -> bool:
         """Check if an employee is in a specific team."""
-        teams = self.get_teams_for_uid(uid)
+        with self._lock:
+            return self._is_employee_in_team(uid, team_name)
+
+    def _is_employee_in_team(self, uid: str, team_name: str) -> bool:
+        """Internal: Check if an employee is in a specific team. Caller must hold lock."""
+        teams = self._get_teams_for_uid(uid)
         return team_name in teams
 
     def is_slack_user_in_team(self, slack_id: str, team_name: str) -> bool:
         """Check if a Slack user is in a specific team."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return False
-        return self.is_employee_in_team(uid, team_name)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return False
+            return self._is_employee_in_team(uid, team_name)
 
     def is_employee_in_org(self, uid: str, org_name: str) -> bool:
         """Check if an employee is in a specific organization."""
         with self._lock:
-            if self._data is None or not self._data.indexes.membership.membership_index:
-                return False
+            return self._is_employee_in_org(uid, org_name)
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, ())
-
-            for membership in memberships:
-                if membership.type == MembershipType.ORG and membership.name == org_name:
-                    return True
-                elif membership.type == MembershipType.TEAM:
-                    hierarchy_path = self.get_hierarchy_path(membership.name, "team")
-                    for entry in hierarchy_path:
-                        if entry.type == "org" and entry.name == org_name:
-                            return True
-
+    def _is_employee_in_org(self, uid: str, org_name: str) -> bool:
+        """Internal: Check if an employee is in a specific organization. Caller must hold lock."""
+        if self._data is None or not self._data.indexes.membership.membership_index:
             return False
+
+        memberships = self._data.indexes.membership.membership_index.get(uid, ())
+
+        for membership in memberships:
+            if membership.type == MembershipType.ORG and membership.name == org_name:
+                return True
+            elif membership.type == MembershipType.TEAM:
+                hierarchy_path = self._get_hierarchy_path(membership.name, "team")
+                for entry in hierarchy_path:
+                    if entry.type == "org" and entry.name == org_name:
+                        return True
+
+        return False
 
     def is_slack_user_in_org(self, slack_id: str, org_name: str) -> bool:
         """Check if a Slack user is in a specific organization."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return False
-        return self.is_employee_in_org(uid, org_name)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return False
+            return self._is_employee_in_org(uid, org_name)
 
     def get_user_organizations(self, slack_user_id: str) -> list[OrgInfo]:
         """Get the complete organizational hierarchy a Slack user belongs to."""
@@ -709,7 +752,7 @@ class Service:
                         orgs.append(OrgInfo(name=membership.name, type=OrgInfoType.TEAM))
                         seen.add(membership.name)
 
-                    hierarchy_path = self.get_hierarchy_path(membership.name, "team")
+                    hierarchy_path = self._get_hierarchy_path(membership.name, "team")
                     self._add_hierarchy_path_items(orgs, seen, tuple(hierarchy_path))
 
             return orgs
@@ -820,26 +863,32 @@ class Service:
             Ordered list from entity to root. Empty list if not found.
         """
         with self._lock:
-            if self._data is None:
-                return []
+            return self._get_hierarchy_path(entity_name, entity_type)
 
-            entity = self._get_entity_by_type(entity_name, entity_type)
-            if entity is None:
-                return []
+    def _get_hierarchy_path(
+            self, entity_name: str, entity_type: str = "team"
+    ) -> list[HierarchyPathEntry]:
+        """Internal: Get hierarchy path. Caller must hold lock."""
+        if self._data is None:
+            return []
 
-            path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
-            visited = {entity_name}
-            current: Team | Org | Pillar | TeamGroup | None = entity
+        entity = self._get_entity_by_type(entity_name, entity_type)
+        if entity is None:
+            return []
 
-            while current and current.parent:
-                parent = current.parent
-                if parent.name in visited:
-                    break
-                visited.add(parent.name)
-                path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
-                current = self._get_entity_by_type(parent.name, parent.type)
+        path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
+        visited = {entity_name}
+        current: Team | Org | Pillar | TeamGroup | None = entity
 
-            return path
+        while current and current.parent:
+            parent = current.parent
+            if parent.name in visited:
+                break
+            visited.add(parent.name)
+            path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
+            current = self._get_entity_by_type(parent.name, parent.type)
+
+        return path
 
     def get_descendants_tree(self, entity_name: str) -> HierarchyNode | None:
         """Get all descendants of an entity as a nested tree.
