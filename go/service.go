@@ -16,6 +16,7 @@ type Service struct {
 	version        DataVersion
 	logger         *slog.Logger
 	watcherRunning bool
+	watcherCancel  context.CancelFunc
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -67,17 +68,23 @@ func (s *Service) StartDataSourceWatcher(ctx context.Context, source DataSource)
 		return ErrWatcherAlreadyRunning
 	}
 	s.watcherRunning = true
+
+	// Create a cancellable context so StopWatcher can terminate the watcher
+	watchCtx, cancel := context.WithCancel(ctx)
+	s.watcherCancel = cancel
 	s.mu.Unlock()
 
-	if err := s.LoadFromDataSource(ctx, source); err != nil {
+	if err := s.LoadFromDataSource(watchCtx, source); err != nil {
 		s.mu.Lock()
 		s.watcherRunning = false
+		s.watcherCancel = nil
 		s.mu.Unlock()
+		cancel() // Clean up the context
 		return err
 	}
 
-	err := source.Watch(ctx, func() error {
-		if err := s.LoadFromDataSource(ctx, source); err != nil {
+	err := source.Watch(watchCtx, func() error {
+		if err := s.LoadFromDataSource(watchCtx, source); err != nil {
 			s.logger.Error("failed to reload data", "source", source.String(), "error", err)
 			return err
 		}
@@ -87,24 +94,55 @@ func (s *Service) StartDataSourceWatcher(ctx context.Context, source DataSource)
 	// Clear watcher state when Watch exits (context cancelled, error, etc.)
 	s.mu.Lock()
 	s.watcherRunning = false
+	s.watcherCancel = nil
 	s.mu.Unlock()
 
 	return err
 }
 
-// StopWatcher marks the watcher as stopped. Note that this only updates the
-// Service's internal state - actual watcher termination depends on the
-// DataSource implementation respecting context cancellation.
+// StopWatcher stops the running watcher by cancelling its context.
+// This signals the DataSource.Watch method to exit. The method is safe to call
+// even if no watcher is running.
 func (s *Service) StopWatcher() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	cancel := s.watcherCancel
+	s.watcherCancel = nil
 	s.watcherRunning = false
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (s *Service) GetVersion() DataVersion {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.version
+}
+
+// GetDataAge returns the duration since data was last loaded.
+// Returns 0 if no data has been loaded.
+func (s *Service) GetDataAge() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.version.LoadTime.IsZero() {
+		return 0
+	}
+	return time.Since(s.version.LoadTime)
+}
+
+// IsDataStale returns true if data is older than maxAge, or if no data is loaded.
+// Use this in health checks to detect stale data from failed reloads.
+func (s *Service) IsDataStale(maxAge time.Duration) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.version.LoadTime.IsZero() {
+		return true
+	}
+	return time.Since(s.version.LoadTime) > maxAge
 }
 
 func (s *Service) GetEmployeeByUID(uid string) *Employee {
@@ -244,6 +282,11 @@ func (s *Service) GetTeamsForUID(uid string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.getTeamsForUID(uid)
+}
+
+// getTeamsForUID is the internal version that assumes the lock is held.
+func (s *Service) getTeamsForUID(uid string) []string {
 	if s.data == nil || s.data.Indexes.Membership.MembershipIndex == nil {
 		return []string{}
 	}
@@ -258,11 +301,14 @@ func (s *Service) GetTeamsForUID(uid string) []string {
 }
 
 func (s *Service) GetTeamsForSlackID(slackID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	uid := s.getUIDFromSlackID(slackID)
 	if uid == "" {
 		return []string{}
 	}
-	return s.GetTeamsForUID(uid)
+	return s.getTeamsForUID(uid)
 }
 
 func (s *Service) GetTeamMembers(teamName string) []Employee {
@@ -288,7 +334,15 @@ func (s *Service) GetTeamMembers(teamName string) []Employee {
 }
 
 func (s *Service) IsEmployeeInTeam(uid string, teamName string) bool {
-	for _, team := range s.GetTeamsForUID(uid) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.isEmployeeInTeam(uid, teamName)
+}
+
+// isEmployeeInTeam is the internal version that assumes the lock is held.
+func (s *Service) isEmployeeInTeam(uid string, teamName string) bool {
+	for _, team := range s.getTeamsForUID(uid) {
 		if team == teamName {
 			return true
 		}
@@ -297,17 +351,25 @@ func (s *Service) IsEmployeeInTeam(uid string, teamName string) bool {
 }
 
 func (s *Service) IsSlackUserInTeam(slackID string, teamName string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	uid := s.getUIDFromSlackID(slackID)
 	if uid == "" {
 		return false
 	}
-	return s.IsEmployeeInTeam(uid, teamName)
+	return s.isEmployeeInTeam(uid, teamName)
 }
 
 func (s *Service) IsEmployeeInOrg(uid string, orgName string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.isEmployeeInOrg(uid, orgName)
+}
+
+// isEmployeeInOrg is the internal version that assumes the lock is held.
+func (s *Service) isEmployeeInOrg(uid string, orgName string) bool {
 	if s.data == nil || s.data.Indexes.Membership.MembershipIndex == nil {
 		return false
 	}
@@ -329,11 +391,14 @@ func (s *Service) IsEmployeeInOrg(uid string, orgName string) bool {
 }
 
 func (s *Service) IsSlackUserInOrg(slackID string, orgName string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	uid := s.getUIDFromSlackID(slackID)
 	if uid == "" {
 		return false
 	}
-	return s.IsEmployeeInOrg(uid, orgName)
+	return s.isEmployeeInOrg(uid, orgName)
 }
 
 func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {

@@ -1,4 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 """Async service and data source implementations for orgdatacore.
 
 This module provides async-compatible versions of Service and GCS data source
@@ -18,9 +17,10 @@ Example:
 """
 
 import asyncio
+import inspect
 import json
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any, BinaryIO
 
@@ -102,12 +102,15 @@ class AsyncService:
 
         try:
             # Support both sync and async data sources
-            if asyncio.iscoroutinefunction(source.load):
+            if inspect.iscoroutinefunction(source.load):
                 reader = await source.load()
             else:
                 reader = await asyncio.to_thread(source.load)
         except Exception as e:
-            logger.error("Failed to load from async data source", extra={"source": str(source), "error": str(e)})
+            logger.error(
+                "Failed to load from async data source",
+                extra={"source": str(source), "error": str(e)},
+            )
             raise DataLoadError(f"failed to load from data source {source}: {e}") from e
 
         try:
@@ -116,16 +119,25 @@ class AsyncService:
                 content = content.decode("utf-8")
             raw_data = json.loads(content)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON", extra={"source": str(source), "error": str(e)})
-            raise DataLoadError(f"failed to parse JSON from source {source}: {e}") from e
+            logger.error(
+                "Failed to parse JSON", extra={"source": str(source), "error": str(e)}
+            )
+            raise DataLoadError(
+                f"failed to parse JSON from source {source}: {e}"
+            ) from e
         finally:
             reader.close()
 
         try:
             org_data = parse_data(raw_data)
         except Exception as e:
-            logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
-            raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
+            logger.error(
+                "Failed to parse data structure",
+                extra={"source": str(source), "error": str(e)},
+            )
+            raise DataLoadError(
+                f"failed to parse data structure from source {source}: {e}"
+            ) from e
 
         async with self._lock:
             self._data = org_data
@@ -171,18 +183,28 @@ class AsyncService:
         async def _run_watcher() -> None:
             """Background watcher coroutine."""
             try:
+
                 async def callback() -> Exception | None:
                     try:
-                        logger.info("Reloading data from async source", extra={"source": str(source)})
+                        logger.info(
+                            "Reloading data from async source",
+                            extra={"source": str(source)},
+                        )
                         await self.load_from_data_source(source)
                         return None
                     except Exception as e:
-                        logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
+                        logger.error(
+                            "Failed to reload data",
+                            extra={"source": str(source), "error": str(e)},
+                        )
                         return e
 
                 if hasattr(source, "watch"):
-                    logger.info("Starting async data source watcher", extra={"source": str(source)})
-                    if asyncio.iscoroutinefunction(source.watch):
+                    logger.info(
+                        "Starting async data source watcher",
+                        extra={"source": str(source)},
+                    )
+                    if inspect.iscoroutinefunction(source.watch):
                         err = await source.watch(callback)
                     else:
                         # Sync watch - run in thread with async-safe callback
@@ -197,7 +219,10 @@ class AsyncService:
 
                         err = await asyncio.to_thread(source.watch, sync_callback)
                     if err:
-                        logger.error("Watcher error", extra={"source": str(source), "error": str(err)})
+                        logger.error(
+                            "Watcher error",
+                            extra={"source": str(source), "error": str(err)},
+                        )
             except asyncio.CancelledError:
                 logger.info("Watcher cancelled", extra={"source": str(source)})
                 raise
@@ -246,6 +271,31 @@ class AsyncService:
             return False
         # Data has lookups and indexes (always present when data is loaded)
         return bool(self._data.lookups.employees)
+
+    def get_data_age(self) -> timedelta:
+        """Get the duration since data was last loaded.
+
+        Returns:
+            timedelta since last load, or timedelta(0) if no data loaded.
+        """
+        if self._version.load_time == datetime.min:
+            return timedelta(0)
+        return datetime.now() - self._version.load_time
+
+    def is_data_stale(self, max_age: timedelta) -> bool:
+        """Check if data is older than max_age, or if no data is loaded.
+
+        Use this in health checks to detect stale data from failed reloads.
+
+        Args:
+            max_age: Maximum acceptable age for the data.
+
+        Returns:
+            True if data is stale or not loaded, False otherwise.
+        """
+        if self._data is None or self._version.load_time == datetime.min:
+            return True
+        return (datetime.now() - self._version.load_time) > max_age
 
     # Async lookup methods
 
@@ -321,12 +371,12 @@ class AsyncService:
                 return None
             return self._data.lookups.components.get(name)
 
-    async def get_user_memberships(self, uid: str) -> tuple[MembershipInfo, ...]:
+    async def get_user_memberships(self, uid: str) -> list[MembershipInfo]:
         """Get all memberships for a user."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return self._data.indexes.membership.membership_index.get(uid, ())
+                return []
+            return list(self._data.indexes.membership.membership_index.get(uid, ()))
 
     async def get_user_teams(self, uid: str) -> list[str]:
         """Get team names for a user."""
@@ -349,7 +399,9 @@ class AsyncService:
         async with self._lock:
             if self._data is None:
                 return ""
-            return self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id, "")
+            return self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(
+                slack_id, ""
+            )
 
     async def get_manager_for_employee(self, uid: str) -> Employee | None:
         """Get the manager for a given employee UID."""
@@ -382,7 +434,10 @@ class AsyncService:
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
 
             for membership in memberships:
-                if membership.type == MembershipType.ORG and membership.name == org_name:
+                if (
+                    membership.type == MembershipType.ORG
+                    and membership.name == org_name
+                ):
                     return True
                 elif membership.type == MembershipType.TEAM:
                     hierarchy_path = self._get_hierarchy_path(membership.name, "team")
@@ -400,23 +455,25 @@ class AsyncService:
         return await self.is_employee_in_org(uid, org_name)
 
     def _get_entity_by_type(
-            self, entity_name: str, entity_type: str
+        self, entity_name: str, entity_type: str
     ) -> Team | Org | Pillar | TeamGroup | None:
         """Get entity from lookups by name and type."""
         if self._data is None:
             return None
-        type_to_lookup = {
-            "team": self._data.lookups.teams,
-            "org": self._data.lookups.orgs,
-            "pillar": self._data.lookups.pillars,
-            "team_group": self._data.lookups.team_groups,
-        }
-        lookup = type_to_lookup.get(entity_type.lower())
-        if not lookup:
-            return None
-        return lookup.get(entity_name)
+        entity_type_lower = entity_type.lower()
+        if entity_type_lower == "team":
+            return self._data.lookups.teams.get(entity_name)
+        elif entity_type_lower == "org":
+            return self._data.lookups.orgs.get(entity_name)
+        elif entity_type_lower == "pillar":
+            return self._data.lookups.pillars.get(entity_name)
+        elif entity_type_lower == "team_group":
+            return self._data.lookups.team_groups.get(entity_name)
+        return None
 
-    def _get_hierarchy_path(self, entity_name: str, entity_type: str) -> list[HierarchyPathEntry]:
+    def _get_hierarchy_path(
+        self, entity_name: str, entity_type: str
+    ) -> list[HierarchyPathEntry]:
         """Compute hierarchy path by walking parent references."""
         if self._data is None:
             return []
@@ -427,7 +484,7 @@ class AsyncService:
 
         path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
         visited = {entity_name}
-        current = entity
+        current: Team | Org | Pillar | TeamGroup | None = entity
 
         while current and current.parent:
             parent = current.parent
@@ -440,7 +497,7 @@ class AsyncService:
         return path
 
     async def get_hierarchy_path(
-            self, entity_name: str, entity_type: str = "team"
+        self, entity_name: str, entity_type: str = "team"
     ) -> list[HierarchyPathEntry]:
         """Get ordered hierarchy path from entity to root.
 
@@ -473,15 +530,14 @@ class AsyncService:
 
             # Look up entity type
             entity_type = ""
-            for type_name, lookup in [
-                ("team", self._data.lookups.teams),
-                ("org", self._data.lookups.orgs),
-                ("pillar", self._data.lookups.pillars),
-                ("team_group", self._data.lookups.team_groups),
-            ]:
-                if entity_name in lookup:
-                    entity_type = type_name
-                    break
+            if entity_name in self._data.lookups.teams:
+                entity_type = "team"
+            elif entity_name in self._data.lookups.orgs:
+                entity_type = "org"
+            elif entity_name in self._data.lookups.pillars:
+                entity_type = "pillar"
+            elif entity_name in self._data.lookups.team_groups:
+                entity_type = "team_group"
 
             if not entity_type:
                 return None
@@ -489,10 +545,22 @@ class AsyncService:
             # Build children map by scanning all entities
             children_map: dict[str, list[tuple[str, str]]] = {}
             all_entities: list[tuple[str, Team | Org | Pillar | TeamGroup, str]] = [
-                *((name, info, "team") for name, info in self._data.lookups.teams.items()),
-                *((name, info, "org") for name, info in self._data.lookups.orgs.items()),
-                *((name, info, "pillar") for name, info in self._data.lookups.pillars.items()),
-                *((name, info, "team_group") for name, info in self._data.lookups.team_groups.items()),
+                *(
+                    (name, info, "team")
+                    for name, info in self._data.lookups.teams.items()
+                ),
+                *(
+                    (name, info, "org")
+                    for name, info in self._data.lookups.orgs.items()
+                ),
+                *(
+                    (name, info, "pillar")
+                    for name, info in self._data.lookups.pillars.items()
+                ),
+                *(
+                    (name, info, "team_group")
+                    for name, info in self._data.lookups.team_groups.items()
+                ),
             ]
 
             for name, info, etype in all_entities:
@@ -511,11 +579,11 @@ class AsyncService:
 
             return build_node(entity_name, entity_type, set())
 
-    async def get_user_organizations(self, uid: str) -> tuple[OrgInfo, ...]:
+    async def get_user_organizations(self, uid: str) -> list[OrgInfo]:
         """Get organization info for a user."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
@@ -531,7 +599,9 @@ class AsyncService:
             for m in memberships:
                 if m.type == MembershipType.ORG:
                     if m.name not in seen:
-                        result.append(OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION))
+                        result.append(
+                            OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION)
+                        )
                         seen.add(m.name)
                 elif m.type == MembershipType.TEAM:
                     if m.name not in seen:
@@ -541,53 +611,55 @@ class AsyncService:
                     hierarchy_path = self._get_hierarchy_path(m.name, "team")
                     for entry in hierarchy_path[1:]:
                         if entry.name not in seen:
-                            org_type = type_to_org_info_type.get(entry.type.lower(), OrgInfoType.ORGANIZATION)
+                            org_type = type_to_org_info_type.get(
+                                entry.type.lower(), OrgInfoType.ORGANIZATION
+                            )
                             result.append(OrgInfo(name=entry.name, type=org_type))
                             seen.add(entry.name)
 
-            return tuple(result)
+            return result
 
-    async def get_all_employees(self) -> tuple[Employee, ...]:
+    async def get_all_employees(self) -> list[Employee]:
         """Get all employees."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.employees.values())
+                return []
+            return list(self._data.lookups.employees.values())
 
-    async def get_all_teams(self) -> tuple[Team, ...]:
+    async def get_all_teams(self) -> list[Team]:
         """Get all teams."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.teams.values())
+                return []
+            return list(self._data.lookups.teams.values())
 
-    async def get_all_orgs(self) -> tuple[Org, ...]:
+    async def get_all_orgs(self) -> list[Org]:
         """Get all organizations."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.orgs.values())
+                return []
+            return list(self._data.lookups.orgs.values())
 
-    async def get_all_pillars(self) -> tuple[Pillar, ...]:
+    async def get_all_pillars(self) -> list[Pillar]:
         """Get all pillars."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.pillars.values())
+                return []
+            return list(self._data.lookups.pillars.values())
 
-    async def get_all_team_groups(self) -> tuple[TeamGroup, ...]:
+    async def get_all_team_groups(self) -> list[TeamGroup]:
         """Get all team groups."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.team_groups.values())
+                return []
+            return list(self._data.lookups.team_groups.values())
 
-    async def get_all_components(self) -> tuple[Component, ...]:
+    async def get_all_components(self) -> list[Component]:
         """Get all components."""
         async with self._lock:
             if self._data is None:
-                return ()
-            return tuple(self._data.lookups.components.values())
+                return []
+            return list(self._data.lookups.components.values())
 
     async def get_all_team_names(self) -> list[str]:
         """Get all team names."""
@@ -624,35 +696,33 @@ class AsyncService:
                 return []
             return list(self._data.lookups.employees.keys())
 
-    async def get_team_members(self, team_name: str) -> tuple[Employee, ...]:
+    async def get_team_members(self, team_name: str) -> list[Employee]:
         """Get all members of a team."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
             team = self._data.lookups.teams.get(team_name)
             if not team:
-                return ()
-            result: list[Employee] = []
-            for uid in team.group.resolved_people_uid_list:
-                emp = self._data.lookups.employees.get(uid)
-                if emp:
-                    result.append(emp)
-            return tuple(result)
+                return []
+            return [
+                emp
+                for uid in team.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
 
-    async def get_org_members(self, org_name: str) -> tuple[Employee, ...]:
+    async def get_org_members(self, org_name: str) -> list[Employee]:
         """Get all members of an organization."""
         async with self._lock:
             if self._data is None:
-                return ()
+                return []
             org = self._data.lookups.orgs.get(org_name)
             if not org:
-                return ()
-            result: list[Employee] = []
-            for uid in org.group.resolved_people_uid_list:
-                emp = self._data.lookups.employees.get(uid)
-                if emp:
-                    result.append(emp)
-            return tuple(result)
+                return []
+            return [
+                emp
+                for uid in org.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
 
     def get_version(self) -> DataVersion:
         """Get the current data version (sync - no lock needed for read)."""
@@ -677,7 +747,9 @@ class AsyncService:
         async with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             return list(components.keys())
 
     async def get_teams_by_jira_project(self, project: str) -> list[JiraOwnerInfo]:
@@ -692,7 +764,9 @@ class AsyncService:
         async with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             seen: set[str] = set()
             result: list[JiraOwnerInfo] = []
             for owners in components.values():
@@ -703,7 +777,7 @@ class AsyncService:
             return result
 
     async def get_teams_by_jira_component(
-            self, project: str, component: str
+        self, project: str, component: str
     ) -> list[JiraOwnerInfo]:
         """Get teams/entities that own a specific Jira component.
 
@@ -717,7 +791,9 @@ class AsyncService:
         async with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             owners = components.get(component, ())
             return list(owners)
 
@@ -734,7 +810,10 @@ class AsyncService:
             if self._data is None:
                 return []
             result: list[dict[str, str]] = []
-            for project, components in self._data.indexes.jira.project_component_owners.items():
+            for (
+                project,
+                components,
+            ) in self._data.indexes.jira.project_component_owners.items():
                 for component, owners in components.items():
                     for owner in owners:
                         if owner.name == team_name:
@@ -744,11 +823,11 @@ class AsyncService:
 
 
 async def _async_retry_with_backoff(
-        operation: Callable[[], Awaitable[BinaryIO]],
-        max_retries: int = DEFAULT_MAX_RETRIES,
-        initial_delay: float = DEFAULT_RETRY_DELAY,
-        backoff: float = DEFAULT_RETRY_BACKOFF,
-        operation_name: str = "operation",
+    operation: Callable[[], Awaitable[BinaryIO]],
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    initial_delay: float = DEFAULT_RETRY_DELAY,
+    backoff: float = DEFAULT_RETRY_BACKOFF,
+    operation_name: str = "operation",
 ) -> BinaryIO:
     """Execute an async operation with exponential backoff retry."""
     logger = get_logger()
@@ -778,7 +857,9 @@ async def _async_retry_with_backoff(
                     extra={"attempts": max_retries + 1, "error": str(e)},
                 )
 
-    raise GCSError(f"{operation_name} failed after {max_retries + 1} attempts: {last_error}")
+    raise GCSError(
+        f"{operation_name} failed after {max_retries + 1} attempts: {last_error}"
+    )
 
 
 try:
@@ -801,12 +882,12 @@ try:
         """
 
         def __init__(
-                self,
-                config: GCSConfig,
-                *,
-                max_retries: int = DEFAULT_MAX_RETRIES,
-                retry_delay: float = DEFAULT_RETRY_DELAY,
-                retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+            self,
+            config: GCSConfig,
+            *,
+            max_retries: int = DEFAULT_MAX_RETRIES,
+            retry_delay: float = DEFAULT_RETRY_DELAY,
+            retry_backoff: float = DEFAULT_RETRY_BACKOFF,
         ) -> None:
             """Create an async GCS data source.
 
@@ -834,14 +915,18 @@ try:
             """Get or create the GCS client (sync)."""
             if self._client is None:
                 logger = get_logger()
-                logger.debug("Creating GCS client", extra={"project_id": self.config.project_id})
+                logger.debug(
+                    "Creating GCS client", extra={"project_id": self.config.project_id}
+                )
 
                 if self.config.credentials_json:
                     self._client = storage.Client.from_service_account_json(
                         self.config.credentials_json
                     )
                 else:
-                    self._client = storage.Client(project=self.config.project_id or None)
+                    self._client = storage.Client(
+                        project=self.config.project_id or None
+                    )
             return self._client
 
         async def load(self) -> BinaryIO:
@@ -877,7 +962,7 @@ try:
             )
 
         async def watch(
-                self, callback: Callable[[], Awaitable[Exception | None]]
+            self, callback: Callable[[], Awaitable[Exception | None]]
         ) -> Exception | None:
             """Monitor for changes and call async callback when data is updated.
 
@@ -907,7 +992,9 @@ try:
                     },
                 )
             except Exception as e:
-                logger.error("Failed to initialize async GCS watcher", extra={"error": str(e)})
+                logger.error(
+                    "Failed to initialize async GCS watcher", extra={"error": str(e)}
+                )
                 return GCSError(f"Failed to initialize GCS watcher: {e}")
 
             async def watcher() -> None:
@@ -930,12 +1017,17 @@ try:
                             last_generation = blob.generation
                             err = await callback()
                             if err:
-                                logger.error("Async reload callback failed", extra={"error": str(err)})
+                                logger.error(
+                                    "Async reload callback failed",
+                                    extra={"error": str(err)},
+                                )
                     except asyncio.CancelledError:
                         logger.info("Async GCS watcher cancelled")
                         break
                     except Exception as e:
-                        logger.error("Async GCS watcher check failed", extra={"error": str(e)})
+                        logger.error(
+                            "Async GCS watcher check failed", extra={"error": str(e)}
+                        )
 
             # Start watcher as background task
             asyncio.create_task(watcher())

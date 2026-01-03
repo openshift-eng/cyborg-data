@@ -1,6 +1,5 @@
 """Tests for team group-related functionality."""
 
-
 from orgdatacore import (
     Data,
     GitHubIDMappings,
@@ -104,5 +103,3 @@ class TestGetAllTeamGroupNames:
         assert len(names) == 2
         assert "Platform Teams" in names
         assert "Product Teams" in names
-
-

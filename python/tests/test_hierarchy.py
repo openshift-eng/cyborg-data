@@ -80,7 +80,9 @@ class TestGetHierarchyPath:
         path = service.get_hierarchy_path("test-team", "invalid_type")
         assert path == []
 
-    def test_get_hierarchy_path_returns_hierarchy_path_entries(self, service: Service) -> None:
+    def test_get_hierarchy_path_returns_hierarchy_path_entries(
+        self, service: Service
+    ) -> None:
         """Test that returned items are HierarchyPathEntry objects."""
         path = service.get_hierarchy_path("test-team", "team")
         assert all(isinstance(entry, HierarchyPathEntry) for entry in path)
@@ -158,7 +160,9 @@ class TestGetDescendantsTree:
         assert tree is not None
 
         # Find platform-org in children
-        platform_org = next((c for c in tree.children if c.name == "platform-org"), None)
+        platform_org = next(
+            (c for c in tree.children if c.name == "platform-org"), None
+        )
         assert platform_org is not None
 
         # Navigate to platform-team

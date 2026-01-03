@@ -294,7 +294,9 @@ class HierarchyPathEntry:
 class MembershipIndex:
     """Represents the membership index structure."""
 
-    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(default_factory=lambda: {})
+    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(
+        default_factory=lambda: {}
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,4 +389,3 @@ class GCSConfig:
     project_id: str = ""
     credentials_json: str = ""
     check_interval: timedelta = field(default_factory=lambda: timedelta(minutes=5))
-

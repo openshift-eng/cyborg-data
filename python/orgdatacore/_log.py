@@ -96,4 +96,3 @@ def configure_default_logging(
         formatter = logging.Formatter(format_string)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-
