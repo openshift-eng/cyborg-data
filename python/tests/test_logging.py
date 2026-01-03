@@ -49,4 +49,3 @@ class TestLogging:
 
         configure_default_logging(level=logging.INFO)
         assert len(get_logger().handlers) == initial_handlers
-

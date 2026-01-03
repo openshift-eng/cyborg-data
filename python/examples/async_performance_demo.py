@@ -159,8 +159,10 @@ async def simulate_data_change_detection(
         employees = await service.get_all_employees()
         employee_count = len(employees)
 
-        print(f"  [{i+1}/3] Service: {health_status}, {ready_status}, "
-              f"employees: {employee_count}")
+        print(
+            f"  [{i + 1}/3] Service: {health_status}, {ready_status}, "
+            f"employees: {employee_count}"
+        )
 
     print("\nWatcher demo complete.")
     print("In production, the watcher continues running indefinitely.")
@@ -181,10 +183,7 @@ async def run_concurrent_stress_test(service: AsyncService) -> None:
 
     # Create 1000 lookup tasks (cycling through available UIDs)
     uids = [e.uid for e in employees]
-    tasks = [
-        service.get_employee_by_uid(uids[i % len(uids)])
-        for i in range(1000)
-    ]
+    tasks = [service.get_employee_by_uid(uids[i % len(uids)]) for i in range(1000)]
 
     start = time.perf_counter()
     results = await asyncio.gather(*tasks)
@@ -193,7 +192,7 @@ async def run_concurrent_stress_test(service: AsyncService) -> None:
     successful = sum(1 for r in results if r is not None)
     print(f"Completed: {successful}/1000 successful lookups")
     print(f"Time: {elapsed:.4f}s")
-    print(f"Throughput: {1000/elapsed:.0f} lookups/second")
+    print(f"Throughput: {1000 / elapsed:.0f} lookups/second")
 
     # Verify service is still healthy after stress test
     print(f"\nService health after stress test: {service.is_healthy()}")
@@ -255,4 +254,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

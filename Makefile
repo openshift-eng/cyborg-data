@@ -99,7 +99,7 @@ python-clean:
 # Validation targets
 validate-parity:
 	@echo "Validating API parity between Go and Python..."
-	@./scripts/validate-api-parity.sh || echo "Parity validation script not yet implemented"
+	@./scripts/validate-api-parity.sh
 
 # Documentation targets
 docs:

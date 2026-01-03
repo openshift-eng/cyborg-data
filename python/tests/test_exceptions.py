@@ -68,4 +68,3 @@ class TestCatchingExceptions:
 
         e = GCSError("Bucket not found")
         assert str(e) == "Bucket not found"
-

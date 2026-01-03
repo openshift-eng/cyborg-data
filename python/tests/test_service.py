@@ -48,38 +48,38 @@ class TestServiceInterface:
     def test_service_implements_interface(self, service: Service):
         """Service should implement all required interface methods."""
         # Core data access methods
-        assert hasattr(service, 'get_employee_by_uid')
-        assert hasattr(service, 'get_employee_by_slack_id')
-        assert hasattr(service, 'get_employee_by_github_id')
-        assert hasattr(service, 'get_manager_for_employee')
-        assert hasattr(service, 'get_team_by_name')
-        assert hasattr(service, 'get_org_by_name')
-        assert hasattr(service, 'get_pillar_by_name')
-        assert hasattr(service, 'get_team_group_by_name')
+        assert hasattr(service, "get_employee_by_uid")
+        assert hasattr(service, "get_employee_by_slack_id")
+        assert hasattr(service, "get_employee_by_github_id")
+        assert hasattr(service, "get_manager_for_employee")
+        assert hasattr(service, "get_team_by_name")
+        assert hasattr(service, "get_org_by_name")
+        assert hasattr(service, "get_pillar_by_name")
+        assert hasattr(service, "get_team_group_by_name")
 
         # Membership queries
-        assert hasattr(service, 'get_teams_for_uid')
-        assert hasattr(service, 'get_teams_for_slack_id')
-        assert hasattr(service, 'get_team_members')
-        assert hasattr(service, 'is_employee_in_team')
-        assert hasattr(service, 'is_slack_user_in_team')
+        assert hasattr(service, "get_teams_for_uid")
+        assert hasattr(service, "get_teams_for_slack_id")
+        assert hasattr(service, "get_team_members")
+        assert hasattr(service, "is_employee_in_team")
+        assert hasattr(service, "is_slack_user_in_team")
 
         # Organization queries
-        assert hasattr(service, 'is_employee_in_org')
-        assert hasattr(service, 'is_slack_user_in_org')
-        assert hasattr(service, 'get_user_organizations')
+        assert hasattr(service, "is_employee_in_org")
+        assert hasattr(service, "is_slack_user_in_org")
+        assert hasattr(service, "get_user_organizations")
 
         # Data management
-        assert hasattr(service, 'get_version')
-        assert hasattr(service, 'load_from_data_source')
-        assert hasattr(service, 'start_data_source_watcher')
+        assert hasattr(service, "get_version")
+        assert hasattr(service, "load_from_data_source")
+        assert hasattr(service, "start_data_source_watcher")
 
         # Enumeration methods
-        assert hasattr(service, 'get_all_employee_uids')
-        assert hasattr(service, 'get_all_team_names')
-        assert hasattr(service, 'get_all_org_names')
-        assert hasattr(service, 'get_all_pillar_names')
-        assert hasattr(service, 'get_all_team_group_names')
+        assert hasattr(service, "get_all_employee_uids")
+        assert hasattr(service, "get_all_team_names")
+        assert hasattr(service, "get_all_org_names")
+        assert hasattr(service, "get_all_pillar_names")
+        assert hasattr(service, "get_all_team_group_names")
 
 
 class TestLoadFromDataSource:
@@ -174,4 +174,3 @@ class TestHealthCheck:
     def test_is_ready_with_data(self, service: Service):
         """Service should be ready with data loaded."""
         assert service.is_ready() is True
-

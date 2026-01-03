@@ -98,4 +98,3 @@ class TestVersionDict:
         assert d["major"] == __version_info__[0]
         assert d["minor"] == __version_info__[1]
         assert d["patch"] == __version_info__[2]
-
