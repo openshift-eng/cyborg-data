@@ -154,7 +154,7 @@ def main() -> int:
 def run_go_runner(runner_path: Path, config: dict[str, Any]) -> list[dict[str, Any]]:
     """Run the Go test runner and return results."""
     build_result = subprocess.run(
-        ["go", "build", "-o", "runner", "."],
+        ["go", "build", "-mod=mod", "-o", "runner", "."],
         cwd=runner_path,
         capture_output=True,
         text=True,
