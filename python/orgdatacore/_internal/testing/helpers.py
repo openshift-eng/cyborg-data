@@ -186,7 +186,9 @@ def create_test_data() -> Data:
                 project_component_owners={
                     "TEST": {
                         "Core": (JiraOwnerInfo(name="test-squad", type="team"),),
-                        "_project_level": (JiraOwnerInfo(name="test-squad", type="team"),),
+                        "_project_level": (
+                            JiraOwnerInfo(name="test-squad", type="team"),
+                        ),
                     },
                     "PLAT": {
                         "API": (JiraOwnerInfo(name="test-squad", type="team"),),
@@ -240,10 +242,14 @@ def _data_to_dict(data: Data) -> dict[str, Any]:
                 },
             },
             "slack_id_mappings": {
-                "slack_uid_to_uid": dict(data.indexes.slack_id_mappings.slack_uid_to_uid),
+                "slack_uid_to_uid": dict(
+                    data.indexes.slack_id_mappings.slack_uid_to_uid
+                ),
             },
             "github_id_mappings": {
-                "github_id_to_uid": dict(data.indexes.github_id_mappings.github_id_to_uid),
+                "github_id_to_uid": dict(
+                    data.indexes.github_id_mappings.github_id_to_uid
+                ),
             },
         },
     }
@@ -317,7 +323,9 @@ def _group_to_dict(group: Group) -> dict[str, Any]:
             ],
         }
     if group.roles:
-        d["roles"] = [{"people": list(r.people), "types": list(r.types)} for r in group.roles]
+        d["roles"] = [
+            {"people": list(r.people), "types": list(r.types)} for r in group.roles
+        ]
     if group.jiras:
         d["jiras"] = [
             {
@@ -356,7 +364,8 @@ def _group_to_dict(group: Group) -> dict[str, Any]:
         ]
     if group.component_roles:
         d["component_roles"] = [
-            {"component": c.component, "types": list(c.types)} for c in group.component_roles
+            {"component": c.component, "types": list(c.types)}
+            for c in group.component_roles
         ]
     return d
 

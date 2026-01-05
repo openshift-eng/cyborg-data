@@ -164,7 +164,9 @@ def _retry_with_backoff(
                     },
                 )
 
-    raise GCSError(f"{operation_name} failed after {max_retries + 1} attempts: {last_error}")
+    raise GCSError(
+        f"{operation_name} failed after {max_retries + 1} attempts: {last_error}"
+    )
 
 
 try:
@@ -232,14 +234,18 @@ try:
             """Get or create the GCS client."""
             if self._client is None:
                 logger = get_logger()
-                logger.debug("Creating GCS client", extra={"project_id": self.config.project_id})
+                logger.debug(
+                    "Creating GCS client", extra={"project_id": self.config.project_id}
+                )
 
                 if self.config.credentials_json:
                     self._client = storage.Client.from_service_account_json(
                         self.config.credentials_json
                     )
                 else:
-                    self._client = storage.Client(project=self.config.project_id or None)
+                    self._client = storage.Client(
+                        project=self.config.project_id or None
+                    )
             return self._client
 
         def load(self) -> BinaryIO:
@@ -272,9 +278,7 @@ try:
                 operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
             )
 
-        def watch(
-            self, callback: Callable[[], Exception | None]
-        ) -> Exception | None:
+        def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
             """
             Monitor for changes and call callback when data is updated.
 
@@ -308,7 +312,9 @@ try:
                     },
                 )
             except Exception as e:
-                logger.error("Failed to initialize GCS watcher", extra={"error": str(e)})
+                logger.error(
+                    "Failed to initialize GCS watcher", extra={"error": str(e)}
+                )
                 return GCSError(f"Failed to initialize GCS watcher: {e}")
 
             def watcher() -> None:
@@ -333,9 +339,13 @@ try:
                             last_generation = blob.generation
                             err = callback()
                             if err:
-                                logger.error("Reload callback failed", extra={"error": str(err)})
+                                logger.error(
+                                    "Reload callback failed", extra={"error": str(err)}
+                                )
                     except Exception as e:
-                        logger.error("GCS watcher check failed", extra={"error": str(e)})
+                        logger.error(
+                            "GCS watcher check failed", extra={"error": str(e)}
+                        )
 
             thread = threading.Thread(target=watcher, daemon=True, name="gcs-watcher")
             thread.start()

@@ -2,7 +2,7 @@
 
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from ._exceptions import DataLoadError
@@ -299,12 +299,21 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
 
     lookups_raw = raw_data.get("lookups", {})
     lookups = Lookups(
-        employees={k: _parse_employee(v) for k, v in lookups_raw.get("employees", {}).items()},
+        employees={
+            k: _parse_employee(v) for k, v in lookups_raw.get("employees", {}).items()
+        },
         teams={k: _parse_team(v) for k, v in lookups_raw.get("teams", {}).items()},
         orgs={k: _parse_org(v) for k, v in lookups_raw.get("orgs", {}).items()},
-        pillars={k: _parse_pillar(v) for k, v in lookups_raw.get("pillars", {}).items()},
-        team_groups={k: _parse_team_group(v) for k, v in lookups_raw.get("team_groups", {}).items()},
-        components={k: _parse_component(v) for k, v in lookups_raw.get("components", {}).items()},
+        pillars={
+            k: _parse_pillar(v) for k, v in lookups_raw.get("pillars", {}).items()
+        },
+        team_groups={
+            k: _parse_team_group(v)
+            for k, v in lookups_raw.get("team_groups", {}).items()
+        },
+        components={
+            k: _parse_component(v) for k, v in lookups_raw.get("components", {}).items()
+        },
     )
 
     indexes_raw = raw_data.get("indexes", {})
@@ -352,7 +361,9 @@ def _validate_data(data: Data, source: DataSource) -> None:
     if not data.lookups.employees:
         raise DataLoadError(f"invalid data from {source}: missing lookups.employees")
     if not data.indexes.membership.membership_index:
-        raise DataLoadError(f"invalid data from {source}: missing indexes.membership.membership_index")
+        raise DataLoadError(
+            f"invalid data from {source}: missing indexes.membership.membership_index"
+        )
 
 
 class Service:
@@ -405,22 +416,34 @@ class Service:
         try:
             reader = source.load()
         except Exception as e:
-            logger.error("Failed to load from data source", extra={"source": str(source), "error": str(e)})
+            logger.error(
+                "Failed to load from data source",
+                extra={"source": str(source), "error": str(e)},
+            )
             raise DataLoadError(f"failed to load from data source {source}: {e}") from e
 
         try:
             raw_data = json.load(reader)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON", extra={"source": str(source), "error": str(e)})
-            raise DataLoadError(f"failed to parse JSON from source {source}: {e}") from e
+            logger.error(
+                "Failed to parse JSON", extra={"source": str(source), "error": str(e)}
+            )
+            raise DataLoadError(
+                f"failed to parse JSON from source {source}: {e}"
+            ) from e
         finally:
             reader.close()
 
         try:
             org_data = parse_data(raw_data)
         except Exception as e:
-            logger.error("Failed to parse data structure", extra={"source": str(source), "error": str(e)})
-            raise DataLoadError(f"failed to parse data structure from source {source}: {e}") from e
+            logger.error(
+                "Failed to parse data structure",
+                extra={"source": str(source), "error": str(e)},
+            )
+            raise DataLoadError(
+                f"failed to parse data structure from source {source}: {e}"
+            ) from e
 
         _validate_data(org_data, source)
 
@@ -468,17 +491,25 @@ class Service:
                 if self._stop_event.is_set():
                     return None
                 try:
-                    logger.info("Reloading data from source", extra={"source": str(source)})
+                    logger.info(
+                        "Reloading data from source", extra={"source": str(source)}
+                    )
                     self.load_from_data_source(source)
                     return None
                 except Exception as e:
-                    logger.error("Failed to reload data", extra={"source": str(source), "error": str(e)})
+                    logger.error(
+                        "Failed to reload data",
+                        extra={"source": str(source), "error": str(e)},
+                    )
                     return e
 
             logger.info("Starting data source watcher", extra={"source": str(source)})
             err = source.watch(callback)
             if err:
-                logger.error("Failed to start watcher", extra={"source": str(source), "error": str(err)})
+                logger.error(
+                    "Failed to start watcher",
+                    extra={"source": str(source), "error": str(err)},
+                )
                 raise err
         finally:
             self._watcher_running = False
@@ -506,6 +537,33 @@ class Service:
         with self._lock:
             return self._version
 
+    def get_data_age(self) -> timedelta:
+        """Get the duration since data was last loaded.
+
+        Returns:
+            timedelta since last load, or timedelta(0) if no data loaded.
+        """
+        with self._lock:
+            if self._version.load_time == datetime.min:
+                return timedelta(0)
+            return datetime.now() - self._version.load_time
+
+    def is_data_stale(self, max_age: timedelta) -> bool:
+        """Check if data is older than max_age, or if no data is loaded.
+
+        Use this in health checks to detect stale data from failed reloads.
+
+        Args:
+            max_age: Maximum acceptable age for the data.
+
+        Returns:
+            True if data is stale or not loaded, False otherwise.
+        """
+        with self._lock:
+            if self._data is None or self._version.load_time == datetime.min:
+                return True
+            return (datetime.now() - self._version.load_time) > max_age
+
     def get_employee_by_uid(self, uid: str) -> Employee | None:
         """Get an employee by UID."""
         with self._lock:
@@ -528,13 +586,15 @@ class Service:
         """Get an employee by Slack ID."""
         with self._lock:
             if (
-                    self._data is None
-                    or not self._data.indexes.slack_id_mappings.slack_uid_to_uid
-                    or not self._data.lookups.employees
+                self._data is None
+                or not self._data.indexes.slack_id_mappings.slack_uid_to_uid
+                or not self._data.lookups.employees
             ):
                 return None
 
-            uid = self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id, "")
+            uid = self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(
+                slack_id, ""
+            )
             if not uid:
                 return None
 
@@ -544,13 +604,15 @@ class Service:
         """Get an employee by GitHub ID."""
         with self._lock:
             if (
-                    self._data is None
-                    or not self._data.indexes.github_id_mappings.github_id_to_uid
-                    or not self._data.lookups.employees
+                self._data is None
+                or not self._data.indexes.github_id_mappings.github_id_to_uid
+                or not self._data.lookups.employees
             ):
                 return None
 
-            uid = self._data.indexes.github_id_mappings.github_id_to_uid.get(github_id, "")
+            uid = self._data.indexes.github_id_mappings.github_id_to_uid.get(
+                github_id, ""
+            )
             if not uid:
                 return None
 
@@ -610,25 +672,37 @@ class Service:
                 return []
             return list(self._data.lookups.components.values())
 
+    def get_all_component_names(self) -> list[str]:
+        """Get all component names in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.components:
+                return []
+            return list(self._data.lookups.components.keys())
+
     def get_teams_for_uid(self, uid: str) -> list[str]:
         """Get all teams a UID is a member of."""
         with self._lock:
-            if self._data is None or not self._data.indexes.membership.membership_index:
-                return []
+            return self._get_teams_for_uid(uid)
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, ())
-            teams: list[str] = []
-            for membership in memberships:
-                if membership.type == MembershipType.TEAM:
-                    teams.append(membership.name)
-            return teams
+    def _get_teams_for_uid(self, uid: str) -> list[str]:
+        """Internal: Get all teams a UID is a member of. Caller must hold lock."""
+        if self._data is None or not self._data.indexes.membership.membership_index:
+            return []
+
+        memberships = self._data.indexes.membership.membership_index.get(uid, ())
+        teams: list[str] = []
+        for membership in memberships:
+            if membership.type == MembershipType.TEAM:
+                teams.append(membership.name)
+        return teams
 
     def get_teams_for_slack_id(self, slack_id: str) -> list[str]:
         """Get all teams a Slack user is a member of."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return []
-        return self.get_teams_for_uid(uid)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return []
+            return self._get_teams_for_uid(uid)
 
     def get_team_members(self, team_name: str) -> list[Employee]:
         """Get all members of a team."""
@@ -648,41 +722,52 @@ class Service:
 
     def is_employee_in_team(self, uid: str, team_name: str) -> bool:
         """Check if an employee is in a specific team."""
-        teams = self.get_teams_for_uid(uid)
+        with self._lock:
+            return self._is_employee_in_team(uid, team_name)
+
+    def _is_employee_in_team(self, uid: str, team_name: str) -> bool:
+        """Internal: Check if an employee is in a specific team. Caller must hold lock."""
+        teams = self._get_teams_for_uid(uid)
         return team_name in teams
 
     def is_slack_user_in_team(self, slack_id: str, team_name: str) -> bool:
         """Check if a Slack user is in a specific team."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return False
-        return self.is_employee_in_team(uid, team_name)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return False
+            return self._is_employee_in_team(uid, team_name)
 
     def is_employee_in_org(self, uid: str, org_name: str) -> bool:
         """Check if an employee is in a specific organization."""
         with self._lock:
-            if self._data is None or not self._data.indexes.membership.membership_index:
-                return False
+            return self._is_employee_in_org(uid, org_name)
 
-            memberships = self._data.indexes.membership.membership_index.get(uid, ())
-
-            for membership in memberships:
-                if membership.type == MembershipType.ORG and membership.name == org_name:
-                    return True
-                elif membership.type == MembershipType.TEAM:
-                    hierarchy_path = self.get_hierarchy_path(membership.name, "team")
-                    for entry in hierarchy_path:
-                        if entry.type == "org" and entry.name == org_name:
-                            return True
-
+    def _is_employee_in_org(self, uid: str, org_name: str) -> bool:
+        """Internal: Check if an employee is in a specific organization. Caller must hold lock."""
+        if self._data is None or not self._data.indexes.membership.membership_index:
             return False
+
+        memberships = self._data.indexes.membership.membership_index.get(uid, ())
+
+        for membership in memberships:
+            if membership.type == MembershipType.ORG and membership.name == org_name:
+                return True
+            elif membership.type == MembershipType.TEAM:
+                hierarchy_path = self._get_hierarchy_path(membership.name, "team")
+                for entry in hierarchy_path:
+                    if entry.type == "org" and entry.name == org_name:
+                        return True
+
+        return False
 
     def is_slack_user_in_org(self, slack_id: str, org_name: str) -> bool:
         """Check if a Slack user is in a specific organization."""
-        uid = self._get_uid_from_slack_id(slack_id)
-        if not uid:
-            return False
-        return self.is_employee_in_org(uid, org_name)
+        with self._lock:
+            uid = self._get_uid_from_slack_id(slack_id)
+            if not uid:
+                return False
+            return self._is_employee_in_org(uid, org_name)
 
     def get_user_organizations(self, slack_user_id: str) -> list[OrgInfo]:
         """Get the complete organizational hierarchy a Slack user belongs to."""
@@ -701,24 +786,28 @@ class Service:
             for membership in memberships:
                 if membership.type == MembershipType.ORG:
                     if membership.name not in seen:
-                        orgs.append(OrgInfo(name=membership.name, type=OrgInfoType.ORGANIZATION))
+                        orgs.append(
+                            OrgInfo(name=membership.name, type=OrgInfoType.ORGANIZATION)
+                        )
                         seen.add(membership.name)
 
                 elif membership.type == MembershipType.TEAM:
                     if membership.name not in seen:
-                        orgs.append(OrgInfo(name=membership.name, type=OrgInfoType.TEAM))
+                        orgs.append(
+                            OrgInfo(name=membership.name, type=OrgInfoType.TEAM)
+                        )
                         seen.add(membership.name)
 
-                    hierarchy_path = self.get_hierarchy_path(membership.name, "team")
+                    hierarchy_path = self._get_hierarchy_path(membership.name, "team")
                     self._add_hierarchy_path_items(orgs, seen, tuple(hierarchy_path))
 
             return orgs
 
     def _add_hierarchy_path_items(
-            self,
-            orgs: list[OrgInfo],
-            seen: set[str],
-            hierarchy_path: tuple[HierarchyPathEntry, ...],
+        self,
+        orgs: list[OrgInfo],
+        seen: set[str],
+        hierarchy_path: tuple[HierarchyPathEntry, ...],
     ) -> None:
         """Add hierarchy path items to the orgs list, avoiding duplicates."""
         type_to_org_info_type = {
@@ -729,13 +818,18 @@ class Service:
         }
         for entry in hierarchy_path[1:]:
             if entry.name not in seen:
-                org_type = type_to_org_info_type.get(entry.type.lower(), OrgInfoType.ORGANIZATION)
+                org_type = type_to_org_info_type.get(
+                    entry.type.lower(), OrgInfoType.ORGANIZATION
+                )
                 orgs.append(OrgInfo(name=entry.name, type=org_type))
                 seen.add(entry.name)
 
     def _get_uid_from_slack_id(self, slack_id: str) -> str:
         """Get the UID for a given Slack ID."""
-        if self._data is None or not self._data.indexes.slack_id_mappings.slack_uid_to_uid:
+        if (
+            self._data is None
+            or not self._data.indexes.slack_id_mappings.slack_uid_to_uid
+        ):
             return ""
         return self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id, "")
 
@@ -775,38 +869,38 @@ class Service:
             return list(self._data.lookups.team_groups.keys())
 
     def _get_entity_by_type(
-            self, entity_name: str, entity_type: str
+        self, entity_name: str, entity_type: str
     ) -> Team | Org | Pillar | TeamGroup | None:
         """Get entity from lookups by name and type."""
         if self._data is None:
             return None
-        type_to_lookup = {
-            "team": self._data.lookups.teams,
-            "org": self._data.lookups.orgs,
-            "pillar": self._data.lookups.pillars,
-            "team_group": self._data.lookups.team_groups,
-        }
-        lookup = type_to_lookup.get(entity_type.lower())
-        if not lookup:
-            return None
-        return lookup.get(entity_name)
+        entity_type_lower = entity_type.lower()
+        if entity_type_lower == "team":
+            return self._data.lookups.teams.get(entity_name)
+        elif entity_type_lower == "org":
+            return self._data.lookups.orgs.get(entity_name)
+        elif entity_type_lower == "pillar":
+            return self._data.lookups.pillars.get(entity_name)
+        elif entity_type_lower == "team_group":
+            return self._data.lookups.team_groups.get(entity_name)
+        return None
 
     def _get_entity_type(self, entity_name: str) -> str:
         """Look up entity type by scanning lookups."""
         if self._data is None:
             return ""
-        for type_name, lookup in [
-            ("team", self._data.lookups.teams),
-            ("org", self._data.lookups.orgs),
-            ("pillar", self._data.lookups.pillars),
-            ("team_group", self._data.lookups.team_groups),
-        ]:
-            if entity_name in lookup:
-                return type_name
+        if entity_name in self._data.lookups.teams:
+            return "team"
+        if entity_name in self._data.lookups.orgs:
+            return "org"
+        if entity_name in self._data.lookups.pillars:
+            return "pillar"
+        if entity_name in self._data.lookups.team_groups:
+            return "team_group"
         return ""
 
     def get_hierarchy_path(
-            self, entity_name: str, entity_type: str = "team"
+        self, entity_name: str, entity_type: str = "team"
     ) -> list[HierarchyPathEntry]:
         """Get ordered hierarchy path from entity to root.
 
@@ -820,26 +914,32 @@ class Service:
             Ordered list from entity to root. Empty list if not found.
         """
         with self._lock:
-            if self._data is None:
-                return []
+            return self._get_hierarchy_path(entity_name, entity_type)
 
-            entity = self._get_entity_by_type(entity_name, entity_type)
-            if entity is None:
-                return []
+    def _get_hierarchy_path(
+        self, entity_name: str, entity_type: str = "team"
+    ) -> list[HierarchyPathEntry]:
+        """Internal: Get hierarchy path. Caller must hold lock."""
+        if self._data is None:
+            return []
 
-            path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
-            visited = {entity_name}
-            current = entity
+        entity = self._get_entity_by_type(entity_name, entity_type)
+        if entity is None:
+            return []
 
-            while current and current.parent:
-                parent = current.parent
-                if parent.name in visited:
-                    break
-                visited.add(parent.name)
-                path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
-                current = self._get_entity_by_type(parent.name, parent.type)
+        path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
+        visited = {entity_name}
+        current: Team | Org | Pillar | TeamGroup | None = entity
 
-            return path
+        while current and current.parent:
+            parent = current.parent
+            if parent.name in visited:
+                break
+            visited.add(parent.name)
+            path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
+            current = self._get_entity_by_type(parent.name, parent.type)
+
+        return path
 
     def get_descendants_tree(self, entity_name: str) -> HierarchyNode | None:
         """Get all descendants of an entity as a nested tree.
@@ -859,10 +959,22 @@ class Service:
             # Build children map by scanning all entities
             children_map: dict[str, list[tuple[str, str]]] = {}
             all_entities: list[tuple[str, Team | Org | Pillar | TeamGroup, str]] = [
-                *((name, info, "team") for name, info in self._data.lookups.teams.items()),
-                *((name, info, "org") for name, info in self._data.lookups.orgs.items()),
-                *((name, info, "pillar") for name, info in self._data.lookups.pillars.items()),
-                *((name, info, "team_group") for name, info in self._data.lookups.team_groups.items()),
+                *(
+                    (name, info, "team")
+                    for name, info in self._data.lookups.teams.items()
+                ),
+                *(
+                    (name, info, "org")
+                    for name, info in self._data.lookups.orgs.items()
+                ),
+                *(
+                    (name, info, "pillar")
+                    for name, info in self._data.lookups.pillars.items()
+                ),
+                *(
+                    (name, info, "team_group")
+                    for name, info in self._data.lookups.team_groups.items()
+                ),
             ]
 
             entity_type = self._get_entity_type(entity_name)
@@ -904,7 +1016,9 @@ class Service:
         with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             return list(components.keys())
 
     def get_teams_by_jira_project(self, project: str) -> list[JiraOwnerInfo]:
@@ -919,7 +1033,9 @@ class Service:
         with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             seen: set[str] = set()
             result: list[JiraOwnerInfo] = []
             for owners in components.values():
@@ -930,7 +1046,7 @@ class Service:
             return result
 
     def get_teams_by_jira_component(
-            self, project: str, component: str
+        self, project: str, component: str
     ) -> list[JiraOwnerInfo]:
         """Get teams/entities that own a specific Jira component.
 
@@ -944,7 +1060,9 @@ class Service:
         with self._lock:
             if self._data is None:
                 return []
-            components = self._data.indexes.jira.project_component_owners.get(project, {})
+            components = self._data.indexes.jira.project_component_owners.get(
+                project, {}
+            )
             owners = components.get(component, ())
             return list(owners)
 
@@ -961,7 +1079,10 @@ class Service:
             if self._data is None:
                 return []
             result: list[dict[str, str]] = []
-            for project, components in self._data.indexes.jira.project_component_owners.items():
+            for (
+                project,
+                components,
+            ) in self._data.indexes.jira.project_component_owners.items():
                 for component, owners in components.items():
                     for owner in owners:
                         if owner.name == team_name:

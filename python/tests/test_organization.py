@@ -8,13 +8,20 @@ from orgdatacore import OrgInfo, Service
 class TestGetOrgByName:
     """Tests for organization lookup by name."""
 
-    @pytest.mark.parametrize("org_name,expected_found,expected_name", [
-        ("test-org", True, "test-org"),
-        ("platform-org", True, "platform-org"),
-        ("nonexistent-org", False, None),
-    ])
+    @pytest.mark.parametrize(
+        "org_name,expected_found,expected_name",
+        [
+            ("test-org", True, "test-org"),
+            ("platform-org", True, "platform-org"),
+            ("nonexistent-org", False, None),
+        ],
+    )
     def test_get_org_by_name(
-        self, service: Service, org_name: str, expected_found: bool, expected_name: str | None
+        self,
+        service: Service,
+        org_name: str,
+        expected_found: bool,
+        expected_name: str | None,
     ):
         """Test organization lookup by name."""
         result = service.get_org_by_name(org_name)
@@ -29,14 +36,17 @@ class TestGetOrgByName:
 class TestIsEmployeeInOrg:
     """Tests for organization membership checks."""
 
-    @pytest.mark.parametrize("uid,org_name,expected", [
-        ("jsmith", "test-org", True),  # Direct membership
-        ("bwilson", "platform-org", True),  # Direct membership
-        ("bwilson", "test-org", True),  # Via team inheritance
-        ("jsmith", "platform-org", False),  # Not in platform-org
-        ("nonexistent", "test-org", False),
-        ("jsmith", "nonexistent-org", False),
-    ])
+    @pytest.mark.parametrize(
+        "uid,org_name,expected",
+        [
+            ("jsmith", "test-org", True),  # Direct membership
+            ("bwilson", "platform-org", True),  # Direct membership
+            ("bwilson", "test-org", True),  # Via team inheritance
+            ("jsmith", "platform-org", False),  # Not in platform-org
+            ("nonexistent", "test-org", False),
+            ("jsmith", "nonexistent-org", False),
+        ],
+    )
     def test_is_employee_in_org(
         self, service: Service, uid: str, org_name: str, expected: bool
     ):
@@ -48,12 +58,15 @@ class TestIsEmployeeInOrg:
 class TestIsSlackUserInOrg:
     """Tests for Slack user organization membership checks."""
 
-    @pytest.mark.parametrize("slack_id,org_name,expected", [
-        ("U12345678", "test-org", True),  # jsmith
-        ("U98765432", "platform-org", True),  # bwilson
-        ("U98765432", "test-org", True),  # bwilson via team
-        ("U99999999", "test-org", False),  # nonexistent
-    ])
+    @pytest.mark.parametrize(
+        "slack_id,org_name,expected",
+        [
+            ("U12345678", "test-org", True),  # jsmith
+            ("U98765432", "platform-org", True),  # bwilson
+            ("U98765432", "test-org", True),  # bwilson via team
+            ("U99999999", "test-org", False),  # nonexistent
+        ],
+    )
     def test_is_slack_user_in_org(
         self, service: Service, slack_id: str, org_name: str, expected: bool
     ):
@@ -157,8 +170,9 @@ class TestOrgInfoTypes:
 
         for name, expected_type in expected_types.items():
             actual_type = type_map.get(name)
-            assert actual_type is not None, f"Expected to find {name} in user organizations"
-            assert actual_type == expected_type, \
+            assert actual_type is not None, (
+                f"Expected to find {name} in user organizations"
+            )
+            assert actual_type == expected_type, (
                 f"Expected {name} to have type {expected_type}, got {actual_type}"
-
-
+            )

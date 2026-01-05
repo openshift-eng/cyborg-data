@@ -11,6 +11,8 @@
 # Default target
 all: test
 
+PYTHON ?= python
+
 help:
 	@echo "Multi-Language Build System for cyborg-data"
 	@echo ""
@@ -22,14 +24,21 @@ help:
 	@echo ""
 	@echo "Go-specific targets:"
 	@echo "  make go-test       - Run Go tests"
+	@echo "  make go-test-with-gcs - Run Go tests with GCS support"
 	@echo "  make go-lint       - Run Go linter"
 	@echo "  make go-build      - Build Go examples"
+	@echo "  make go-bench      - Run Go benchmarks"
 	@echo ""
 	@echo "Python-specific targets:"
 	@echo "  make python-test   - Run Python tests"
 	@echo "  make python-lint   - Run Python linter"
-	@echo "  make python-typing - Run Python type checker (pyright strict)"
+	@echo "  make python-typing - Run Python type checker (mypy strict)"
+	@echo "  make python-format - Format Python code with ruff"
 	@echo "  make python-build  - Build Python package"
+	@echo ""
+	@echo "Validation targets:"
+	@echo "  make validate-parity - Validate API parity between Go and Python"
+	@echo "  make docs            - Build documentation"
 
 # Combined targets
 test: go-test python-test
@@ -79,8 +88,8 @@ python-lint:
 	cd python && ruff check .
 
 python-typing:
-	@echo "Running Python type checker..."
-	cd python && pyright
+	@echo "Running Python type checker (mypy strict)..."
+	cd python && $(PYTHON) -m mypy orgdatacore
 
 python-format:
 	@echo "Formatting Python code..."
@@ -94,12 +103,10 @@ python-clean:
 	@echo "Cleaning Python build artifacts..."
 	cd python && rm -rf dist/ build/ *.egg-info .pytest_cache .mypy_cache .ruff_cache __pycache__
 
-# Validation targets
 validate-parity:
 	@echo "Validating API parity between Go and Python..."
-	@./scripts/validate-api-parity.sh || echo "Parity validation script not yet implemented"
+	@./scripts/validate-api-parity.sh
 
-# Documentation targets
-docs:
+docs: #todo
 	@echo "Building documentation..."
 	@echo "Documentation build not yet configured"

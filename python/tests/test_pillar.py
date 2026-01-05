@@ -1,6 +1,5 @@
 """Tests for pillar-related functionality."""
 
-
 from orgdatacore import (
     Data,
     GitHubIDMappings,
@@ -104,5 +103,3 @@ class TestGetAllPillarNames:
         assert len(names) == 2
         assert "Engineering" in names
         assert "Product" in names
-
-

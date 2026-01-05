@@ -246,7 +246,7 @@ class TestAsyncService:
 
         pillars = await service.get_all_pillars()
         # Test data doesn't have pillars
-        assert isinstance(pillars, tuple)
+        assert isinstance(pillars, list)
 
     @pytest.mark.asyncio
     async def test_get_all_team_groups(self) -> None:
@@ -257,7 +257,7 @@ class TestAsyncService:
 
         team_groups = await service.get_all_team_groups()
         # Test data doesn't have team groups
-        assert isinstance(team_groups, tuple)
+        assert isinstance(team_groups, list)
 
     @pytest.mark.asyncio
     async def test_get_org_members(self) -> None:
@@ -267,7 +267,7 @@ class TestAsyncService:
         await service.load_from_data_source(source)
 
         members = await service.get_org_members("test-division")
-        assert isinstance(members, tuple)
+        assert isinstance(members, list)
 
     @pytest.mark.asyncio
     async def test_get_version(self) -> None:
@@ -305,14 +305,14 @@ class TestAsyncService:
         assert await service.get_pillar_by_name("test") is None
         assert await service.get_team_group_by_name("test") is None
         assert await service.get_user_teams("test") == []
-        assert await service.get_user_organizations("test") == ()
-        assert await service.get_all_employees() == ()
-        assert await service.get_all_teams() == ()
-        assert await service.get_all_orgs() == ()
-        assert await service.get_all_pillars() == ()
-        assert await service.get_all_team_groups() == ()
-        assert await service.get_team_members("test") == ()
-        assert await service.get_org_members("test") == ()
+        assert await service.get_user_organizations("test") == []
+        assert await service.get_all_employees() == []
+        assert await service.get_all_teams() == []
+        assert await service.get_all_orgs() == []
+        assert await service.get_all_pillars() == []
+        assert await service.get_all_team_groups() == []
+        assert await service.get_team_members("test") == []
+        assert await service.get_org_members("test") == []
         assert await service.get_manager_for_employee("test") is None
         assert await service.is_employee_in_team("test", "team") is False
         assert await service.is_slack_user_in_team("U123", "team") is False
@@ -324,7 +324,7 @@ class TestAsyncService:
         assert await service.get_hierarchy_path("test", "team") == []
         assert await service.get_descendants_tree("test") is None
         assert await service.get_component_by_name("test") is None
-        assert await service.get_all_components() == ()
+        assert await service.get_all_components() == []
         assert await service.get_jira_projects() == []
         assert await service.get_jira_components("TEST") == []
         assert await service.get_teams_by_jira_project("TEST") == []

@@ -8,35 +8,40 @@ from orgdatacore import Employee, Service
 class TestGetEmployeeByUID:
     """Tests for employee lookup by UID."""
 
-    @pytest.mark.parametrize("uid,expected", [
-        (
-            "jsmith",
-            Employee(
-                uid="jsmith",
-                full_name="John Smith",
-                email="jsmith@example.com",
-                job_title="Software Engineer",
-                slack_uid="U12345678",
-                github_id="jsmith-dev",
-                manager_uid="adoe",
+    @pytest.mark.parametrize(
+        "uid,expected",
+        [
+            (
+                "jsmith",
+                Employee(
+                    uid="jsmith",
+                    full_name="John Smith",
+                    email="jsmith@example.com",
+                    job_title="Software Engineer",
+                    slack_uid="U12345678",
+                    github_id="jsmith-dev",
+                    manager_uid="adoe",
+                ),
             ),
-        ),
-        (
-            "adoe",
-            Employee(
-                uid="adoe",
-                full_name="Alice Doe",
-                email="adoe@example.com",
-                job_title="Team Lead",
-                slack_uid="U87654321",
-                github_id="alice-codes",
-                is_people_manager=True,
+            (
+                "adoe",
+                Employee(
+                    uid="adoe",
+                    full_name="Alice Doe",
+                    email="adoe@example.com",
+                    job_title="Team Lead",
+                    slack_uid="U87654321",
+                    github_id="alice-codes",
+                    is_people_manager=True,
+                ),
             ),
-        ),
-        ("nonexistent", None),
-        ("", None),
-    ])
-    def test_get_employee_by_uid(self, service: Service, uid: str, expected: Employee | None):
+            ("nonexistent", None),
+            ("", None),
+        ],
+    )
+    def test_get_employee_by_uid(
+        self, service: Service, uid: str, expected: Employee | None
+    ):
         """Test employee lookup by UID."""
         result = service.get_employee_by_uid(uid)
         assert result == expected
@@ -45,13 +50,16 @@ class TestGetEmployeeByUID:
 class TestGetEmployeeBySlackID:
     """Tests for employee lookup by Slack ID."""
 
-    @pytest.mark.parametrize("slack_id,expected_uid", [
-        ("U12345678", "jsmith"),
-        ("U87654321", "adoe"),
-        ("U98765432", "bwilson"),
-        ("U99999999", None),
-        ("", None),
-    ])
+    @pytest.mark.parametrize(
+        "slack_id,expected_uid",
+        [
+            ("U12345678", "jsmith"),
+            ("U87654321", "adoe"),
+            ("U98765432", "bwilson"),
+            ("U99999999", None),
+            ("", None),
+        ],
+    )
     def test_get_employee_by_slack_id(
         self, service: Service, slack_id: str, expected_uid: str | None
     ):
@@ -68,13 +76,16 @@ class TestGetEmployeeBySlackID:
 class TestGetEmployeeByGitHubID:
     """Tests for employee lookup by GitHub ID."""
 
-    @pytest.mark.parametrize("github_id,expected_uid", [
-        ("jsmith-dev", "jsmith"),
-        ("alice-codes", "adoe"),
-        ("bobw", "bwilson"),
-        ("hackerx", None),
-        ("", None),
-    ])
+    @pytest.mark.parametrize(
+        "github_id,expected_uid",
+        [
+            ("jsmith-dev", "jsmith"),
+            ("alice-codes", "adoe"),
+            ("bobw", "bwilson"),
+            ("hackerx", None),
+            ("", None),
+        ],
+    )
     def test_get_employee_by_github_id(
         self, service: Service, github_id: str, expected_uid: str | None
     ):
@@ -107,11 +118,14 @@ class TestEmployeeFields:
 class TestSlackIDMapping:
     """Tests for bidirectional Slack ID mapping."""
 
-    @pytest.mark.parametrize("uid,slack_id", [
-        ("jsmith", "U12345678"),
-        ("adoe", "U87654321"),
-        ("bwilson", "U98765432"),
-    ])
+    @pytest.mark.parametrize(
+        "uid,slack_id",
+        [
+            ("jsmith", "U12345678"),
+            ("adoe", "U87654321"),
+            ("bwilson", "U98765432"),
+        ],
+    )
     def test_bidirectional_mapping(self, service: Service, uid: str, slack_id: str):
         """Test UID <-> Slack ID mapping consistency."""
         # Test UID -> Employee -> SlackID
@@ -131,11 +145,14 @@ class TestSlackIDMapping:
 class TestGitHubIDMapping:
     """Tests for bidirectional GitHub ID mapping."""
 
-    @pytest.mark.parametrize("uid,github_id", [
-        ("jsmith", "jsmith-dev"),
-        ("adoe", "alice-codes"),
-        ("bwilson", "bobw"),
-    ])
+    @pytest.mark.parametrize(
+        "uid,github_id",
+        [
+            ("jsmith", "jsmith-dev"),
+            ("adoe", "alice-codes"),
+            ("bwilson", "bobw"),
+        ],
+    )
     def test_bidirectional_mapping(self, service: Service, uid: str, github_id: str):
         """Test UID <-> GitHub ID mapping consistency."""
         # Test UID -> Employee -> GitHubID
@@ -204,13 +221,16 @@ class TestNewEmployeeFields:
 class TestGetManagerForEmployee:
     """Tests for manager lookup functionality."""
 
-    @pytest.mark.parametrize("uid,expected_manager_uid", [
-        ("jsmith", "adoe"),  # jsmith's manager is adoe
-        ("bwilson", None),   # bwilson has no manager
-        ("adoe", None),      # adoe has no manager
-        ("nonexistent", None),
-        ("", None),
-    ])
+    @pytest.mark.parametrize(
+        "uid,expected_manager_uid",
+        [
+            ("jsmith", "adoe"),  # jsmith's manager is adoe
+            ("bwilson", None),  # bwilson has no manager
+            ("adoe", None),  # adoe has no manager
+            ("nonexistent", None),
+            ("", None),
+        ],
+    )
     def test_get_manager_for_employee(
         self, service: Service, uid: str, expected_manager_uid: str | None
     ):
@@ -222,5 +242,3 @@ class TestGetManagerForEmployee:
         else:
             assert result is not None
             assert result.uid == expected_manager_uid
-
-

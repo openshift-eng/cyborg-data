@@ -28,14 +28,21 @@ from orgdatacore import (
 class TestGetTeamByName:
     """Tests for team lookup by name."""
 
-    @pytest.mark.parametrize("team_name,expected_found,expected_name", [
-        ("test-team", True, "test-team"),
-        ("platform-team", True, "platform-team"),
-        ("nonexistent-team", False, None),
-        ("", False, None),
-    ])
+    @pytest.mark.parametrize(
+        "team_name,expected_found,expected_name",
+        [
+            ("test-team", True, "test-team"),
+            ("platform-team", True, "platform-team"),
+            ("nonexistent-team", False, None),
+            ("", False, None),
+        ],
+    )
     def test_get_team_by_name(
-        self, service: Service, team_name: str, expected_found: bool, expected_name: str | None
+        self,
+        service: Service,
+        team_name: str,
+        expected_found: bool,
+        expected_name: str | None,
     ):
         """Test team lookup by name."""
         result = service.get_team_by_name(team_name)
@@ -50,11 +57,14 @@ class TestGetTeamByName:
 class TestGetTeamsForUID:
     """Tests for team membership lookup by UID."""
 
-    @pytest.mark.parametrize("uid,expected_teams", [
-        ("jsmith", ["test-team"]),
-        ("bwilson", ["platform-team"]),
-        ("nonexistent", []),
-    ])
+    @pytest.mark.parametrize(
+        "uid,expected_teams",
+        [
+            ("jsmith", ["test-team"]),
+            ("bwilson", ["platform-team"]),
+            ("nonexistent", []),
+        ],
+    )
     def test_get_teams_for_uid(
         self, service: Service, uid: str, expected_teams: list[str]
     ):
@@ -67,11 +77,14 @@ class TestGetTeamsForUID:
 class TestGetTeamsForSlackID:
     """Tests for team membership lookup by Slack ID."""
 
-    @pytest.mark.parametrize("slack_id,expected_teams", [
-        ("U12345678", ["test-team"]),  # jsmith
-        ("U98765432", ["platform-team"]),  # bwilson
-        ("U99999999", []),  # nonexistent
-    ])
+    @pytest.mark.parametrize(
+        "slack_id,expected_teams",
+        [
+            ("U12345678", ["test-team"]),  # jsmith
+            ("U98765432", ["platform-team"]),  # bwilson
+            ("U99999999", []),  # nonexistent
+        ],
+    )
     def test_get_teams_for_slack_id(
         self, service: Service, slack_id: str, expected_teams: list[str]
     ):
@@ -84,11 +97,14 @@ class TestGetTeamsForSlackID:
 class TestGetTeamMembers:
     """Tests for team member retrieval."""
 
-    @pytest.mark.parametrize("team_name,expected_uids", [
-        ("test-team", ["jsmith", "adoe"]),
-        ("platform-team", ["bwilson"]),
-        ("nonexistent-team", []),
-    ])
+    @pytest.mark.parametrize(
+        "team_name,expected_uids",
+        [
+            ("test-team", ["jsmith", "adoe"]),
+            ("platform-team", ["bwilson"]),
+            ("nonexistent-team", []),
+        ],
+    )
     def test_get_team_members(
         self, service: Service, team_name: str, expected_uids: list[str]
     ):
@@ -111,13 +127,16 @@ class TestGetTeamMembers:
 class TestIsEmployeeInTeam:
     """Tests for team membership checks."""
 
-    @pytest.mark.parametrize("uid,team_name,expected", [
-        ("jsmith", "test-team", True),
-        ("bwilson", "platform-team", True),
-        ("jsmith", "platform-team", False),
-        ("nonexistent", "test-team", False),
-        ("jsmith", "nonexistent-team", False),
-    ])
+    @pytest.mark.parametrize(
+        "uid,team_name,expected",
+        [
+            ("jsmith", "test-team", True),
+            ("bwilson", "platform-team", True),
+            ("jsmith", "platform-team", False),
+            ("nonexistent", "test-team", False),
+            ("jsmith", "nonexistent-team", False),
+        ],
+    )
     def test_is_employee_in_team(
         self, service: Service, uid: str, team_name: str, expected: bool
     ):
@@ -129,12 +148,15 @@ class TestIsEmployeeInTeam:
 class TestIsSlackUserInTeam:
     """Tests for Slack user team membership checks."""
 
-    @pytest.mark.parametrize("slack_id,team_name,expected", [
-        ("U12345678", "test-team", True),  # jsmith
-        ("U98765432", "platform-team", True),  # bwilson
-        ("U12345678", "platform-team", False),  # jsmith
-        ("U99999999", "test-team", False),  # nonexistent
-    ])
+    @pytest.mark.parametrize(
+        "slack_id,team_name,expected",
+        [
+            ("U12345678", "test-team", True),  # jsmith
+            ("U98765432", "platform-team", True),  # bwilson
+            ("U12345678", "platform-team", False),  # jsmith
+            ("U99999999", "test-team", False),  # nonexistent
+        ],
+    )
     def test_is_slack_user_in_team(
         self, service: Service, slack_id: str, team_name: str, expected: bool
     ):
@@ -153,12 +175,14 @@ class TestTeamMembershipConsistency:
         for member in members:
             # Each member should show up in get_teams_for_uid
             teams = service.get_teams_for_uid(member.uid)
-            assert "test-team" in teams, \
+            assert "test-team" in teams, (
                 f"Employee {member.uid} is member of test-team but get_teams_for_uid doesn't show it"
+            )
 
             # is_employee_in_team should also return True
-            assert service.is_employee_in_team(member.uid, "test-team"), \
+            assert service.is_employee_in_team(member.uid, "test-team"), (
                 f"Employee {member.uid} is member of test-team but is_employee_in_team returns False"
+            )
 
 
 class TestGroupExtendedFields:
@@ -262,5 +286,3 @@ class TestGroupExtendedFields:
         assert len(team.group.emails) == 1
         assert len(team.group.resources) == 1
         assert len(team.group.component_roles) == 1
-
-

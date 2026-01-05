@@ -298,9 +298,7 @@ class TestDataValidation:
             },
         }
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(invalid_data, f)
             temp_path = f.name
 
@@ -333,9 +331,7 @@ class TestDataValidation:
             },
         }
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(invalid_data, f)
             temp_path = f.name
 
@@ -347,4 +343,3 @@ class TestDataValidation:
             assert "membership_index" in str(exc_info.value)
         finally:
             Path(temp_path).unlink()
-
