@@ -15,4 +15,5 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # Run the parity check orchestrator
-python3 parity/run_parity_check.py
+# Use PYTHON env var if set (CI sets python3.12), otherwise default to python3
+${PYTHON:-python3} parity/run_parity_check.py
