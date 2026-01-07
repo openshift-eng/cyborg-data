@@ -43,6 +43,64 @@
 make test
 ```
 
+## Automated Parity Check
+
+The `parity/` directory contains an automated tool that verifies Go and Python implementations match.
+
+### How It Works
+
+1. **Discovery**: Parses Go's `ServiceInterface` and introspects Python's `Service` class
+2. **Name Matching**: Normalizes names (lowercase, remove underscores) to match across languages
+3. **Execution**: Runs both implementations with identical test inputs
+4. **Comparison**: Verifies outputs match exactly
+
+### Running the Parity Check
+
+```bash
+make validate-parity
+```
+
+### Naming Convention
+
+Methods are matched by normalizing names - **case and underscores are ignored**:
+
+| Go | Python | Normalized |
+|----|--------|------------|
+| `GetEmployeeByUID` | `get_employee_by_uid` | `getemployeebyuid` |
+| `GetAllEmployeeUIDs` | `get_all_employee_uids` | `getallemployeeuids` |
+| `IsSlackUserInTeam` | `is_slack_user_in_team` | `isslackuserinteam` |
+
+This means you don't need to worry about acronym casing (UID vs Uid) - just follow standard conventions for each language.
+
+### Excluded Methods
+
+Some methods are excluded from parity comparison (defined in `parity/discovery/python_introspector.py`):
+
+```python
+EXCLUDED_METHODS = {
+    # Lifecycle (exist in both, not automatically testable)
+    "load_from_data_source",
+    "start_data_source_watcher",
+    "stop_watcher",
+    "get_version",
+    "get_data_age",
+    "is_data_stale",
+    # Python-only (intentional, not a parity issue)
+    "is_healthy",
+    "is_ready",
+    "initialize",
+}
+```
+
+If you add a language-specific method, add it to `EXCLUDED_METHODS` to prevent false failures.
+
+### What the Tool Catches
+
+- Methods in Go but missing in Python
+- Methods in Python but missing in Go (unless excluded)
+- Different return values for the same inputs
+- Different error behavior
+
 ## Build Commands
 
 ```bash

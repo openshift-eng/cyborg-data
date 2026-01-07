@@ -38,8 +38,11 @@ def parse_go_interface(interface_path: Path) -> list[GoMethod]:
     interface_body = interface_match.group(1)
 
     methods = []
+    # Pattern matches: MethodName(params) [returnType]
+    # Return type is optional (some methods like StopWatcher() have no return)
+    # Use [ \t]* (horizontal whitespace only) instead of \s* to prevent matching across lines
     method_pattern = re.compile(
-        r'^\s*(\w+)\s*\(([^)]*)\)\s*(.+?)\s*$',
+        r'^[ \t]*(\w+)[ \t]*\(([^)]*)\)[ \t]*([^\n]*)$',
         re.MULTILINE
     )
 

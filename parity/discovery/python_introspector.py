@@ -16,15 +16,21 @@ class PythonMethod:
     return_type: Any
 
 
+# Methods excluded from parity comparison.
+# Two categories:
+# 1. Lifecycle methods - exist in both languages but can't be tested automatically
+# 2. Language-specific methods - intentionally only in one language
 EXCLUDED_METHODS = {
+    # Lifecycle (exist in both, not testable)
     "load_from_data_source",
     "start_data_source_watcher",
     "stop_watcher",
-    "is_healthy",
-    "is_ready",
     "get_version",
     "get_data_age",
     "is_data_stale",
+    # Python-only (intentional, not a parity issue)
+    "is_healthy",
+    "is_ready",
     "initialize",
 }
 
@@ -45,7 +51,7 @@ def introspect_python_service(python_root: Path | None = None) -> list[PythonMet
 
     methods = []
     for name in dir(Service):
-        if name.startswith('_') or name in EXCLUDED_METHODS:
+        if name.startswith('_'):
             continue
 
         attr = getattr(Service, name)

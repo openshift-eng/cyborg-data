@@ -847,6 +847,7 @@ class Service:
                 return []
             return list(self._data.lookups.teams.keys())
 
+
     def get_all_org_names(self) -> list[str]:
         """Get all organization names in the system."""
         with self._lock:
