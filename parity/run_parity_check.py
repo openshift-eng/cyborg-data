@@ -22,7 +22,7 @@ REPO_ROOT = PARITY_ROOT.parent
 sys.path.insert(0, str(PARITY_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
-from discovery import go_to_python, parse_go_interface, python_to_go  # noqa: E402
+from discovery import normalize, parse_go_interface  # noqa: E402
 from discovery.python_introspector import (  # noqa: E402
     EXCLUDED_METHODS,
     introspect_python_service,
@@ -52,41 +52,62 @@ def main() -> int:
 
     print(f"  Found {len(go_methods)} Go methods")
     print(f"  Found {len(python_methods)} Python methods")
-    print(f"  Excluded from testing: {len(EXCLUDED_METHODS)} (lifecycle/time-dependent)")
     print()
 
     print("Step 2: Checking method parity...")
-    go_method_names = {m.name for m in go_methods}
-    python_method_names = {m.name for m in python_methods}
+    # Build maps from normalized name -> original name
+    # Exclude lifecycle/time-dependent methods from both sides
+    excluded_normalized = {normalize(name) for name in EXCLUDED_METHODS}
 
-    excluded_go_names = {python_to_go(name) for name in EXCLUDED_METHODS}
-    testable_go_names = go_method_names - excluded_go_names
-    expected_python_names = {go_to_python(name) for name in testable_go_names}
-    expected_go_names = {python_to_go(name) for name in python_method_names}
-    missing_in_python = testable_go_names - expected_go_names
+    go_by_normalized: dict[str, str] = {}
+    for m in go_methods:
+        norm = normalize(m.name)
+        if norm not in excluded_normalized:
+            go_by_normalized[norm] = m.name
+
+    python_by_normalized: dict[str, str] = {}
+    for m in python_methods:
+        norm = normalize(m.name)
+        if norm not in excluded_normalized:
+            python_by_normalized[norm] = m.name
+
+    go_testable = len(go_by_normalized)
+    py_testable = len(python_by_normalized)
+    print(f"  Comparable methods: {go_testable} Go, {py_testable} Python")
+
+    # Find mismatches
+    go_only = set(go_by_normalized.keys()) - set(python_by_normalized.keys())
+    python_only = set(python_by_normalized.keys()) - set(go_by_normalized.keys())
 
     parity_issues = []
-    for go_name in sorted(missing_in_python):
-        py_name = go_to_python(go_name)
-        parity_issues.append(f"  - Missing in Python: {py_name} (Go: {go_name})")
+    for norm in sorted(go_only):
+        go_name = go_by_normalized[norm]
+        parity_issues.append(f"  - Missing in Python: {go_name}")
+
+    for norm in sorted(python_only):
+        py_name = python_by_normalized[norm]
+        parity_issues.append(f"  - Missing in Go: {py_name}")
 
     if parity_issues:
-        print("WARNING: Method parity issues:")
+        print("PARITY FAILURE: Method parity issues detected:")
         for issue in parity_issues:
             print(issue)
         print()
+        return 1
 
     print("Step 3: Generating test inputs...")
     catalog = load_catalog(test_data_path)
     generator = TestInputGenerator(catalog)
 
+    # Match Go and Python methods by normalized name
+    go_methods_by_name = {m.name: m for m in go_methods}
     python_methods_by_name = {m.name: m for m in python_methods}
 
     testable_methods = []
-    for go_method in go_methods:
-        python_name = go_to_python(go_method.name)
-        if python_name in python_methods_by_name:
-            testable_methods.append((go_method, python_methods_by_name[python_name]))
+    for norm, go_name in go_by_normalized.items():
+        if norm in python_by_normalized:
+            py_name = python_by_normalized[norm]
+            testable_methods.append((go_methods_by_name[go_name], python_methods_by_name[py_name]))
 
     print(f"  Testable methods: {len(testable_methods)}")
     print()
