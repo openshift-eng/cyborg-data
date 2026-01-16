@@ -119,7 +119,7 @@ def _parse_jira_info(data: dict[str, Any]) -> JiraInfo:
 def _parse_repo_info(data: dict[str, Any]) -> RepoInfo:
     """Parse a RepoInfo from a dictionary."""
     return RepoInfo(
-        repo=data.get("repo", ""),
+        repo=data.get("repo_name", ""),
         description=data.get("description", ""),
         tags=tuple(data.get("tags", [])),
         path=data.get("path", ""),

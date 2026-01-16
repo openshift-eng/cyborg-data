@@ -55,7 +55,7 @@ type JiraInfo struct {
 
 // RepoInfo represents GitHub repository configuration
 type RepoInfo struct {
-	Repo        string   `json:"repo,omitempty"`
+	Repo        string   `json:"repo_name,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	Path        string   `json:"path,omitempty"`
