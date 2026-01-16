@@ -340,7 +340,7 @@ def _group_to_dict(group: Group) -> dict[str, Any]:
     if group.repos:
         d["repos"] = [
             {
-                "repo": r.repo,
+                "repo_name": r.repo,
                 "description": r.description,
                 "tags": list(r.tags),
                 "path": r.path,
