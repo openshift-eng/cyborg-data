@@ -59,6 +59,7 @@ def _parse_employee(data: dict[str, Any]) -> Employee:
         cost_center=data.get("cost_center", 0),
         manager_uid=data.get("manager_uid", ""),
         is_people_manager=data.get("is_people_manager", False),
+        timezone=data.get("timezone", ""),
     )
 
 
@@ -101,7 +102,8 @@ def _parse_role_info(data: dict[str, Any]) -> RoleInfo:
     """Parse a RoleInfo from a dictionary."""
     return RoleInfo(
         people=tuple(data.get("people", [])),
-        types=tuple(data.get("types", [])),
+        roles=tuple(data.get("roles", [])),
+        description=data.get("description", ""),
     )
 
 
@@ -163,7 +165,7 @@ def _parse_group(data: dict[str, Any] | None) -> Group:
         type=_parse_group_type(data.get("type")),
         resolved_people_uid_list=tuple(data.get("resolved_people_uid_list", [])),
         slack=_parse_slack_config(data.get("slack")),
-        roles=tuple(_parse_role_info(r) for r in data.get("roles", [])),
+        roles=tuple(_parse_role_info(r) for r in data.get("resolved_roles", [])),
         jiras=tuple(_parse_jira_info(j) for j in data.get("jiras", [])),
         repos=tuple(_parse_repo_info(r) for r in data.get("repos", [])),
         keywords=tuple(data.get("keywords", [])),
@@ -254,16 +256,38 @@ def _parse_jira_owner_info(data: dict[str, Any]) -> JiraOwnerInfo:
 
 
 def _parse_component(data: dict[str, Any]) -> Component:
-    """Parse a Component from a dictionary."""
+    """Parse a Component from a dictionary.
+
+    Supports both flat and nested formats. The indexer writes type/repos/jiras
+    under a nested "component" key; this reads top-level fields first, then
+    merges from nested if present.
+    """
+    nested = data.get("component", {})
+
+    # Type: flat is a string, nested is an object {"name": "..."}
+    comp_type = data.get("type", "")
+    if not comp_type and nested:
+        type_val = nested.get("type")
+        if isinstance(type_val, dict):
+            comp_type = type_val.get("name", "")
+        elif isinstance(type_val, str):
+            comp_type = type_val
+
+    repos_raw = data.get("repos") or (nested.get("repos") if nested else []) or []
+    jiras_raw = data.get("jiras") or (nested.get("jiras") if nested else []) or []
+    repos_list_raw = (
+        data.get("repos_list") or (nested.get("repos_list") if nested else []) or []
+    )
+
     return Component(
         name=data.get("name", ""),
-        type=data.get("type", ""),
+        type=comp_type,
         description=data.get("description", ""),
         parent=_parse_parent_info(data.get("parent")),
         parent_path=data.get("parent_path", ""),
-        repos=tuple(_parse_repo_info(r) for r in data.get("repos", [])),
-        jiras=tuple(_parse_jira_info(j) for j in data.get("jiras", [])),
-        repos_list=tuple(data.get("repos_list", [])),
+        repos=tuple(_parse_repo_info(r) for r in repos_raw),
+        jiras=tuple(_parse_jira_info(j) for j in jiras_raw),
+        repos_list=tuple(repos_list_raw),
     )
 
 

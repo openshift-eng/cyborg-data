@@ -222,7 +222,7 @@ class TestGroupExtendedFields:
                             roles=(
                                 RoleInfo(
                                     people=("manager1",),
-                                    types=("manager",),
+                                    roles=("manager",),
                                 ),
                             ),
                             jiras=(

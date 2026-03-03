@@ -1,6 +1,7 @@
 package orgdatacore
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type Employee struct {
 	CostCenter      int    `json:"cost_center,omitempty"`
 	ManagerUID      string `json:"manager_uid,omitempty"`
 	IsPeopleManager bool   `json:"is_people_manager,omitempty"`
+	Timezone        string `json:"timezone,omitempty"`
 }
 
 // SlackConfig contains Slack channel and alias configuration
@@ -40,8 +42,9 @@ type AliasInfo struct {
 
 // RoleInfo represents a role assignment with associated people
 type RoleInfo struct {
-	People []string `json:"people"`
-	Types  []string `json:"types"`
+	People      []string `json:"people"`
+	Roles       []string `json:"roles"`
+	Description string   `json:"description,omitempty"`
 }
 
 // JiraInfo represents Jira project/component configuration
@@ -106,7 +109,7 @@ type Group struct {
 	Type                  GroupType           `json:"type"`
 	ResolvedPeopleUIDList []string            `json:"resolved_people_uid_list"`
 	Slack                 *SlackConfig        `json:"slack,omitempty"`
-	Roles                 []RoleInfo          `json:"roles,omitempty"`
+	Roles                 []RoleInfo          `json:"resolved_roles,omitempty"`
 	Jiras                 []JiraInfo          `json:"jiras,omitempty"`
 	Repos                 []RepoInfo          `json:"repos,omitempty"`
 	Keywords              []string            `json:"keywords,omitempty"`
@@ -189,6 +192,63 @@ type Component struct {
 	Repos       []RepoInfo  `json:"repos,omitempty"`
 	Jiras       []JiraInfo  `json:"jiras,omitempty"`
 	ReposList   []string    `json:"repos_list,omitempty"`
+}
+
+// UnmarshalJSON supports both flat and nested component formats.
+// The indexer writes type/repos/jiras under a nested "component" key;
+// this method reads top-level fields first, then merges from the nested
+// object if present (filling in any fields not already set).
+func (c *Component) UnmarshalJSON(data []byte) error {
+	type Alias Component
+	aux := &struct {
+		*Alias
+		Nested json.RawMessage `json:"component,omitempty"`
+	}{
+		Alias: (*Alias)(c),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if len(aux.Nested) > 0 {
+		var nested struct {
+			Type      json.RawMessage `json:"type,omitempty"`
+			Repos     []RepoInfo      `json:"repos,omitempty"`
+			Jiras     []JiraInfo      `json:"jiras,omitempty"`
+			ReposList []string        `json:"repos_list,omitempty"`
+		}
+		if err := json.Unmarshal(aux.Nested, &nested); err != nil {
+			return err
+		}
+
+		if len(nested.Type) > 0 && c.Type == "" {
+			// Try object form: {"name": "team", ...}
+			var typeName struct {
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(nested.Type, &typeName); err == nil && typeName.Name != "" {
+				c.Type = typeName.Name
+			} else {
+				// Try string form: "team"
+				var typeStr string
+				if err := json.Unmarshal(nested.Type, &typeStr); err == nil && typeStr != "" {
+					c.Type = typeStr
+				}
+			}
+		}
+		if len(nested.Repos) > 0 && len(c.Repos) == 0 {
+			c.Repos = nested.Repos
+		}
+		if len(nested.Jiras) > 0 && len(c.Jiras) == 0 {
+			c.Jiras = nested.Jiras
+		}
+		if len(nested.ReposList) > 0 && len(c.ReposList) == 0 {
+			c.ReposList = nested.ReposList
+		}
+	}
+
+	return nil
 }
 
 // Indexes contains pre-computed lookup tables
