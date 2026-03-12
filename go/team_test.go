@@ -361,7 +361,7 @@ func TestGroupExtendedFields(t *testing.T) {
 						Roles: []RoleInfo{
 							{
 								People: []string{"manager1"},
-								Types:  []string{"manager"},
+								Roles:  []string{"manager"},
 							},
 						},
 						Jiras: []JiraInfo{

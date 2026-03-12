@@ -25,6 +25,7 @@ func TestGetEmployeeByUID(t *testing.T) {
 				SlackUID:   "U12345678",
 				GitHubID:   "jsmith-dev",
 				ManagerUID: "adoe",
+				Timezone:   "America/New_York",
 			},
 		},
 		{
@@ -38,6 +39,7 @@ func TestGetEmployeeByUID(t *testing.T) {
 				SlackUID:        "U87654321",
 				GitHubID:        "alice-codes",
 				IsPeopleManager: true,
+				Timezone:        "America/Los_Angeles",
 			},
 		},
 		{
@@ -82,6 +84,7 @@ func TestGetEmployeeBySlackID(t *testing.T) {
 				SlackUID:   "U12345678",
 				GitHubID:   "jsmith-dev",
 				ManagerUID: "adoe",
+				Timezone:   "America/New_York",
 			},
 		},
 		{
@@ -94,6 +97,7 @@ func TestGetEmployeeBySlackID(t *testing.T) {
 				JobTitle: "Senior Engineer",
 				SlackUID: "U98765432",
 				GitHubID: "bobw",
+				Timezone: "Europe/London",
 			},
 		},
 		{
@@ -138,6 +142,7 @@ func TestGetEmployeeByGitHubID(t *testing.T) {
 				SlackUID:   "U12345678",
 				GitHubID:   "jsmith-dev",
 				ManagerUID: "adoe",
+				Timezone:   "America/New_York",
 			},
 		},
 		{
@@ -150,6 +155,7 @@ func TestGetEmployeeByGitHubID(t *testing.T) {
 				JobTitle: "Senior Engineer",
 				SlackUID: "U98765432",
 				GitHubID: "bobw",
+				Timezone: "Europe/London",
 			},
 		},
 		{
@@ -350,6 +356,7 @@ func TestGetManagerForEmployee(t *testing.T) {
 				SlackUID:        "U87654321",
 				GitHubID:        "alice-codes",
 				IsPeopleManager: true,
+				Timezone:        "America/Los_Angeles",
 			},
 		},
 		{
@@ -404,6 +411,7 @@ func TestGetEmployeeByEmail(t *testing.T) {
 				SlackUID:   "U12345678",
 				GitHubID:   "jsmith-dev",
 				ManagerUID: "adoe",
+				Timezone:   "America/New_York",
 			},
 		},
 		{
@@ -417,6 +425,7 @@ func TestGetEmployeeByEmail(t *testing.T) {
 				SlackUID:        "U87654321",
 				GitHubID:        "alice-codes",
 				IsPeopleManager: true,
+				Timezone:        "America/Los_Angeles",
 			},
 		},
 		{
@@ -430,6 +439,7 @@ func TestGetEmployeeByEmail(t *testing.T) {
 				SlackUID:   "U12345678",
 				GitHubID:   "jsmith-dev",
 				ManagerUID: "adoe",
+				Timezone:   "America/New_York",
 			},
 		},
 		{

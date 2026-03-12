@@ -7,6 +7,14 @@ from enum import StrEnum
 from typing import BinaryIO, Protocol
 
 
+class PIIMode(StrEnum):
+    """Controls PII visibility in organizational data."""
+
+    FULL = "full"
+    REDACTED = "redacted"
+    ANONYMIZED = "anonymized"
+
+
 class MembershipType(StrEnum):
     """Membership types for organizational hierarchy."""
 
@@ -68,6 +76,7 @@ class Employee:
     cost_center: int = 0
     manager_uid: str = ""
     is_people_manager: bool = False
+    timezone: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +110,8 @@ class RoleInfo:
     """Represents a role assignment with associated people."""
 
     people: tuple[str, ...] = ()
-    types: tuple[str, ...] = ()
+    roles: tuple[str, ...] = ()
+    description: str = ""
 
 
 @dataclass(frozen=True, slots=True)

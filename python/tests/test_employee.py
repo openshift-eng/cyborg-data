@@ -21,6 +21,7 @@ class TestGetEmployeeByUID:
                     slack_uid="U12345678",
                     github_id="jsmith-dev",
                     manager_uid="adoe",
+                    timezone="America/New_York",
                 ),
             ),
             (
@@ -33,6 +34,7 @@ class TestGetEmployeeByUID:
                     slack_uid="U87654321",
                     github_id="alice-codes",
                     is_people_manager=True,
+                    timezone="America/Los_Angeles",
                 ),
             ),
             ("nonexistent", None),
