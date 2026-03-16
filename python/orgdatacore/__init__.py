@@ -6,7 +6,7 @@ access to organizational data including employees, teams, organizations,
 pillars, and team groups.
 
 Example with GCS:
-    from orgdatacore import Service, GCSConfig, GCSDataSourceWithSDK
+    from orgdatacore import Service, GCSConfig, GCSDataSource
     from datetime import timedelta
 
     config = GCSConfig(
@@ -15,7 +15,7 @@ Example with GCS:
         project_id="your-project",
         check_interval=timedelta(minutes=5),
     )
-    source = GCSDataSourceWithSDK(config)
+    source = GCSDataSource(config)
 
     service = Service()
     service.load_from_data_source(source)
@@ -31,7 +31,7 @@ Example with custom DataSource:
 """
 
 from ._anonymization import AnonymizingDataSource, AsyncAnonymizingDataSource
-from ._async import AsyncService
+from ._async import AsyncGCSDataSource, AsyncService
 from ._exceptions import (
     ConfigurationError,
     DataLoadError,
@@ -41,17 +41,21 @@ from ._exceptions import (
 )
 from ._gcs import GCSDataSource
 from ._log import configure_default_logging, get_logger, set_logger
-from ._redaction import RedactingDataSource
+from ._redaction import AsyncRedactingDataSource, RedactingDataSource
 from ._service import Service
 from ._types import (
     AliasInfo,
     ChannelInfo,
-    ComponentRoleInfo,
+    Component,
+    ComponentOwnerInfo,
+    ComponentOwnership,
+    ComponentOwnershipIndex,
     Data,
     DataSource,
     DataVersion,
     EmailInfo,
     Employee,
+    EscalationContactInfo,
     GCSConfig,
     GitHubIDMappings,
     Group,
@@ -89,16 +93,10 @@ from ._version import (
     get_version_dict,
 )
 
-try:
-    from ._async import AsyncGCSDataSource
-    from ._gcs import GCSDataSourceWithSDK
-except ImportError:
-    GCSDataSourceWithSDK = None  # type: ignore[misc, assignment]
-    AsyncGCSDataSource = None  # type: ignore[misc, assignment]
-
 __all__ = [
     "AnonymizingDataSource",
     "AsyncAnonymizingDataSource",
+    "AsyncRedactingDataSource",
     "Employee",
     "Team",
     "Org",
@@ -126,8 +124,12 @@ __all__ = [
     "JiraInfo",
     "RepoInfo",
     "EmailInfo",
+    "EscalationContactInfo",
     "ResourceInfo",
-    "ComponentRoleInfo",
+    "Component",
+    "ComponentOwnerInfo",
+    "ComponentOwnership",
+    "ComponentOwnershipIndex",
     "OrgInfo",
     "DataVersion",
     "GCSConfig",
@@ -139,7 +141,6 @@ __all__ = [
     "Service",
     "AsyncService",
     "GCSDataSource",
-    "GCSDataSourceWithSDK",
     "AsyncGCSDataSource",
     "OrgDataError",
     "DataLoadError",

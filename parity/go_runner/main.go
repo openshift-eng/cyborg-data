@@ -196,6 +196,12 @@ var methodParamNames = map[string][]string{
 	"GetJiraComponents":      {"project"},
 	"GetTeamsByJiraProject":  {"project"},
 	"GetJiraOwnershipForTeam": {"team_name"},
+	"GetUserMemberships":     {"uid"},
+	"GetUserTeams":           {"uid"},
+	"GetOrgMembers":          {"org_name"},
+	"GetTeamEscalation":      {"team_name"},
+	"GetTeamsForComponent":   {"component_name"},
+	"GetComponentsForTeam":   {"team_name"},
 	"IsEmployeeInTeam":       {"uid", "team_name"},
 	"IsSlackUserInTeam":      {"slack_id", "team_name"},
 	"IsEmployeeInOrg":        {"uid", "org_name"},
@@ -316,6 +322,22 @@ func serializeOutput(output interface{}) interface{} {
 		return serializeJiraOwnerList(val)
 	case []orgdatacore.JiraOwnership:
 		return serializeJiraOwnershipList(val)
+	case []orgdatacore.Team:
+		return serializeTeamList(val)
+	case []orgdatacore.Org:
+		return serializeOrgList(val)
+	case []orgdatacore.Pillar:
+		return serializePillarList(val)
+	case []orgdatacore.TeamGroup:
+		return serializeTeamGroupList(val)
+	case []orgdatacore.MembershipInfo:
+		return serializeMembershipInfoList(val)
+	case []orgdatacore.EscalationContactInfo:
+		return serializeEscalationList(val)
+	case []orgdatacore.ComponentOwnerInfo:
+		return serializeComponentOwnerInfoList(val)
+	case []orgdatacore.ComponentOwnership:
+		return serializeComponentOwnershipList(val)
 	default:
 		return output
 	}
@@ -495,6 +517,128 @@ func serializeJiraOwnershipList(ownerships []orgdatacore.JiraOwnership) interfac
 		if result[i]["project"].(string) != result[j]["project"].(string) {
 			return result[i]["project"].(string) < result[j]["project"].(string)
 		}
+		return result[i]["component"].(string) < result[j]["component"].(string)
+	})
+	return result
+}
+
+func serializeTeamList(teams []orgdatacore.Team) interface{} {
+	result := make([]map[string]interface{}, len(teams))
+	for i, team := range teams {
+		result[i] = map[string]interface{}{
+			"uid":         team.UID,
+			"name":        team.Name,
+			"description": team.Description,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i]["name"].(string) < result[j]["name"].(string)
+	})
+	return result
+}
+
+func serializeOrgList(orgs []orgdatacore.Org) interface{} {
+	result := make([]map[string]interface{}, len(orgs))
+	for i, org := range orgs {
+		result[i] = map[string]interface{}{
+			"uid":         org.UID,
+			"name":        org.Name,
+			"description": org.Description,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i]["name"].(string) < result[j]["name"].(string)
+	})
+	return result
+}
+
+func serializePillarList(pillars []orgdatacore.Pillar) interface{} {
+	result := make([]map[string]interface{}, len(pillars))
+	for i, pillar := range pillars {
+		result[i] = map[string]interface{}{
+			"uid":         pillar.UID,
+			"name":        pillar.Name,
+			"description": pillar.Description,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i]["name"].(string) < result[j]["name"].(string)
+	})
+	return result
+}
+
+func serializeTeamGroupList(tgs []orgdatacore.TeamGroup) interface{} {
+	result := make([]map[string]interface{}, len(tgs))
+	for i, tg := range tgs {
+		result[i] = map[string]interface{}{
+			"uid":         tg.UID,
+			"name":        tg.Name,
+			"description": tg.Description,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i]["name"].(string) < result[j]["name"].(string)
+	})
+	return result
+}
+
+func serializeMembershipInfoList(infos []orgdatacore.MembershipInfo) interface{} {
+	result := make([]map[string]interface{}, len(infos))
+	for i, info := range infos {
+		result[i] = map[string]interface{}{
+			"name": info.Name,
+			"type": info.Type,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i]["name"].(string) != result[j]["name"].(string) {
+			return result[i]["name"].(string) < result[j]["name"].(string)
+		}
+		return result[i]["type"].(string) < result[j]["type"].(string)
+	})
+	return result
+}
+
+func serializeEscalationList(contacts []orgdatacore.EscalationContactInfo) interface{} {
+	result := make([]map[string]interface{}, len(contacts))
+	for i, contact := range contacts {
+		result[i] = map[string]interface{}{
+			"name":        contact.Name,
+			"url":         contact.URL,
+			"description": contact.Description,
+		}
+	}
+	// Escalation order matters (it's priority order), so don't sort
+	return result
+}
+
+func serializeComponentOwnerInfoList(owners []orgdatacore.ComponentOwnerInfo) interface{} {
+	result := make([]map[string]interface{}, len(owners))
+	for i, owner := range owners {
+		result[i] = map[string]interface{}{
+			"name":            owner.Name,
+			"type":            owner.Type,
+			"ownership_types": owner.OwnershipTypes,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i]["name"].(string) != result[j]["name"].(string) {
+			return result[i]["name"].(string) < result[j]["name"].(string)
+		}
+		return result[i]["type"].(string) < result[j]["type"].(string)
+	})
+	return result
+}
+
+func serializeComponentOwnershipList(ownerships []orgdatacore.ComponentOwnership) interface{} {
+	result := make([]map[string]interface{}, len(ownerships))
+	for i, ownership := range ownerships {
+		result[i] = map[string]interface{}{
+			"component":      ownership.Component,
+			"ownership_types": ownership.OwnershipTypes,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
 		return result[i]["component"].(string) < result[j]["component"].(string)
 	})
 	return result

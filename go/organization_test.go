@@ -52,6 +52,40 @@ func TestGetOrgByName(t *testing.T) {
 	}
 }
 
+// TestGetOrgMembers tests organization member retrieval
+func TestGetOrgMembers(t *testing.T) {
+	service := setupTestService(t)
+
+	// test-org has 3 members: jsmith, adoe, bwilson
+	members := service.GetOrgMembers("test-org")
+	if len(members) != 3 {
+		t.Errorf("GetOrgMembers(\"test-org\") returned %d members, expected 3", len(members))
+	}
+
+	// platform-org has 1 member: bwilson
+	members2 := service.GetOrgMembers("platform-org")
+	if len(members2) != 1 {
+		t.Errorf("GetOrgMembers(\"platform-org\") returned %d members, expected 1", len(members2))
+	}
+	if len(members2) > 0 && members2[0].UID != "bwilson" {
+		t.Errorf("GetOrgMembers(\"platform-org\")[0].UID = %q, expected \"bwilson\"", members2[0].UID)
+	}
+
+	// nonexistent org
+	none := service.GetOrgMembers("nonexistent")
+	if len(none) != 0 {
+		t.Errorf("GetOrgMembers(\"nonexistent\") returned %d members, expected 0", len(none))
+	}
+}
+
+func TestGetOrgMembers_EmptyService(t *testing.T) {
+	service := NewService()
+	result := service.GetOrgMembers("test-org")
+	if len(result) != 0 {
+		t.Errorf("Expected 0 members from empty service, got %d", len(result))
+	}
+}
+
 // TestIsEmployeeInOrg tests organization membership checks
 func TestIsEmployeeInOrg(t *testing.T) {
 	service := setupTestService(t)

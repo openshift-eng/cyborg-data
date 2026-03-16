@@ -29,9 +29,12 @@ from ._log import get_logger
 from ._service import parse_data
 from ._types import (
     Component,
+    ComponentOwnerInfo,
+    ComponentOwnership,
     Data,
     DataVersion,
     Employee,
+    EscalationContactInfo,
     GCSConfig,
     HierarchyNode,
     HierarchyPathEntry,
@@ -336,40 +339,58 @@ class AsyncService:
                 return self._data.lookups.employees.get(uid)
             return None
 
-    async def get_team_by_name(self, name: str) -> Team | None:
+    async def get_team_by_name(self, team_name: str) -> Team | None:
         """Get a team by name."""
         async with self._lock:
             if self._data is None:
                 return None
-            return self._data.lookups.teams.get(name)
+            return self._data.lookups.teams.get(team_name)
 
-    async def get_org_by_name(self, name: str) -> Org | None:
+    async def get_team_escalation(self, team_name: str) -> list[EscalationContactInfo]:
+        """Get the escalation contacts for a team.
+
+        Args:
+            team_name: The team name to look up.
+
+        Returns:
+            Ordered list of escalation contacts, or empty list if team
+            not found or has no escalation data.
+        """
+        async with self._lock:
+            if self._data is None or not self._data.lookups.teams:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if team is None:
+                return []
+            return list(team.group.escalation)
+
+    async def get_org_by_name(self, org_name: str) -> Org | None:
         """Get an organization by name."""
         async with self._lock:
             if self._data is None:
                 return None
-            return self._data.lookups.orgs.get(name)
+            return self._data.lookups.orgs.get(org_name)
 
-    async def get_pillar_by_name(self, name: str) -> Pillar | None:
+    async def get_pillar_by_name(self, pillar_name: str) -> Pillar | None:
         """Get a pillar by name."""
         async with self._lock:
             if self._data is None:
                 return None
-            return self._data.lookups.pillars.get(name)
+            return self._data.lookups.pillars.get(pillar_name)
 
-    async def get_team_group_by_name(self, name: str) -> TeamGroup | None:
+    async def get_team_group_by_name(self, team_group_name: str) -> TeamGroup | None:
         """Get a team group by name."""
         async with self._lock:
             if self._data is None:
                 return None
-            return self._data.lookups.team_groups.get(name)
+            return self._data.lookups.team_groups.get(team_group_name)
 
-    async def get_component_by_name(self, name: str) -> Component | None:
+    async def get_component_by_name(self, component_name: str) -> Component | None:
         """Get a component by name."""
         async with self._lock:
             if self._data is None:
                 return None
-            return self._data.lookups.components.get(name)
+            return self._data.lookups.components.get(component_name)
 
     async def get_user_memberships(self, uid: str) -> list[MembershipInfo]:
         """Get all memberships for a user."""
@@ -579,10 +600,16 @@ class AsyncService:
 
             return build_node(entity_name, entity_type, set())
 
-    async def get_user_organizations(self, uid: str) -> list[OrgInfo]:
-        """Get organization info for a user."""
+    async def get_user_organizations(self, slack_user_id: str) -> list[OrgInfo]:
+        """Get the complete organizational hierarchy a Slack user belongs to."""
         async with self._lock:
-            if self._data is None:
+            if self._data is None or not self._data.indexes.membership.membership_index:
+                return []
+
+            uid = self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(
+                slack_user_id, ""
+            )
+            if not uid:
                 return []
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
@@ -660,6 +687,68 @@ class AsyncService:
             if self._data is None:
                 return []
             return list(self._data.lookups.components.values())
+
+    async def get_all_component_names(self) -> list[str]:
+        """Get all component names."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            return list(self._data.lookups.components.keys())
+
+    async def get_teams_for_component(
+        self, component_name: str
+    ) -> list[ComponentOwnerInfo]:
+        """Get all teams/entities that own a component.
+
+        Args:
+            component_name: Component name to look up
+
+        Returns:
+            List of owner entities with ownership types.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            owners = self._data.indexes.component_ownership.component_owners.get(
+                component_name, ()
+            )
+            return list(owners)
+
+    async def get_components_for_team(self, team_name: str) -> list[ComponentOwnership]:
+        """Get all components owned by a team.
+
+        Uses the team's component_roles list for O(1) team lookup, then
+        resolves ownership types from the component_ownership index.
+
+        Args:
+            team_name: Team name to look up
+
+        Returns:
+            List of ComponentOwnership with component name and ownership types.
+        """
+        async with self._lock:
+            if self._data is None:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if not team:
+                return []
+            result: list[ComponentOwnership] = []
+            for cr in team.group.component_roles:
+                ownership_types: tuple[str, ...] = ()
+                owners = self._data.indexes.component_ownership.component_owners.get(
+                    cr, ()
+                )
+                for owner in owners:
+                    if owner.name == team_name:
+                        ownership_types = owner.ownership_types
+                        break
+                result.append(
+                    ComponentOwnership(
+                        component=cr,
+                        ownership_types=ownership_types,
+                    )
+                )
+            return result
 
     async def get_all_team_names(self) -> list[str]:
         """Get all team names."""
@@ -863,180 +952,190 @@ async def _async_retry_with_backoff(
 
 
 try:
-    from google.cloud import storage  # type: ignore[import-untyped]
+    from google.cloud import storage
 
-    class AsyncGCSDataSource:
-        """Async GCS data source using google-cloud-storage.
+    _HAS_GCS = True
+except ImportError:
+    _HAS_GCS = False
 
-        Wraps sync GCS operations in asyncio.to_thread for non-blocking I/O.
 
-        Example:
-            config = GCSConfig(
-                bucket="my-bucket",
-                object_path="data.json",
-                project_id="my-project",
-            )
-            source = AsyncGCSDataSource(config)
-            service = AsyncService()
-            await service.load_from_data_source(source)
+class AsyncGCSDataSource:
+    """Async GCS data source using google-cloud-storage.
+
+    Wraps sync GCS operations in asyncio.to_thread for non-blocking I/O.
+
+    Requires the google-cloud-storage package:
+        pip install orgdatacore[gcs]
+
+    Example:
+        config = GCSConfig(
+            bucket="my-bucket",
+            object_path="data.json",
+            project_id="my-project",
+        )
+        source = AsyncGCSDataSource(config)
+        service = AsyncService()
+        await service.load_from_data_source(source)
+    """
+
+    def __init__(
+        self,
+        config: GCSConfig,
+        *,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_delay: float = DEFAULT_RETRY_DELAY,
+        retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+    ) -> None:
+        """Create an async GCS data source.
+
+        Args:
+            config: GCS configuration.
+            max_retries: Maximum retry attempts for transient failures.
+            retry_delay: Initial delay between retries in seconds.
+            retry_backoff: Multiplier for delay after each retry.
+
+        Raises:
+            ImportError: If google-cloud-storage is not installed.
+            ConfigurationError: If configuration is invalid.
         """
+        if not _HAS_GCS:
+            raise ImportError(
+                "google-cloud-storage is required for GCS support. "
+                "Install it with: pip install orgdatacore[gcs]"
+            )
+        if not config.bucket:
+            raise ConfigurationError("GCS bucket is required")
+        if not config.object_path:
+            raise ConfigurationError("GCS object_path is required")
 
-        def __init__(
-            self,
-            config: GCSConfig,
-            *,
-            max_retries: int = DEFAULT_MAX_RETRIES,
-            retry_delay: float = DEFAULT_RETRY_DELAY,
-            retry_backoff: float = DEFAULT_RETRY_BACKOFF,
-        ) -> None:
-            """Create an async GCS data source.
+        self.config = config
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.retry_backoff = retry_backoff
+        self._client: Any = None
 
-            Args:
-                config: GCS configuration.
-                max_retries: Maximum retry attempts for transient failures.
-                retry_delay: Initial delay between retries in seconds.
-                retry_backoff: Multiplier for delay after each retry.
-
-            Raises:
-                ConfigurationError: If configuration is invalid.
-            """
-            if not config.bucket:
-                raise ConfigurationError("GCS bucket is required")
-            if not config.object_path:
-                raise ConfigurationError("GCS object_path is required")
-
-            self.config = config
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.retry_backoff = retry_backoff
-            self._client: storage.Client | None = None
-
-        def _get_client(self) -> storage.Client:
-            """Get or create the GCS client (sync)."""
-            if self._client is None:
-                logger = get_logger()
-                logger.debug(
-                    "Creating GCS client", extra={"project_id": self.config.project_id}
-                )
-
-                if self.config.credentials_json:
-                    self._client = storage.Client.from_service_account_json(
-                        self.config.credentials_json
-                    )
-                else:
-                    self._client = storage.Client(
-                        project=self.config.project_id or None
-                    )
-            return self._client
-
-        async def load(self) -> BinaryIO:
-            """Load data from GCS asynchronously.
-
-            Returns:
-                File-like object containing the JSON data.
-
-            Raises:
-                GCSError: If loading fails after all retries.
-            """
+    def _get_client(self) -> Any:
+        """Get or create the GCS client (sync)."""
+        if self._client is None:
             logger = get_logger()
             logger.debug(
-                "Loading from GCS (async)",
-                extra={"bucket": self.config.bucket, "object": self.config.object_path},
+                "Creating GCS client", extra={"project_id": self.config.project_id}
             )
 
-            async def _download() -> BinaryIO:
-                def _sync_download() -> BinaryIO:
-                    client = self._get_client()
-                    bucket = client.bucket(self.config.bucket)
-                    blob = bucket.blob(self.config.object_path)
-                    return BytesIO(blob.download_as_bytes())
+            if self.config.credentials_json:
+                import json as _json
 
-                return await asyncio.to_thread(_sync_download)
+                creds_info = _json.loads(self.config.credentials_json)
+                self._client = storage.Client.from_service_account_info(creds_info)
+            else:
+                self._client = storage.Client(project=self.config.project_id or None)
+        return self._client
 
-            return await _async_retry_with_backoff(
-                _download,
-                max_retries=self.max_retries,
-                initial_delay=self.retry_delay,
-                backoff=self.retry_backoff,
-                operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
-            )
+    async def load(self) -> BinaryIO:
+        """Load data from GCS asynchronously.
 
-        async def watch(
-            self, callback: Callable[[], Awaitable[Exception | None]]
-        ) -> Exception | None:
-            """Monitor for changes and call async callback when data is updated.
+        Returns:
+            File-like object containing the JSON data.
 
-            Args:
-                callback: Async function to call when data changes.
+        Raises:
+            GCSError: If loading fails after all retries.
+        """
+        logger = get_logger()
+        logger.debug(
+            "Loading from GCS (async)",
+            extra={"bucket": self.config.bucket, "object": self.config.object_path},
+        )
 
-            Returns:
-                Exception if watcher setup fails, None otherwise.
-            """
-            logger = get_logger()
-
-            try:
+        async def _download() -> BinaryIO:
+            def _sync_download() -> BinaryIO:
                 client = self._get_client()
                 bucket = client.bucket(self.config.bucket)
                 blob = bucket.blob(self.config.object_path)
+                return BytesIO(blob.download_as_bytes())
 
-                # Get initial generation (sync, but quick)
-                await asyncio.to_thread(blob.reload)
-                last_generation = blob.generation
+            return await asyncio.to_thread(_sync_download)
 
-                logger.info(
-                    "Starting async GCS watcher",
-                    extra={
-                        "bucket": self.config.bucket,
-                        "object": self.config.object_path,
-                        "check_interval": str(self.config.check_interval),
-                    },
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to initialize async GCS watcher", extra={"error": str(e)}
-                )
-                return GCSError(f"Failed to initialize GCS watcher: {e}")
+        return await _async_retry_with_backoff(
+            _download,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
+        )
 
-            async def watcher() -> None:
-                nonlocal last_generation
-                interval = self.config.check_interval.total_seconds()
+    async def watch(
+        self, callback: Callable[[], Awaitable[Exception | None]]
+    ) -> Exception | None:
+        """Monitor for changes and call async callback when data is updated.
 
-                while True:
-                    await asyncio.sleep(interval)
+        This coroutine blocks until cancelled. The caller should wrap it in
+        asyncio.create_task() and cancel the task to stop watching.
 
-                    try:
-                        await asyncio.to_thread(blob.reload)
-                        if blob.generation != last_generation:
-                            logger.info(
-                                "GCS object changed, triggering async reload",
-                                extra={
-                                    "old_generation": last_generation,
-                                    "new_generation": blob.generation,
-                                },
-                            )
-                            last_generation = blob.generation
-                            err = await callback()
-                            if err:
-                                logger.error(
-                                    "Async reload callback failed",
-                                    extra={"error": str(err)},
-                                )
-                    except asyncio.CancelledError:
-                        logger.info("Async GCS watcher cancelled")
-                        break
-                    except Exception as e:
-                        logger.error(
-                            "Async GCS watcher check failed", extra={"error": str(e)}
+        Args:
+            callback: Async function to call when data changes.
+
+        Returns:
+            Exception if watcher setup fails, None otherwise.
+        """
+        logger = get_logger()
+
+        try:
+            client = self._get_client()
+            bucket = client.bucket(self.config.bucket)
+            blob = bucket.blob(self.config.object_path)
+
+            # Get initial generation (sync, but quick)
+            await asyncio.to_thread(blob.reload)
+            last_generation = blob.generation
+
+            logger.info(
+                "Starting async GCS watcher",
+                extra={
+                    "bucket": self.config.bucket,
+                    "object": self.config.object_path,
+                    "check_interval": str(self.config.check_interval),
+                },
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to initialize async GCS watcher", extra={"error": str(e)}
+            )
+            return GCSError(f"Failed to initialize GCS watcher: {e}")
+
+        interval = self.config.check_interval.total_seconds()
+
+        try:
+            while True:
+                await asyncio.sleep(interval)
+
+                try:
+                    await asyncio.to_thread(blob.reload)
+                    if blob.generation != last_generation:
+                        logger.info(
+                            "GCS object changed, triggering async reload",
+                            extra={
+                                "old_generation": last_generation,
+                                "new_generation": blob.generation,
+                            },
                         )
+                        last_generation = blob.generation
+                        err = await callback()
+                        if err:
+                            logger.error(
+                                "Async reload callback failed",
+                                extra={"error": str(err)},
+                            )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "Async GCS watcher check failed", extra={"error": str(e)}
+                    )
+        except asyncio.CancelledError:
+            logger.info("Async GCS watcher cancelled")
 
-            # Start watcher as background task
-            asyncio.create_task(watcher())
-            return None
+        return None
 
-        def __str__(self) -> str:
-            """Return a description of this data source."""
-            return f"gs://{self.config.bucket}/{self.config.object_path} (async)"
-
-except ImportError:
-    # google-cloud-storage not available
-    pass
+    def __str__(self) -> str:
+        """Return a description of this data source."""
+        return f"gs://{self.config.bucket}/{self.config.object_path} (async)"

@@ -8,23 +8,20 @@ from typing import Any, cast
 from ._exceptions import DataLoadError
 from ._log import get_logger
 from ._types import (
-    AliasInfo,
-    ChannelInfo,
     Component,
-    ComponentRoleInfo,
+    ComponentOwnerInfo,
+    ComponentOwnership,
+    ComponentOwnershipIndex,
     Data,
     DataSource,
     DataVersion,
-    EmailInfo,
     Employee,
+    EscalationContactInfo,
     GitHubIDMappings,
-    Group,
-    GroupType,
     HierarchyNode,
     HierarchyPathEntry,
     Indexes,
     JiraIndex,
-    JiraInfo,
     JiraOwnerInfo,
     Lookups,
     MembershipIndex,
@@ -34,261 +31,11 @@ from ._types import (
     Org,
     OrgInfo,
     OrgInfoType,
-    ParentInfo,
     Pillar,
-    RepoInfo,
-    ResourceInfo,
-    RoleInfo,
-    SlackConfig,
     SlackIDMappings,
     Team,
     TeamGroup,
 )
-
-
-def _parse_employee(data: dict[str, Any]) -> Employee:
-    """Parse an Employee from a dictionary."""
-    return Employee(
-        uid=data.get("uid", ""),
-        full_name=data.get("full_name", ""),
-        email=data.get("email", ""),
-        job_title=data.get("job_title", ""),
-        slack_uid=data.get("slack_uid", ""),
-        github_id=data.get("github_id", ""),
-        rhat_geo=data.get("rhat_geo", ""),
-        cost_center=data.get("cost_center", 0),
-        manager_uid=data.get("manager_uid", ""),
-        is_people_manager=data.get("is_people_manager", False),
-        timezone=data.get("timezone", ""),
-    )
-
-
-def _parse_group_type(data: dict[str, Any] | None) -> GroupType:
-    """Parse a GroupType from a dictionary."""
-    if not data:
-        return GroupType()
-    return GroupType(name=data.get("name", ""))
-
-
-def _parse_channel_info(data: dict[str, Any]) -> ChannelInfo:
-    """Parse a ChannelInfo from a dictionary."""
-    return ChannelInfo(
-        channel=data.get("channel", ""),
-        channel_id=data.get("channel_id", ""),
-        description=data.get("description", ""),
-        types=tuple(data.get("types", [])),
-    )
-
-
-def _parse_alias_info(data: dict[str, Any]) -> AliasInfo:
-    """Parse an AliasInfo from a dictionary."""
-    return AliasInfo(
-        alias=data.get("alias", ""),
-        description=data.get("description", ""),
-    )
-
-
-def _parse_slack_config(data: dict[str, Any] | None) -> SlackConfig | None:
-    """Parse a SlackConfig from a dictionary."""
-    if not data:
-        return None
-    return SlackConfig(
-        channels=tuple(_parse_channel_info(c) for c in data.get("channels", [])),
-        aliases=tuple(_parse_alias_info(a) for a in data.get("aliases", [])),
-    )
-
-
-def _parse_role_info(data: dict[str, Any]) -> RoleInfo:
-    """Parse a RoleInfo from a dictionary."""
-    return RoleInfo(
-        people=tuple(data.get("people", [])),
-        roles=tuple(data.get("roles", [])),
-        description=data.get("description", ""),
-    )
-
-
-def _parse_jira_info(data: dict[str, Any]) -> JiraInfo:
-    """Parse a JiraInfo from a dictionary."""
-    return JiraInfo(
-        project=data.get("project", ""),
-        component=data.get("component", ""),
-        description=data.get("description", ""),
-        view=data.get("view", ""),
-        types=tuple(data.get("types", [])),
-    )
-
-
-def _parse_repo_info(data: dict[str, Any]) -> RepoInfo:
-    """Parse a RepoInfo from a dictionary."""
-    return RepoInfo(
-        repo=data.get("repo_name", ""),
-        description=data.get("description", ""),
-        tags=tuple(data.get("tags", [])),
-        path=data.get("path", ""),
-        roles=tuple(data.get("roles", [])),
-        branch=data.get("branch", ""),
-        types=tuple(data.get("types", [])),
-    )
-
-
-def _parse_email_info(data: dict[str, Any]) -> EmailInfo:
-    """Parse an EmailInfo from a dictionary."""
-    return EmailInfo(
-        address=data.get("address", ""),
-        name=data.get("name", ""),
-        description=data.get("description", ""),
-    )
-
-
-def _parse_resource_info(data: dict[str, Any]) -> ResourceInfo:
-    """Parse a ResourceInfo from a dictionary."""
-    return ResourceInfo(
-        name=data.get("name", ""),
-        url=data.get("url", ""),
-        description=data.get("description", ""),
-    )
-
-
-def _parse_component_role_info(data: dict[str, Any]) -> ComponentRoleInfo:
-    """Parse a ComponentRoleInfo from a dictionary."""
-    return ComponentRoleInfo(
-        component=data.get("component", ""),
-        types=tuple(data.get("types", [])),
-    )
-
-
-def _parse_group(data: dict[str, Any] | None) -> Group:
-    """Parse a Group from a dictionary."""
-    if not data:
-        return Group()
-    return Group(
-        type=_parse_group_type(data.get("type")),
-        resolved_people_uid_list=tuple(data.get("resolved_people_uid_list", [])),
-        slack=_parse_slack_config(data.get("slack")),
-        roles=tuple(_parse_role_info(r) for r in data.get("resolved_roles", [])),
-        jiras=tuple(_parse_jira_info(j) for j in data.get("jiras", [])),
-        repos=tuple(_parse_repo_info(r) for r in data.get("repos", [])),
-        keywords=tuple(data.get("keywords", [])),
-        emails=tuple(_parse_email_info(e) for e in data.get("emails", [])),
-        resources=tuple(_parse_resource_info(r) for r in data.get("resources", [])),
-        component_roles=tuple(
-            _parse_component_role_info(c) for c in data.get("component_roles", [])
-        ),
-    )
-
-
-def _parse_parent_info(data: dict[str, Any] | None) -> ParentInfo | None:
-    """Parse a ParentInfo from a dictionary."""
-    if data is None:
-        return None
-    return ParentInfo(
-        name=data.get("name", ""),
-        type=data.get("type", ""),
-    )
-
-
-def _parse_team(data: dict[str, Any]) -> Team:
-    """Parse a Team from a dictionary."""
-    return Team(
-        uid=data.get("uid", ""),
-        name=data.get("name", ""),
-        tab_name=data.get("tab_name", ""),
-        description=data.get("description", ""),
-        type=data.get("type", ""),
-        parent=_parse_parent_info(data.get("parent")),
-        group=_parse_group(data.get("group")),
-    )
-
-
-def _parse_org(data: dict[str, Any]) -> Org:
-    """Parse an Org from a dictionary."""
-    return Org(
-        uid=data.get("uid", ""),
-        name=data.get("name", ""),
-        tab_name=data.get("tab_name", ""),
-        description=data.get("description", ""),
-        type=data.get("type", ""),
-        parent=_parse_parent_info(data.get("parent")),
-        group=_parse_group(data.get("group")),
-    )
-
-
-def _parse_pillar(data: dict[str, Any]) -> Pillar:
-    """Parse a Pillar from a dictionary."""
-    return Pillar(
-        uid=data.get("uid", ""),
-        name=data.get("name", ""),
-        tab_name=data.get("tab_name", ""),
-        description=data.get("description", ""),
-        type=data.get("type", ""),
-        parent=_parse_parent_info(data.get("parent")),
-        group=_parse_group(data.get("group")),
-    )
-
-
-def _parse_team_group(data: dict[str, Any]) -> TeamGroup:
-    """Parse a TeamGroup from a dictionary."""
-    return TeamGroup(
-        uid=data.get("uid", ""),
-        name=data.get("name", ""),
-        tab_name=data.get("tab_name", ""),
-        description=data.get("description", ""),
-        type=data.get("type", ""),
-        parent=_parse_parent_info(data.get("parent")),
-        group=_parse_group(data.get("group")),
-    )
-
-
-def _parse_membership_info(data: dict[str, Any]) -> MembershipInfo:
-    """Parse a MembershipInfo from a dictionary."""
-    return MembershipInfo(
-        name=data.get("name", ""),
-        type=data.get("type", ""),
-    )
-
-
-def _parse_jira_owner_info(data: dict[str, Any]) -> JiraOwnerInfo:
-    """Parse a JiraOwnerInfo from a dictionary."""
-    return JiraOwnerInfo(
-        name=data.get("name", ""),
-        type=data.get("type", ""),
-    )
-
-
-def _parse_component(data: dict[str, Any]) -> Component:
-    """Parse a Component from a dictionary.
-
-    Supports both flat and nested formats. The indexer writes type/repos/jiras
-    under a nested "component" key; this reads top-level fields first, then
-    merges from nested if present.
-    """
-    nested = data.get("component", {})
-
-    # Type: flat is a string, nested is an object {"name": "..."}
-    comp_type = data.get("type", "")
-    if not comp_type and nested:
-        type_val = nested.get("type")
-        if isinstance(type_val, dict):
-            comp_type = type_val.get("name", "")
-        elif isinstance(type_val, str):
-            comp_type = type_val
-
-    repos_raw = data.get("repos") or (nested.get("repos") if nested else []) or []
-    jiras_raw = data.get("jiras") or (nested.get("jiras") if nested else []) or []
-    repos_list_raw = (
-        data.get("repos_list") or (nested.get("repos_list") if nested else []) or []
-    )
-
-    return Component(
-        name=data.get("name", ""),
-        type=comp_type,
-        description=data.get("description", ""),
-        parent=_parse_parent_info(data.get("parent")),
-        parent_path=data.get("parent_path", ""),
-        repos=tuple(_parse_repo_info(r) for r in repos_raw),
-        jiras=tuple(_parse_jira_info(j) for j in jiras_raw),
-        repos_list=tuple(repos_list_raw),
-    )
 
 
 def _parse_jira_index(jira_raw: dict[str, Any]) -> JiraIndex:
@@ -304,39 +51,51 @@ def _parse_jira_index(jira_raw: dict[str, Any]) -> JiraIndex:
             if isinstance(owners, list):
                 owners_list = cast(list[dict[str, Any]], owners)
                 project_component_owners[project][component] = tuple(
-                    _parse_jira_owner_info(o) for o in owners_list
+                    JiraOwnerInfo.model_validate(o) for o in owners_list
                 )
 
     return JiraIndex(project_component_owners=project_component_owners)
 
 
+def _parse_component_ownership_index(raw: dict[str, Any]) -> ComponentOwnershipIndex:
+    """Parse the component ownership index from raw data."""
+    component_owners: dict[str, tuple[ComponentOwnerInfo, ...]] = {}
+
+    for component_name, owners in raw.items():
+        if isinstance(owners, list):
+            owners_list = cast(list[dict[str, Any]], owners)
+            component_owners[component_name] = tuple(
+                ComponentOwnerInfo.model_validate(o) for o in owners_list
+            )
+
+    return ComponentOwnershipIndex(component_owners=component_owners)
+
+
 def parse_data(raw_data: dict[str, Any]) -> Data:
     """Parse the complete Data structure from JSON."""
-    metadata_raw = raw_data.get("metadata", {})
-    metadata = Metadata(
-        generated_at=metadata_raw.get("generated_at", ""),
-        data_version=metadata_raw.get("data_version", ""),
-        total_employees=metadata_raw.get("total_employees", 0),
-        total_orgs=metadata_raw.get("total_orgs", 0),
-        total_teams=metadata_raw.get("total_teams", 0),
-    )
+    metadata = Metadata.model_validate(raw_data.get("metadata", {}))
 
     lookups_raw = raw_data.get("lookups", {})
     lookups = Lookups(
         employees={
-            k: _parse_employee(v) for k, v in lookups_raw.get("employees", {}).items()
+            k: Employee.model_validate(v)
+            for k, v in lookups_raw.get("employees", {}).items()
         },
-        teams={k: _parse_team(v) for k, v in lookups_raw.get("teams", {}).items()},
-        orgs={k: _parse_org(v) for k, v in lookups_raw.get("orgs", {}).items()},
+        teams={
+            k: Team.model_validate(v) for k, v in lookups_raw.get("teams", {}).items()
+        },
+        orgs={k: Org.model_validate(v) for k, v in lookups_raw.get("orgs", {}).items()},
         pillars={
-            k: _parse_pillar(v) for k, v in lookups_raw.get("pillars", {}).items()
+            k: Pillar.model_validate(v)
+            for k, v in lookups_raw.get("pillars", {}).items()
         },
         team_groups={
-            k: _parse_team_group(v)
+            k: TeamGroup.model_validate(v)
             for k, v in lookups_raw.get("team_groups", {}).items()
         },
         components={
-            k: _parse_component(v) for k, v in lookups_raw.get("components", {}).items()
+            k: Component.model_validate(v)
+            for k, v in lookups_raw.get("components", {}).items()
         },
     )
 
@@ -345,7 +104,7 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
 
     membership_index_raw = membership_raw.get("membership_index", {})
     membership_index = {
-        k: tuple(_parse_membership_info(m) for m in v)
+        k: tuple(MembershipInfo.model_validate(m) for m in v)
         for k, v in membership_index_raw.items()
     }
 
@@ -366,11 +125,15 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
     jira_raw = indexes_raw.get("jira", {})
     jira_index = _parse_jira_index(jira_raw)
 
+    component_ownership_raw = indexes_raw.get("component_ownership", {})
+    component_ownership = _parse_component_ownership_index(component_ownership_raw)
+
     indexes = Indexes(
         membership=membership,
         slack_id_mappings=slack_id_mappings,
         github_id_mappings=github_id_mappings,
         jira=jira_index,
+        component_ownership=component_ownership,
     )
 
     return Data(
@@ -661,6 +424,24 @@ class Service:
                 return None
             return self._data.lookups.teams.get(team_name)
 
+    def get_team_escalation(self, team_name: str) -> list[EscalationContactInfo]:
+        """Get the escalation contacts for a team.
+
+        Args:
+            team_name: The team name to look up.
+
+        Returns:
+            Ordered list of escalation contacts, or empty list if team
+            not found or has no escalation data.
+        """
+        with self._lock:
+            if self._data is None or not self._data.lookups.teams:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if team is None:
+                return []
+            return list(team.group.escalation)
+
     def get_org_by_name(self, org_name: str) -> Org | None:
         """Get an organization by name."""
         with self._lock:
@@ -702,6 +483,59 @@ class Service:
             if self._data is None or not self._data.lookups.components:
                 return []
             return list(self._data.lookups.components.keys())
+
+    def get_teams_for_component(self, component_name: str) -> list[ComponentOwnerInfo]:
+        """Get all teams/entities that own a component.
+
+        Args:
+            component_name: Component name to look up
+
+        Returns:
+            List of owner entities with ownership types.
+        """
+        with self._lock:
+            if self._data is None:
+                return []
+            owners = self._data.indexes.component_ownership.component_owners.get(
+                component_name, ()
+            )
+            return list(owners)
+
+    def get_components_for_team(self, team_name: str) -> list[ComponentOwnership]:
+        """Get all components owned by a team.
+
+        Uses the team's component_roles list for O(1) team lookup, then
+        resolves ownership types from the component_ownership index.
+
+        Args:
+            team_name: Team name to look up
+
+        Returns:
+            List of ComponentOwnership with component name and ownership types.
+        """
+        with self._lock:
+            if self._data is None:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if not team:
+                return []
+            result: list[ComponentOwnership] = []
+            for cr in team.group.component_roles:
+                ownership_types: tuple[str, ...] = ()
+                owners = self._data.indexes.component_ownership.component_owners.get(
+                    cr, ()
+                )
+                for owner in owners:
+                    if owner.name == team_name:
+                        ownership_types = owner.ownership_types
+                        break
+                result.append(
+                    ComponentOwnership(
+                        component=cr,
+                        ownership_types=ownership_types,
+                    )
+                )
+            return result
 
     def get_teams_for_uid(self, uid: str) -> list[str]:
         """Get all teams a UID is a member of."""
@@ -857,6 +691,88 @@ class Service:
             return ""
         return self._data.indexes.slack_id_mappings.slack_uid_to_uid.get(slack_id, "")
 
+    def get_user_memberships(self, uid: str) -> list[MembershipInfo]:
+        """Get all memberships for a user.
+
+        Args:
+            uid: The employee UID.
+
+        Returns:
+            List of membership entries, or empty list if not found.
+        """
+        with self._lock:
+            if self._data is None or not self._data.indexes.membership.membership_index:
+                return []
+            return list(self._data.indexes.membership.membership_index.get(uid, ()))
+
+    def get_user_teams(self, uid: str) -> list[str]:
+        """Get team names for a user.
+
+        Args:
+            uid: The employee UID.
+
+        Returns:
+            List of team names the user belongs to.
+        """
+        with self._lock:
+            return self._get_teams_for_uid(uid)
+
+    def get_all_employees(self) -> list[Employee]:
+        """Get all employees in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.employees:
+                return []
+            return list(self._data.lookups.employees.values())
+
+    def get_all_teams(self) -> list[Team]:
+        """Get all teams in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.teams:
+                return []
+            return list(self._data.lookups.teams.values())
+
+    def get_all_orgs(self) -> list[Org]:
+        """Get all organizations in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.orgs:
+                return []
+            return list(self._data.lookups.orgs.values())
+
+    def get_all_pillars(self) -> list[Pillar]:
+        """Get all pillars in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.pillars:
+                return []
+            return list(self._data.lookups.pillars.values())
+
+    def get_all_team_groups(self) -> list[TeamGroup]:
+        """Get all team groups in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.team_groups:
+                return []
+            return list(self._data.lookups.team_groups.values())
+
+    def get_org_members(self, org_name: str) -> list[Employee]:
+        """Get all members of an organization.
+
+        Args:
+            org_name: The organization name.
+
+        Returns:
+            List of employees in the organization.
+        """
+        with self._lock:
+            if self._data is None or not self._data.lookups.orgs:
+                return []
+            org = self._data.lookups.orgs.get(org_name)
+            if not org:
+                return []
+            return [
+                emp
+                for uid in org.group.resolved_people_uid_list
+                if (emp := self._data.lookups.employees.get(uid))
+            ]
+
     def get_all_employee_uids(self) -> list[str]:
         """Get all employee UIDs in the system."""
         with self._lock:
@@ -870,7 +786,6 @@ class Service:
             if self._data is None or not self._data.lookups.teams:
                 return []
             return list(self._data.lookups.teams.keys())
-
 
     def get_all_org_names(self) -> list[str]:
         """Get all organization names in the system."""

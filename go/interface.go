@@ -35,15 +35,20 @@ type ServiceInterface interface {
 	GetPillarByName(pillarName string) *Pillar
 	GetTeamGroupByName(teamGroupName string) *TeamGroup
 
+	GetUserMemberships(uid string) []MembershipInfo
+	GetUserTeams(uid string) []string
 	GetTeamsForUID(uid string) []string
 	GetTeamsForSlackID(slackID string) []string
 	GetTeamMembers(teamName string) []Employee
+	GetOrgMembers(orgName string) []Employee
 	IsEmployeeInTeam(uid string, teamName string) bool
 	IsSlackUserInTeam(slackID string, teamName string) bool
 
 	IsEmployeeInOrg(uid string, orgName string) bool
 	IsSlackUserInOrg(slackID string, orgName string) bool
 	GetUserOrganizations(slackUserID string) []OrgInfo
+
+	GetTeamEscalation(teamName string) []EscalationContactInfo
 
 	GetVersion() DataVersion
 	GetDataAge() time.Duration
@@ -53,10 +58,15 @@ type ServiceInterface interface {
 	StopWatcher()
 
 	GetAllEmployeeUIDs() []string
+	GetAllEmployees() []Employee
 	GetAllTeamNames() []string
+	GetAllTeams() []Team
 	GetAllOrgNames() []string
+	GetAllOrgs() []Org
 	GetAllPillarNames() []string
+	GetAllPillars() []Pillar
 	GetAllTeamGroupNames() []string
+	GetAllTeamGroups() []TeamGroup
 
 	// Hierarchy queries
 	GetHierarchyPath(entityName string, entityType string) []HierarchyPathEntry
@@ -66,6 +76,8 @@ type ServiceInterface interface {
 	GetComponentByName(name string) *Component
 	GetAllComponents() []Component
 	GetAllComponentNames() []string
+	GetTeamsForComponent(componentName string) []ComponentOwnerInfo
+	GetComponentsForTeam(teamName string) []ComponentOwnership
 
 	// Jira queries
 	GetJiraProjects() []string

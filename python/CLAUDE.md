@@ -163,23 +163,23 @@ def get_teams_for_uid(self, uid: str) -> list[str]:
 
 ## Adding a New Entity Type
 
-1. Add dataclass to `_types.py`:
+1. Add model to `_types.py`:
 ```python
-@dataclass(frozen=True, slots=True)
-class NewEntity:
+class NewEntity(BaseModel):
     """Represents a new entity in the organizational data."""
+
+    model_config = ConfigDict(frozen=True)
 
     uid: str = ""
     name: str = ""
     # ... fields match JSON structure
 ```
 
-2. Add to `Lookups` dataclass:
+2. Add to `Lookups` model:
 ```python
-@dataclass(frozen=True, slots=True)
-class Lookups:
+class Lookups(BaseModel):
     # ... existing fields ...
-    new_entities: dict[str, NewEntity] = field(default_factory=dict)
+    new_entities: dict[str, NewEntity] = Field(default_factory=dict)
 ```
 
 3. Add parser function in `_service.py`:
@@ -202,21 +202,21 @@ def _parse_new_entity(data: dict[str, Any]) -> NewEntity:
 
 For new external ID → UID mappings:
 
-1. Add mapping dataclass to `_types.py`:
+1. Add mapping model to `_types.py`:
 ```python
-@dataclass(frozen=True, slots=True)
-class NewIDMappings:
+class NewIDMappings(BaseModel):
     """Contains New ID to UID mappings."""
 
-    new_id_to_uid: dict[str, str] = field(default_factory=dict)
+    model_config = ConfigDict(frozen=True)
+
+    new_id_to_uid: dict[str, str] = Field(default_factory=dict)
 ```
 
-2. Add to `Indexes` dataclass:
+2. Add to `Indexes` model:
 ```python
-@dataclass(frozen=True, slots=True)
-class Indexes:
+class Indexes(BaseModel):
     # ... existing fields ...
-    new_id_mappings: NewIDMappings = field(default_factory=NewIDMappings)
+    new_id_mappings: NewIDMappings = Field(default_factory=NewIDMappings)
 ```
 
 3. Update `_parse_data()` to parse the new mappings
@@ -234,25 +234,27 @@ def get_employee_by_uid(self, uid: str) -> Employee | None:
 # Correct: List for collections
 def get_all_team_names(self) -> list[str]:
 
-# Correct: Tuple for immutable sequences in dataclasses
-@dataclass(frozen=True, slots=True)
-class SlackConfig:
+# Correct: Tuple for immutable sequences in models
+class SlackConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     channels: tuple[ChannelInfo, ...] = ()
 ```
 
-## Dataclass Conventions
+## Pydantic Model Conventions
 
-Always use frozen, slotted dataclasses:
+Always use frozen pydantic BaseModel:
 ```python
-@dataclass(frozen=True, slots=True)
-class Employee:
+class Employee(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     uid: str = ""
     full_name: str = ""
     # Default values for all fields
 ```
 
 - `frozen=True`: Immutability for thread safety
-- `slots=True`: Memory efficiency
+- Only add `populate_by_name=True` if the model has aliased fields (`Field(alias=...)`)
+- Use `Field(default_factory=...)` for mutable defaults (dicts, lists)
 
 ## Protocol-Based DataSource
 

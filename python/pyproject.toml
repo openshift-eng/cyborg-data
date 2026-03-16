@@ -25,7 +25,7 @@ classifiers = [
 ]
 keywords = ["organizational-data", "employees", "teams", "organizations"]
 
-dependencies = []
+dependencies = ["pydantic>=2.0"]
 
 [project.optional-dependencies]
 gcs = [
@@ -75,6 +75,10 @@ warn_return_any = true
 warn_unused_ignores = true
 packages = ["orgdatacore"]
 exclude = ["examples", "tests"]
+
+[[tool.mypy.overrides]]
+module = "google.cloud.*"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "orgdatacore._internal.testing.*"

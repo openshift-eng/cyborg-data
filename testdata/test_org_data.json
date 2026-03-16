@@ -67,7 +67,10 @@
           "repos": [
             {"repo_name": "https://github.com/example/test-repo", "description": "Main test repository"}
           ],
-          "keywords": ["testing", "qa"]
+          "keywords": ["testing", "qa"],
+          "component_roles": [
+            "auth-service"
+          ]
         }
       },
       "platform-team": {
@@ -93,6 +96,22 @@
           ],
           "repos": [
             {"repo_name": "https://github.com/example/platform", "description": "Platform monorepo"}
+          ],
+          "escalation": [
+            {
+              "name": "Platform on-call",
+              "url": "https://redhat.enterprise.slack.com/archives/C003",
+              "description": "Primary on-call engineer for platform incidents."
+            },
+            {
+              "name": "Platform team",
+              "url": "https://redhat.enterprise.slack.com/archives/C003",
+              "description": "Entire platform team for escalation."
+            }
+          ],
+          "component_roles": [
+            "platform-api",
+            "auth-service"
           ]
         }
       }
@@ -221,6 +240,15 @@
           {"name": "platform-team", "type": "team"}
         ]
       }
+    },
+    "component_ownership": {
+      "platform-api": [
+        {"name": "platform-team", "type": "team", "ownership_types": ["owner"]}
+      ],
+      "auth-service": [
+        {"name": "test-team", "type": "team", "ownership_types": ["owner"]},
+        {"name": "platform-team", "type": "team", "ownership_types": ["contributor"]}
+      ]
     }
   }
 }

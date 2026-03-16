@@ -1,10 +1,11 @@
 """Type definitions and constants for orgdatacore."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import BinaryIO, Protocol
+from typing import Any, BinaryIO, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PIIMode(StrEnum):
@@ -62,9 +63,10 @@ class DataSource(Protocol):
         ...
 
 
-@dataclass(frozen=True, slots=True)
-class Employee:
+class Employee(BaseModel):
     """Represents an employee in the organizational data."""
+
+    model_config = ConfigDict(frozen=True)
 
     uid: str = ""
     full_name: str = ""
@@ -78,10 +80,32 @@ class Employee:
     is_people_manager: bool = False
     timezone: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_nulls(cls, data: Any) -> Any:
+        """Coerce null string fields to empty strings to match Go zero-value semantics."""
+        if not isinstance(data, dict):
+            return data
+        for key in (
+            "uid",
+            "full_name",
+            "email",
+            "job_title",
+            "slack_uid",
+            "github_id",
+            "rhat_geo",
+            "manager_uid",
+            "timezone",
+        ):
+            if key in data and data[key] is None:
+                data[key] = ""
+        return data
 
-@dataclass(frozen=True, slots=True)
-class ChannelInfo:
+
+class ChannelInfo(BaseModel):
     """Represents a Slack channel configuration."""
+
+    model_config = ConfigDict(frozen=True)
 
     channel: str = ""
     channel_id: str = ""
@@ -89,34 +113,38 @@ class ChannelInfo:
     types: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class AliasInfo:
+class AliasInfo(BaseModel):
     """Represents a Slack alias configuration."""
+
+    model_config = ConfigDict(frozen=True)
 
     alias: str = ""
     description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class SlackConfig:
+class SlackConfig(BaseModel):
     """Contains Slack channel and alias configuration."""
+
+    model_config = ConfigDict(frozen=True)
 
     channels: tuple[ChannelInfo, ...] = ()
     aliases: tuple[AliasInfo, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class RoleInfo:
+class RoleInfo(BaseModel):
     """Represents a role assignment with associated people."""
+
+    model_config = ConfigDict(frozen=True)
 
     people: tuple[str, ...] = ()
     roles: tuple[str, ...] = ()
     description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class JiraInfo:
+class JiraInfo(BaseModel):
     """Represents Jira project/component configuration."""
+
+    model_config = ConfigDict(frozen=True)
 
     project: str = ""
     component: str = ""
@@ -125,11 +153,12 @@ class JiraInfo:
     types: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class RepoInfo:
+class RepoInfo(BaseModel):
     """Represents GitHub repository configuration."""
 
-    repo: str = ""
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    repo: str = Field(default="", alias="repo_name")
     description: str = ""
     tags: tuple[str, ...] = ()
     path: str = ""
@@ -138,118 +167,131 @@ class RepoInfo:
     types: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class EmailInfo:
+class EmailInfo(BaseModel):
     """Represents an email configuration."""
+
+    model_config = ConfigDict(frozen=True)
 
     address: str = ""
     name: str = ""
     description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class ResourceInfo:
+class ResourceInfo(BaseModel):
     """Represents a resource/documentation link."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
     url: str = ""
     description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class ComponentRoleInfo:
-    """Represents component ownership information."""
+class EscalationContactInfo(BaseModel):
+    """Represents an escalation contact for incident response."""
 
-    component: str = ""
-    types: tuple[str, ...] = ()
+    model_config = ConfigDict(frozen=True)
+
+    name: str = ""
+    url: str = ""
+    description: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class GroupType:
+class GroupType(BaseModel):
     """Contains group type information."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class Group:
+class Group(BaseModel):
     """Contains group metadata and configuration."""
 
-    type: GroupType = field(default_factory=GroupType)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    type: GroupType = Field(default_factory=GroupType)
     resolved_people_uid_list: tuple[str, ...] = ()
     slack: SlackConfig | None = None
-    roles: tuple[RoleInfo, ...] = ()
+    roles: tuple[RoleInfo, ...] = Field(default=(), alias="resolved_roles")
     jiras: tuple[JiraInfo, ...] = ()
     repos: tuple[RepoInfo, ...] = ()
     keywords: tuple[str, ...] = ()
     emails: tuple[EmailInfo, ...] = ()
     resources: tuple[ResourceInfo, ...] = ()
-    component_roles: tuple[ComponentRoleInfo, ...] = ()
+    escalation: tuple[EscalationContactInfo, ...] = ()
+    component_roles: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class ParentInfo:
+class ParentInfo(BaseModel):
     """Parent reference for hierarchy traversal."""
 
+    model_config = ConfigDict(frozen=True)
+
     name: str = ""
     type: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class Team:
+class Team(BaseModel):
     """Represents a team in the organizational data."""
 
+    model_config = ConfigDict(frozen=True)
+
     uid: str = ""
     name: str = ""
     tab_name: str = ""
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
-    group: Group = field(default_factory=Group)
+    group: Group = Field(default_factory=Group)
 
 
-@dataclass(frozen=True, slots=True)
-class Org:
+class Org(BaseModel):
     """Represents an organization in the organizational data."""
 
+    model_config = ConfigDict(frozen=True)
+
     uid: str = ""
     name: str = ""
     tab_name: str = ""
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
-    group: Group = field(default_factory=Group)
+    group: Group = Field(default_factory=Group)
 
 
-@dataclass(frozen=True, slots=True)
-class Pillar:
+class Pillar(BaseModel):
     """Represents a pillar in the organizational hierarchy."""
 
+    model_config = ConfigDict(frozen=True)
+
     uid: str = ""
     name: str = ""
     tab_name: str = ""
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
-    group: Group = field(default_factory=Group)
+    group: Group = Field(default_factory=Group)
 
 
-@dataclass(frozen=True, slots=True)
-class TeamGroup:
+class TeamGroup(BaseModel):
     """Represents a team group in the organizational hierarchy."""
 
+    model_config = ConfigDict(frozen=True)
+
     uid: str = ""
     name: str = ""
     tab_name: str = ""
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
-    group: Group = field(default_factory=Group)
+    group: Group = Field(default_factory=Group)
 
 
-@dataclass(frozen=True, slots=True)
-class Component:
+class Component(BaseModel):
     """Represents a component in the organizational data."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
     type: str = ""
@@ -260,10 +302,32 @@ class Component:
     jiras: tuple[JiraInfo, ...] = ()
     repos_list: tuple[str, ...] = ()
 
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten_nested(cls, data: Any) -> Any:
+        """Flatten the nested 'component' key from the indexer format."""
+        if not isinstance(data, dict):
+            return data
+        nested = data.get("component", {})
+        if not nested:
+            return data
+        result = dict(data)
+        if not result.get("type"):
+            type_val = nested.get("type")
+            if isinstance(type_val, dict):
+                result["type"] = type_val.get("name", "")
+            elif isinstance(type_val, str):
+                result["type"] = type_val
+        for key in ("repos", "jiras", "repos_list"):
+            if not result.get(key):
+                result[key] = nested.get(key, [])
+        return result
 
-@dataclass(frozen=True, slots=True)
-class Metadata:
+
+class Metadata(BaseModel):
     """Contains summary information about the data."""
+
+    model_config = ConfigDict(frozen=True)
 
     generated_at: str = ""
     data_version: str = ""
@@ -272,130 +336,179 @@ class Metadata:
     total_teams: int = 0
 
 
-@dataclass(frozen=True, slots=True)
-class Lookups:
+class Lookups(BaseModel):
     """Contains the main data objects."""
 
-    employees: dict[str, Employee] = field(default_factory=lambda: {})
-    teams: dict[str, Team] = field(default_factory=lambda: {})
-    orgs: dict[str, Org] = field(default_factory=lambda: {})
-    pillars: dict[str, Pillar] = field(default_factory=lambda: {})
-    team_groups: dict[str, TeamGroup] = field(default_factory=lambda: {})
-    components: dict[str, Component] = field(default_factory=lambda: {})
+    model_config = ConfigDict(frozen=True)
+
+    employees: dict[str, Employee] = Field(default_factory=dict)
+    teams: dict[str, Team] = Field(default_factory=dict)
+    orgs: dict[str, Org] = Field(default_factory=dict)
+    pillars: dict[str, Pillar] = Field(default_factory=dict)
+    team_groups: dict[str, TeamGroup] = Field(default_factory=dict)
+    components: dict[str, Component] = Field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class MembershipInfo:
+class MembershipInfo(BaseModel):
     """Represents a membership entry with name and type."""
 
+    model_config = ConfigDict(frozen=True)
+
     name: str = ""
     type: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class HierarchyPathEntry:
+class HierarchyPathEntry(BaseModel):
     """Single entry in a hierarchy path (name and type)."""
 
+    model_config = ConfigDict(frozen=True)
+
     name: str = ""
     type: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class MembershipIndex:
+class MembershipIndex(BaseModel):
     """Represents the membership index structure."""
 
-    membership_index: dict[str, tuple[MembershipInfo, ...]] = field(
-        default_factory=lambda: {}
+    model_config = ConfigDict(frozen=True)
+
+    membership_index: dict[str, tuple[MembershipInfo, ...]] = Field(
+        default_factory=dict
     )
 
 
-@dataclass(frozen=True, slots=True)
-class SlackIDMappings:
+class SlackIDMappings(BaseModel):
     """Contains Slack ID to UID mappings."""
 
-    slack_uid_to_uid: dict[str, str] = field(default_factory=lambda: {})
+    model_config = ConfigDict(frozen=True)
+
+    slack_uid_to_uid: dict[str, str] = Field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubIDMappings:
+class GitHubIDMappings(BaseModel):
     """Contains GitHub ID to UID mappings."""
 
-    github_id_to_uid: dict[str, str] = field(default_factory=lambda: {})
+    model_config = ConfigDict(frozen=True)
+
+    github_id_to_uid: dict[str, str] = Field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class HierarchyNode:
+class HierarchyNode(BaseModel):
     """Node in the descendants tree with nested children."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
     type: str = ""
     children: tuple["HierarchyNode", ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class JiraOwnerInfo:
+class ComponentOwnerInfo(BaseModel):
+    """Represents an entity that owns a component, with ownership type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = ""
+    type: str = ""
+    ownership_types: tuple[str, ...] = ()
+
+
+class ComponentOwnership(BaseModel):
+    """Represents a component owned by a team, with ownership type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    component: str = ""
+    ownership_types: tuple[str, ...] = ()
+
+
+class JiraOwnerInfo(BaseModel):
     """Represents an entity that owns a Jira project/component."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
     type: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class JiraIndex:
+class JiraIndex(BaseModel):
     """Contains Jira project/component to team mappings.
 
     Structure: project -> component -> list of owner entities.
     Special key "_project_level" indicates project-level ownership.
     """
 
-    project_component_owners: dict[str, dict[str, tuple[JiraOwnerInfo, ...]]] = field(
-        default_factory=lambda: {}
+    model_config = ConfigDict(frozen=True)
+
+    project_component_owners: dict[str, dict[str, tuple[JiraOwnerInfo, ...]]] = Field(
+        default_factory=dict
     )
 
 
-@dataclass(frozen=True, slots=True)
-class Indexes:
+class ComponentOwnershipIndex(BaseModel):
+    """Contains component-to-team ownership mappings.
+
+    Structure: component_name -> list of owner entities with ownership types.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    component_owners: dict[str, tuple[ComponentOwnerInfo, ...]] = Field(
+        default_factory=dict
+    )
+
+
+class Indexes(BaseModel):
     """Contains pre-computed lookup tables."""
 
-    membership: MembershipIndex = field(default_factory=MembershipIndex)
-    slack_id_mappings: SlackIDMappings = field(default_factory=SlackIDMappings)
-    github_id_mappings: GitHubIDMappings = field(default_factory=GitHubIDMappings)
-    jira: JiraIndex = field(default_factory=JiraIndex)
+    model_config = ConfigDict(frozen=True)
+
+    membership: MembershipIndex = Field(default_factory=MembershipIndex)
+    slack_id_mappings: SlackIDMappings = Field(default_factory=SlackIDMappings)
+    github_id_mappings: GitHubIDMappings = Field(default_factory=GitHubIDMappings)
+    jira: JiraIndex = Field(default_factory=JiraIndex)
+    component_ownership: ComponentOwnershipIndex = Field(
+        default_factory=ComponentOwnershipIndex
+    )
 
 
-@dataclass(frozen=True, slots=True)
-class Data:
+class Data(BaseModel):
     """Represents the comprehensive organizational data structure."""
 
-    metadata: Metadata = field(default_factory=Metadata)
-    lookups: Lookups = field(default_factory=Lookups)
-    indexes: Indexes = field(default_factory=Indexes)
+    model_config = ConfigDict(frozen=True)
+
+    metadata: Metadata = Field(default_factory=Metadata)
+    lookups: Lookups = Field(default_factory=Lookups)
+    indexes: Indexes = Field(default_factory=Indexes)
 
 
-@dataclass(frozen=True, slots=True)
-class OrgInfo:
+class OrgInfo(BaseModel):
     """Represents organization information for a user."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = ""
     type: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class DataVersion:
+class DataVersion(BaseModel):
     """Tracks the version of loaded data for hot reload."""
 
-    load_time: datetime = field(default_factory=lambda: datetime.min)
-    config_maps: dict[str, str] = field(default_factory=lambda: {})
+    model_config = ConfigDict(frozen=True)
+
+    load_time: datetime = Field(default_factory=lambda: datetime.min)
+    config_maps: dict[str, str] = Field(default_factory=dict)
     org_count: int = 0
     employee_count: int = 0
 
 
-@dataclass(frozen=True, slots=True)
-class GCSConfig:
+class GCSConfig(BaseModel):
     """Represents Google Cloud Storage configuration for data loading."""
+
+    model_config = ConfigDict(frozen=True)
 
     bucket: str = ""
     object_path: str = ""
     project_id: str = ""
     credentials_json: str = ""
-    check_interval: timedelta = field(default_factory=lambda: timedelta(minutes=5))
+    check_interval: timedelta = Field(default_factory=lambda: timedelta(minutes=5))

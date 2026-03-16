@@ -415,6 +415,96 @@ func TestGetAllOrgNames_EmptyService(t *testing.T) {
 	}
 }
 
+// TestGetAllEmployees tests bulk employee retrieval
+func TestGetAllEmployees(t *testing.T) {
+	service := setupTestService(t)
+
+	employees := service.GetAllEmployees()
+	if len(employees) != 3 {
+		t.Errorf("GetAllEmployees() returned %d employees, expected 3", len(employees))
+	}
+}
+
+func TestGetAllEmployees_EmptyService(t *testing.T) {
+	service := NewService()
+	employees := service.GetAllEmployees()
+	if len(employees) != 0 {
+		t.Errorf("Expected 0 employees from empty service, got %d", len(employees))
+	}
+}
+
+// TestGetAllTeams tests bulk team retrieval
+func TestGetAllTeams(t *testing.T) {
+	service := setupTestService(t)
+
+	teams := service.GetAllTeams()
+	if len(teams) != 2 {
+		t.Errorf("GetAllTeams() returned %d teams, expected 2", len(teams))
+	}
+}
+
+func TestGetAllTeams_EmptyService(t *testing.T) {
+	service := NewService()
+	teams := service.GetAllTeams()
+	if len(teams) != 0 {
+		t.Errorf("Expected 0 teams from empty service, got %d", len(teams))
+	}
+}
+
+// TestGetAllOrgs tests bulk org retrieval
+func TestGetAllOrgs(t *testing.T) {
+	service := setupTestService(t)
+
+	orgs := service.GetAllOrgs()
+	if len(orgs) != 2 {
+		t.Errorf("GetAllOrgs() returned %d orgs, expected 2", len(orgs))
+	}
+}
+
+func TestGetAllOrgs_EmptyService(t *testing.T) {
+	service := NewService()
+	orgs := service.GetAllOrgs()
+	if len(orgs) != 0 {
+		t.Errorf("Expected 0 orgs from empty service, got %d", len(orgs))
+	}
+}
+
+// TestGetAllPillars tests bulk pillar retrieval
+func TestGetAllPillars(t *testing.T) {
+	service := setupTestService(t)
+
+	pillars := service.GetAllPillars()
+	if len(pillars) != 1 {
+		t.Errorf("GetAllPillars() returned %d pillars, expected 1", len(pillars))
+	}
+}
+
+func TestGetAllPillars_EmptyService(t *testing.T) {
+	service := NewService()
+	pillars := service.GetAllPillars()
+	if len(pillars) != 0 {
+		t.Errorf("Expected 0 pillars from empty service, got %d", len(pillars))
+	}
+}
+
+// TestGetAllTeamGroups tests bulk team group retrieval
+func TestGetAllTeamGroups(t *testing.T) {
+	service := setupTestService(t)
+
+	tgs := service.GetAllTeamGroups()
+	if len(tgs) != 1 {
+		t.Errorf("GetAllTeamGroups() returned %d team groups, expected 1", len(tgs))
+	}
+}
+
+func TestGetAllTeamGroups_EmptyService(t *testing.T) {
+	service := NewService()
+	tgs := service.GetAllTeamGroups()
+	if len(tgs) != 0 {
+		t.Errorf("Expected 0 team groups from empty service, got %d", len(tgs))
+	}
+}
+
 // TestStartDataSourceWatcher tests watcher functionality
 func TestStartDataSourceWatcher_AlreadyRunning(t *testing.T) {
 	service := NewService()
