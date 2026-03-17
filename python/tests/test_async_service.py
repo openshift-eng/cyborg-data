@@ -209,13 +209,17 @@ class TestAsyncService:
 
     @pytest.mark.asyncio
     async def test_get_user_organizations(self) -> None:
-        """Test getting user organizations."""
+        """Test getting user organizations by Slack ID."""
         source = AsyncFakeDataSource(data=create_test_data_json())
         service = AsyncService()
         await service.load_from_data_source(source)
 
-        orgs = await service.get_user_organizations("testuser1")
+        orgs = await service.get_user_organizations("U111111")
         assert len(orgs) > 0
+
+        # Nonexistent Slack ID returns empty
+        orgs2 = await service.get_user_organizations("U999999")
+        assert orgs2 == []
 
     @pytest.mark.asyncio
     async def test_get_all_teams(self) -> None:
@@ -305,7 +309,7 @@ class TestAsyncService:
         assert await service.get_pillar_by_name("test") is None
         assert await service.get_team_group_by_name("test") is None
         assert await service.get_user_teams("test") == []
-        assert await service.get_user_organizations("test") == []
+        assert await service.get_user_organizations("U123") == []
         assert await service.get_all_employees() == []
         assert await service.get_all_teams() == []
         assert await service.get_all_orgs() == []
@@ -325,6 +329,7 @@ class TestAsyncService:
         assert await service.get_descendants_tree("test") is None
         assert await service.get_component_by_name("test") is None
         assert await service.get_all_components() == []
+        assert await service.get_all_component_names() == []
         assert await service.get_jira_projects() == []
         assert await service.get_jira_components("TEST") == []
         assert await service.get_teams_by_jira_project("TEST") == []

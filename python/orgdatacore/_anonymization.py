@@ -8,7 +8,6 @@ existing UIDs keep their nonces, new UIDs get fresh random nonces.
 
 import json
 import secrets
-from dataclasses import replace
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO
 
@@ -16,6 +15,7 @@ from ._serialization import data_to_json_bytes
 from ._service import parse_data
 from ._types import (
     Data,
+    Employee,
     GitHubIDMappings,
     Group,
     MembershipIndex,
@@ -102,15 +102,15 @@ class _AnonymizationEngine:
         self._github_id_to_nonce = {}
 
         used_nonces: set[str] = set(
-            prev_uid_to_nonce[uid]
-            for uid in employees
-            if uid in prev_uid_to_nonce
+            prev_uid_to_nonce[uid] for uid in employees if uid in prev_uid_to_nonce
         )
 
         # Phase 1: Build UID -> nonce mapping for all employees
         for uid, emp in employees.items():
             # Reuse existing nonce if available, otherwise generate new one
-            nonce = prev_uid_to_nonce.get(uid) or self._generate_nonce("HUMAN-", used_nonces)
+            nonce = prev_uid_to_nonce.get(uid) or self._generate_nonce(
+                "HUMAN-", used_nonces
+            )
             self._uid_to_nonce[uid] = nonce
             self._nonce_to_uid[nonce] = uid
 
@@ -155,7 +155,7 @@ class _AnonymizationEngine:
                 uid_to_github_nonce[uid] = self._github_id_to_nonce[github_id]
 
         # Phase 3: Rewrite employee records
-        new_employees: dict[str, Any] = {}
+        new_employees: dict[str, Employee] = {}
         for uid, emp in employees.items():
             nonce = self._uid_to_nonce[uid]
 
@@ -163,14 +163,15 @@ class _AnonymizationEngine:
             if emp.manager_uid:
                 manager_nonce = self._uid_to_nonce.get(emp.manager_uid, "")
 
-            new_employees[nonce] = replace(
-                emp,
-                uid=nonce,
-                full_name="[ANONYMIZED]",
-                email="[ANONYMIZED]",
-                slack_uid=uid_to_slack_nonce.get(uid, ""),
-                github_id=uid_to_github_nonce.get(uid, ""),
-                manager_uid=manager_nonce,
+            new_employees[nonce] = emp.model_copy(
+                update={
+                    "uid": nonce,
+                    "full_name": "[ANONYMIZED]",
+                    "email": "[ANONYMIZED]",
+                    "slack_uid": uid_to_slack_nonce.get(uid, ""),
+                    "github_id": uid_to_github_nonce.get(uid, ""),
+                    "manager_uid": manager_nonce,
+                }
             )
 
         # Phase 4: Rewrite indexes
@@ -197,38 +198,55 @@ class _AnonymizationEngine:
 
         # Phase 5: Rewrite group people lists in teams/orgs/pillars/team_groups
         new_teams = {
-            name: replace(t, group=_remap_group(t.group, self._uid_to_nonce))
+            name: t.model_copy(
+                update={"group": _remap_group(t.group, self._uid_to_nonce)}
+            )
             for name, t in data.lookups.teams.items()
         }
         new_orgs = {
-            name: replace(o, group=_remap_group(o.group, self._uid_to_nonce))
+            name: o.model_copy(
+                update={"group": _remap_group(o.group, self._uid_to_nonce)}
+            )
             for name, o in data.lookups.orgs.items()
         }
         new_pillars = {
-            name: replace(p, group=_remap_group(p.group, self._uid_to_nonce))
+            name: p.model_copy(
+                update={"group": _remap_group(p.group, self._uid_to_nonce)}
+            )
             for name, p in data.lookups.pillars.items()
         }
         new_team_groups = {
-            name: replace(tg, group=_remap_group(tg.group, self._uid_to_nonce))
+            name: tg.model_copy(
+                update={"group": _remap_group(tg.group, self._uid_to_nonce)}
+            )
             for name, tg in data.lookups.team_groups.items()
         }
 
-        return replace(
-            data,
-            lookups=replace(
-                data.lookups,
-                employees=new_employees,
-                teams=new_teams,
-                orgs=new_orgs,
-                pillars=new_pillars,
-                team_groups=new_team_groups,
-            ),
-            indexes=replace(
-                data.indexes,
-                membership=MembershipIndex(membership_index=new_membership_index),
-                slack_id_mappings=SlackIDMappings(slack_uid_to_uid=new_slack_index),
-                github_id_mappings=GitHubIDMappings(github_id_to_uid=new_github_index),
-            ),
+        return data.model_copy(
+            update={
+                "lookups": data.lookups.model_copy(
+                    update={
+                        "employees": new_employees,
+                        "teams": new_teams,
+                        "orgs": new_orgs,
+                        "pillars": new_pillars,
+                        "team_groups": new_team_groups,
+                    }
+                ),
+                "indexes": data.indexes.model_copy(
+                    update={
+                        "membership": MembershipIndex(
+                            membership_index=new_membership_index
+                        ),
+                        "slack_id_mappings": SlackIDMappings(
+                            slack_uid_to_uid=new_slack_index
+                        ),
+                        "github_id_mappings": GitHubIDMappings(
+                            github_id_to_uid=new_github_index
+                        ),
+                    }
+                ),
+            }
         )
 
 
@@ -237,14 +255,39 @@ def _remap_group(group: Group, uid_to_nonce: dict[str, str]) -> Group:
     new_people = tuple(
         uid_to_nonce.get(uid, uid) for uid in group.resolved_people_uid_list
     )
-    new_roles = tuple(
-        replace(
-            role,
-            people=tuple(uid_to_nonce.get(uid, uid) for uid in role.people),
+    new_roles = (
+        tuple(
+            role.model_copy(
+                update={
+                    "people": tuple(uid_to_nonce.get(uid, uid) for uid in role.people)
+                }
+            )
+            for role in group.roles
         )
-        for role in group.roles
-    ) if group.roles else ()
-    return replace(group, resolved_people_uid_list=new_people, roles=new_roles)
+        if group.roles
+        else ()
+    )
+    new_escalation = (
+        tuple(
+            contact.model_copy(
+                update={
+                    "name": "[ANONYMIZED]",
+                    "url": "",
+                    "description": "[ANONYMIZED]",
+                }
+            )
+            for contact in group.escalation
+        )
+        if group.escalation
+        else ()
+    )
+    return group.model_copy(
+        update={
+            "resolved_people_uid_list": new_people,
+            "roles": new_roles,
+            "escalation": new_escalation,
+        }
+    )
 
 
 class AnonymizingDataSource:
@@ -294,9 +337,7 @@ class AnonymizingDataSource:
         anonymized = self._engine.anonymize(data)
         return BytesIO(data_to_json_bytes(anonymized))
 
-    def watch(
-        self, callback: "Callable[[], Exception | None]"
-    ) -> Exception | None:
+    def watch(self, callback: "Callable[[], Exception | None]") -> Exception | None:
         """Delegate to the underlying data source."""
         result: Exception | None = self._source.watch(callback)
         return result

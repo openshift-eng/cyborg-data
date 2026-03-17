@@ -5,7 +5,7 @@ from io import BytesIO
 
 import pytest
 
-from orgdatacore import PIIMode, RedactingDataSource, Service
+from orgdatacore import AsyncRedactingDataSource, PIIMode, RedactingDataSource, Service
 
 
 class FakeDataSource:
@@ -81,9 +81,7 @@ def sample_employee_data() -> dict:
 class TestRedactingDataSourceFullMode:
     """Tests for FULL PII mode (pass-through)."""
 
-    def test_full_mode_returns_unchanged_data(
-        self, sample_employee_data: dict
-    ) -> None:
+    def test_full_mode_returns_unchanged_data(self, sample_employee_data: dict) -> None:
         """In FULL mode, data should pass through unchanged."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.FULL)
@@ -122,9 +120,7 @@ class TestRedactingDataSourceFullMode:
 class TestRedactingDataSourceRedactedMode:
     """Tests for REDACTED PII mode."""
 
-    def test_redacted_mode_strips_full_name(
-        self, sample_employee_data: dict
-    ) -> None:
+    def test_redacted_mode_strips_full_name(self, sample_employee_data: dict) -> None:
         """full_name should be replaced with [REDACTED]."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
@@ -144,10 +140,8 @@ class TestRedactingDataSourceRedactedMode:
         assert result["lookups"]["employees"]["jsmith"]["email"] == "[REDACTED]"
         assert result["lookups"]["employees"]["adoe"]["email"] == "[REDACTED]"
 
-    def test_redacted_mode_clears_slack_uid(
-        self, sample_employee_data: dict
-    ) -> None:
-        """slack_uid should be cleared (omitted from JSON)."""
+    def test_redacted_mode_clears_slack_uid(self, sample_employee_data: dict) -> None:
+        """slack_uid should be cleared."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
 
@@ -156,10 +150,8 @@ class TestRedactingDataSourceRedactedMode:
         assert result["lookups"]["employees"]["jsmith"].get("slack_uid") is None
         assert result["lookups"]["employees"]["adoe"].get("slack_uid") is None
 
-    def test_redacted_mode_clears_github_id(
-        self, sample_employee_data: dict
-    ) -> None:
-        """github_id should be cleared (omitted from JSON)."""
+    def test_redacted_mode_clears_github_id(self, sample_employee_data: dict) -> None:
+        """github_id should be cleared."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
 
@@ -182,9 +174,7 @@ class TestRedactingDataSourceRedactedMode:
         assert jsmith["job_title"] == "Senior Engineer"
         assert jsmith["manager_uid"] == "adoe"
 
-    def test_redacted_mode_preserves_metadata(
-        self, sample_employee_data: dict
-    ) -> None:
+    def test_redacted_mode_preserves_metadata(self, sample_employee_data: dict) -> None:
         """Metadata and other lookups should be preserved."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
@@ -199,9 +189,7 @@ class TestRedactingDataSourceRedactedMode:
 class TestRedactingDataSourceIndexes:
     """Tests for PII index clearing."""
 
-    def test_redacted_mode_clears_slack_index(
-        self, sample_employee_data: dict
-    ) -> None:
+    def test_redacted_mode_clears_slack_index(self, sample_employee_data: dict) -> None:
         """slack_uid_to_uid index should be cleared in redacted mode."""
         inner = FakeDataSource(sample_employee_data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
@@ -229,7 +217,10 @@ class TestRedactingDataSourceEdgeCases:
 
     def test_empty_employees_dict(self) -> None:
         """Should handle empty employees dict."""
-        data = {"lookups": {"employees": {}}, "indexes": {"membership": {"membership_index": {}}}}
+        data = {
+            "lookups": {"employees": {}},
+            "indexes": {"membership": {"membership_index": {}}},
+        }
         inner = FakeDataSource(data)
         source = RedactingDataSource(inner, PIIMode.REDACTED)
 
@@ -277,6 +268,22 @@ class TestRedactingDataSourceEdgeCases:
         result = json.load(source.load())
 
         assert result["lookups"]["employees"]["jsmith"]["full_name"] == "[REDACTED]"
+
+
+class TestRedactingDataSourceUnsupportedMode:
+    """Tests for unsupported PII modes."""
+
+    def test_anonymized_mode_raises(self, sample_employee_data: dict) -> None:
+        """ANONYMIZED mode should raise ValueError."""
+        inner = FakeDataSource(sample_employee_data)
+        with pytest.raises(ValueError, match="ANONYMIZED"):
+            RedactingDataSource(inner, PIIMode.ANONYMIZED)
+
+    def test_async_anonymized_mode_raises(self, sample_employee_data: dict) -> None:
+        """ANONYMIZED mode should raise ValueError for async variant."""
+        inner = FakeDataSource(sample_employee_data)
+        with pytest.raises(ValueError, match="ANONYMIZED"):
+            AsyncRedactingDataSource(inner, PIIMode.ANONYMIZED)
 
 
 class TestRedactingDataSourceStr:

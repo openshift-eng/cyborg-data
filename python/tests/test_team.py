@@ -5,9 +5,9 @@ import pytest
 from orgdatacore import (
     AliasInfo,
     ChannelInfo,
-    ComponentRoleInfo,
     Data,
     EmailInfo,
+    EscalationContactInfo,
     GitHubIDMappings,
     Group,
     GroupType,
@@ -255,12 +255,7 @@ class TestGroupExtendedFields:
                                     description="Team wiki",
                                 ),
                             ),
-                            component_roles=(
-                                ComponentRoleInfo(
-                                    component="/component/path",
-                                    types=("owner",),
-                                ),
-                            ),
+                            component_roles=("/component/path",),
                         ),
                     ),
                 },
@@ -286,3 +281,83 @@ class TestGroupExtendedFields:
         assert len(team.group.emails) == 1
         assert len(team.group.resources) == 1
         assert len(team.group.component_roles) == 1
+
+
+class TestGetComponentsForTeam:
+    """Tests for get_components_for_team."""
+
+    def test_returns_components_with_ownership_types(self, service: Service):
+        components = service.get_components_for_team("platform-team")
+        assert len(components) == 2
+        by_name = {c.component: c for c in components}
+        assert "platform-api" in by_name
+        assert "auth-service" in by_name
+        assert "owner" in by_name["platform-api"].ownership_types
+        assert "contributor" in by_name["auth-service"].ownership_types
+
+    def test_single_component_team(self, service: Service):
+        components = service.get_components_for_team("test-team")
+        assert len(components) == 1
+        assert components[0].component == "auth-service"
+        assert "owner" in components[0].ownership_types
+
+    def test_unknown_team_returns_empty(self, service: Service):
+        components = service.get_components_for_team("nonexistent-team")
+        assert components == []
+
+    def test_empty_service_returns_empty(self, empty_service: Service):
+        components = empty_service.get_components_for_team("test-team")
+        assert components == []
+
+
+class TestGetTeamEscalation:
+    """Tests for team escalation contact lookup."""
+
+    def test_returns_escalation_contacts(self, service: Service):
+        """Test that escalation contacts are returned for a team that has them."""
+        result = service.get_team_escalation("platform-team")
+
+        assert len(result) == 2
+        assert result[0].name == "Platform on-call"
+        assert result[0].url == "https://redhat.enterprise.slack.com/archives/C003"
+        assert (
+            result[0].description == "Primary on-call engineer for platform incidents."
+        )
+        assert result[1].name == "Platform team"
+
+    def test_returns_empty_for_team_without_escalation(self, service: Service):
+        """Test that empty list is returned for a team with no escalation data."""
+        result = service.get_team_escalation("test-team")
+
+        assert result == []
+
+    def test_returns_empty_for_nonexistent_team(self, service: Service):
+        """Test that empty list is returned for a nonexistent team."""
+        result = service.get_team_escalation("nonexistent-team")
+
+        assert result == []
+
+    def test_returns_empty_for_empty_service(self, empty_service: Service):
+        """Test that empty list is returned when no data is loaded."""
+        result = empty_service.get_team_escalation("platform-team")
+
+        assert result == []
+
+    def test_escalation_contacts_are_ordered(self, service: Service):
+        """Test that escalation contacts preserve insertion order."""
+        result = service.get_team_escalation("platform-team")
+
+        names = [c.name for c in result]
+        assert names == ["Platform on-call", "Platform team"]
+
+    def test_escalation_contact_fields(self):
+        """Test EscalationContactInfo dataclass fields."""
+        contact = EscalationContactInfo(
+            name="Test monitor",
+            url="https://example.com/channel",
+            description="Test escalation path",
+        )
+
+        assert contact.name == "Test monitor"
+        assert contact.url == "https://example.com/channel"
+        assert contact.description == "Test escalation path"

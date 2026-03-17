@@ -325,6 +325,146 @@ func TestTeamMembershipConsistency(t *testing.T) {
 	}
 }
 
+// TestGetUserMemberships tests membership lookup by UID
+func TestGetUserMemberships(t *testing.T) {
+	service := setupTestService(t)
+
+	tests := []struct {
+		name     string
+		uid      string
+		minCount int
+	}{
+		{"jsmith memberships", "jsmith", 2},
+		{"bwilson memberships", "bwilson", 2},
+		{"nonexistent user", "nonexistent", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.GetUserMemberships(tt.uid)
+			if len(result) < tt.minCount {
+				t.Errorf("GetUserMemberships(%q) returned %d items, expected at least %d", tt.uid, len(result), tt.minCount)
+			}
+		})
+	}
+}
+
+func TestGetUserMemberships_EmptyService(t *testing.T) {
+	service := NewService()
+	result := service.GetUserMemberships("jsmith")
+	if len(result) != 0 {
+		t.Errorf("Expected 0 memberships from empty service, got %d", len(result))
+	}
+}
+
+// TestGetUserTeams tests GetUserTeams (alias for GetTeamsForUID)
+func TestGetUserTeams(t *testing.T) {
+	service := setupTestService(t)
+
+	teams := service.GetUserTeams("jsmith")
+	found := false
+	for _, team := range teams {
+		if team == "test-team" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("GetUserTeams(\"jsmith\") = %v, expected to contain \"test-team\"", teams)
+	}
+
+	empty := service.GetUserTeams("nonexistent")
+	if len(empty) != 0 {
+		t.Errorf("GetUserTeams(\"nonexistent\") = %v, expected empty", empty)
+	}
+}
+
+// TestGetTeamEscalation tests escalation contact retrieval
+func TestGetTeamEscalation(t *testing.T) {
+	service := setupTestService(t)
+
+	// platform-team has escalation contacts in test data
+	contacts := service.GetTeamEscalation("platform-team")
+	if len(contacts) != 2 {
+		t.Errorf("GetTeamEscalation(\"platform-team\") returned %d contacts, expected 2", len(contacts))
+	}
+	if len(contacts) > 0 && contacts[0].Name != "Platform on-call" {
+		t.Errorf("First escalation contact name = %q, expected \"Platform on-call\"", contacts[0].Name)
+	}
+
+	// test-team has no escalation contacts
+	noContacts := service.GetTeamEscalation("test-team")
+	if len(noContacts) != 0 {
+		t.Errorf("GetTeamEscalation(\"test-team\") returned %d contacts, expected 0", len(noContacts))
+	}
+
+	// nonexistent team
+	none := service.GetTeamEscalation("nonexistent")
+	if len(none) != 0 {
+		t.Errorf("GetTeamEscalation(\"nonexistent\") returned %d contacts, expected 0", len(none))
+	}
+}
+
+func TestGetTeamEscalation_EmptyService(t *testing.T) {
+	service := NewService()
+	result := service.GetTeamEscalation("test-team")
+	if len(result) != 0 {
+		t.Errorf("Expected 0 escalation contacts from empty service, got %d", len(result))
+	}
+}
+
+// TestGetTeamsForComponent tests component ownership lookup
+func TestGetTeamsForComponent(t *testing.T) {
+	service := setupTestService(t)
+
+	// auth-service is owned by two teams
+	owners := service.GetTeamsForComponent("auth-service")
+	if len(owners) != 2 {
+		t.Errorf("GetTeamsForComponent(\"auth-service\") returned %d owners, expected 2", len(owners))
+	}
+
+	// platform-api is owned by one team
+	owners2 := service.GetTeamsForComponent("platform-api")
+	if len(owners2) != 1 {
+		t.Errorf("GetTeamsForComponent(\"platform-api\") returned %d owners, expected 1", len(owners2))
+	}
+	if len(owners2) > 0 && owners2[0].Name != "platform-team" {
+		t.Errorf("GetTeamsForComponent(\"platform-api\")[0].Name = %q, expected \"platform-team\"", owners2[0].Name)
+	}
+
+	// nonexistent component
+	none := service.GetTeamsForComponent("nonexistent")
+	if len(none) != 0 {
+		t.Errorf("GetTeamsForComponent(\"nonexistent\") returned %d owners, expected 0", len(none))
+	}
+}
+
+// TestGetComponentsForTeam tests reverse component ownership lookup
+func TestGetComponentsForTeam(t *testing.T) {
+	service := setupTestService(t)
+
+	// platform-team owns platform-api and auth-service
+	components := service.GetComponentsForTeam("platform-team")
+	if len(components) != 2 {
+		t.Errorf("GetComponentsForTeam(\"platform-team\") returned %d components, expected 2", len(components))
+	}
+
+	// test-team owns auth-service
+	components2 := service.GetComponentsForTeam("test-team")
+	if len(components2) != 1 {
+		t.Errorf("GetComponentsForTeam(\"test-team\") returned %d components, expected 1", len(components2))
+	}
+	if len(components2) > 0 && components2[0].Component != "auth-service" {
+		t.Errorf("GetComponentsForTeam(\"test-team\")[0].Component = %q, expected \"auth-service\"", components2[0].Component)
+	}
+
+	// nonexistent team
+	none := service.GetComponentsForTeam("nonexistent")
+	if len(none) != 0 {
+		t.Errorf("GetComponentsForTeam(\"nonexistent\") returned %d components, expected 0", len(none))
+	}
+}
+
 // TestGroupExtendedFields tests the extended Group fields added in refactoring
 func TestGroupExtendedFields(t *testing.T) {
 	service := NewService()
@@ -394,12 +534,7 @@ func TestGroupExtendedFields(t *testing.T) {
 								Description: "Team wiki",
 							},
 						},
-						ComponentRoles: []ComponentRoleInfo{
-							{
-								Component: "/component/path",
-								Types:     []string{"owner"},
-							},
-						},
+						ComponentRoles: []string{"/component/path"},
 					},
 				},
 			},

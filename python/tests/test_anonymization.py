@@ -167,8 +167,12 @@ class TestAnonymizingDataSourceAnonymizedMode:
 
         employees = result["lookups"]["employees"]
         for nonce_key, emp in employees.items():
-            assert NONCE_PATTERN.match(nonce_key), f"Key {nonce_key} doesn't match pattern"
-            assert NONCE_PATTERN.match(emp["uid"]), f"uid {emp['uid']} doesn't match pattern"
+            assert NONCE_PATTERN.match(nonce_key), (
+                f"Key {nonce_key} doesn't match pattern"
+            )
+            assert NONCE_PATTERN.match(emp["uid"]), (
+                f"uid {emp['uid']} doesn't match pattern"
+            )
             assert emp["uid"] == nonce_key
 
     def test_names_anonymized(self, sample_data: dict) -> None:
@@ -313,7 +317,9 @@ class TestAnonymizingDataSourceGroups:
 
         result = json.load(source.load())
 
-        people = result["lookups"]["teams"]["test-squad"]["group"]["resolved_people_uid_list"]
+        people = result["lookups"]["teams"]["test-squad"]["group"][
+            "resolved_people_uid_list"
+        ]
         assert len(people) == 2
         for p in people:
             assert NONCE_PATTERN.match(p), f"Person {p} not a nonce"
@@ -324,7 +330,9 @@ class TestAnonymizingDataSourceGroups:
 
         result = json.load(source.load())
 
-        people = result["lookups"]["orgs"]["test-org"]["group"]["resolved_people_uid_list"]
+        people = result["lookups"]["orgs"]["test-org"]["group"][
+            "resolved_people_uid_list"
+        ]
         assert len(people) == 2
         for p in people:
             assert NONCE_PATTERN.match(p)
@@ -502,7 +510,10 @@ class TestAnonymizingDataSourceEdgeCases:
     """Edge case tests."""
 
     def test_empty_employees(self) -> None:
-        data = {"lookups": {"employees": {}}, "indexes": {"membership": {"membership_index": {}}}}
+        data = {
+            "lookups": {"employees": {}},
+            "indexes": {"membership": {"membership_index": {}}},
+        }
         inner = FakeDataSource(data)
         source = AnonymizingDataSource(inner, PIIMode.ANONYMIZED)
 

@@ -81,6 +81,26 @@ type ResourceInfo struct {
 	Description string `json:"description,omitempty"`
 }
 
+// EscalationContactInfo represents an escalation contact for incident response
+type EscalationContactInfo struct {
+	Name        string `json:"name"`
+	URL         string `json:"url,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ComponentOwnerInfo represents an entity that owns a component, with ownership types
+type ComponentOwnerInfo struct {
+	Name           string   `json:"name"`
+	Type           string   `json:"type"`
+	OwnershipTypes []string `json:"ownership_types"`
+}
+
+// ComponentOwnership represents a component owned by a team, with ownership types
+type ComponentOwnership struct {
+	Component      string   `json:"component"`
+	OwnershipTypes []string `json:"ownership_types"`
+}
+
 // ComponentRoleInfo represents component ownership information
 type ComponentRoleInfo struct {
 	Component string   `json:"component"`
@@ -114,8 +134,9 @@ type Group struct {
 	Repos                 []RepoInfo          `json:"repos,omitempty"`
 	Keywords              []string            `json:"keywords,omitempty"`
 	Emails                []EmailInfo         `json:"emails,omitempty"`
-	Resources             []ResourceInfo      `json:"resources,omitempty"`
-	ComponentRoles        []ComponentRoleInfo `json:"component_roles,omitempty"`
+	Resources             []ResourceInfo         `json:"resources,omitempty"`
+	Escalation            []EscalationContactInfo `json:"escalation,omitempty"`
+	ComponentRoles        []string               `json:"component_roles,omitempty"`
 }
 
 // GroupType contains group type information
@@ -253,10 +274,11 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 
 // Indexes contains pre-computed lookup tables
 type Indexes struct {
-	Membership       MembershipIndex  `json:"membership"`
-	SlackIDMappings  SlackIDMappings  `json:"slack_id_mappings"`
-	GitHubIDMappings GitHubIDMappings `json:"github_id_mappings,omitempty"`
-	Jira             JiraIndex        `json:"jira,omitempty"`
+	Membership         MembershipIndex                  `json:"membership"`
+	SlackIDMappings    SlackIDMappings                  `json:"slack_id_mappings"`
+	GitHubIDMappings   GitHubIDMappings                 `json:"github_id_mappings,omitempty"`
+	Jira               JiraIndex                        `json:"jira,omitempty"`
+	ComponentOwnership map[string][]ComponentOwnerInfo   `json:"component_ownership,omitempty"`
 }
 
 // SlackIDMappings contains Slack ID to UID mappings

@@ -847,6 +847,194 @@ func (s *Service) GetJiraOwnershipForTeam(teamName string) []JiraOwnership {
 	return result
 }
 
+// GetUserMemberships returns all memberships for a user.
+func (s *Service) GetUserMemberships(uid string) []MembershipInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.Membership.MembershipIndex == nil {
+		return []MembershipInfo{}
+	}
+	memberships := s.data.Indexes.Membership.MembershipIndex[uid]
+	if len(memberships) == 0 {
+		return []MembershipInfo{}
+	}
+	result := make([]MembershipInfo, len(memberships))
+	copy(result, memberships)
+	return result
+}
+
+// GetUserTeams returns team names for a user.
+func (s *Service) GetUserTeams(uid string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.getTeamsForUID(uid)
+}
+
+// GetAllEmployees returns all employees.
+func (s *Service) GetAllEmployees() []Employee {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Employees == nil {
+		return []Employee{}
+	}
+	employees := make([]Employee, 0, len(s.data.Lookups.Employees))
+	for _, emp := range s.data.Lookups.Employees {
+		employees = append(employees, emp)
+	}
+	return employees
+}
+
+// GetAllTeams returns all teams.
+func (s *Service) GetAllTeams() []Team {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Teams == nil {
+		return []Team{}
+	}
+	teams := make([]Team, 0, len(s.data.Lookups.Teams))
+	for _, team := range s.data.Lookups.Teams {
+		teams = append(teams, team)
+	}
+	return teams
+}
+
+// GetAllOrgs returns all organizations.
+func (s *Service) GetAllOrgs() []Org {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Orgs == nil {
+		return []Org{}
+	}
+	orgs := make([]Org, 0, len(s.data.Lookups.Orgs))
+	for _, org := range s.data.Lookups.Orgs {
+		orgs = append(orgs, org)
+	}
+	return orgs
+}
+
+// GetAllPillars returns all pillars.
+func (s *Service) GetAllPillars() []Pillar {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Pillars == nil {
+		return []Pillar{}
+	}
+	pillars := make([]Pillar, 0, len(s.data.Lookups.Pillars))
+	for _, pillar := range s.data.Lookups.Pillars {
+		pillars = append(pillars, pillar)
+	}
+	return pillars
+}
+
+// GetAllTeamGroups returns all team groups.
+func (s *Service) GetAllTeamGroups() []TeamGroup {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.TeamGroups == nil {
+		return []TeamGroup{}
+	}
+	tgs := make([]TeamGroup, 0, len(s.data.Lookups.TeamGroups))
+	for _, tg := range s.data.Lookups.TeamGroups {
+		tgs = append(tgs, tg)
+	}
+	return tgs
+}
+
+// GetOrgMembers returns all members of an organization.
+func (s *Service) GetOrgMembers(orgName string) []Employee {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Orgs == nil {
+		return []Employee{}
+	}
+	org, exists := s.data.Lookups.Orgs[orgName]
+	if !exists {
+		return []Employee{}
+	}
+	var members []Employee
+	for _, uid := range org.Group.ResolvedPeopleUIDList {
+		if emp, exists := s.data.Lookups.Employees[uid]; exists {
+			members = append(members, emp)
+		}
+	}
+	if members == nil {
+		return []Employee{}
+	}
+	return members
+}
+
+// GetTeamEscalation returns the escalation contacts for a team.
+func (s *Service) GetTeamEscalation(teamName string) []EscalationContactInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Teams == nil {
+		return []EscalationContactInfo{}
+	}
+	team, exists := s.data.Lookups.Teams[teamName]
+	if !exists {
+		return []EscalationContactInfo{}
+	}
+	if len(team.Group.Escalation) == 0 {
+		return []EscalationContactInfo{}
+	}
+	result := make([]EscalationContactInfo, len(team.Group.Escalation))
+	copy(result, team.Group.Escalation)
+	return result
+}
+
+// GetTeamsForComponent returns all teams/entities that own a component.
+func (s *Service) GetTeamsForComponent(componentName string) []ComponentOwnerInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.ComponentOwnership == nil {
+		return []ComponentOwnerInfo{}
+	}
+	owners, exists := s.data.Indexes.ComponentOwnership[componentName]
+	if !exists {
+		return []ComponentOwnerInfo{}
+	}
+	result := make([]ComponentOwnerInfo, len(owners))
+	copy(result, owners)
+	return result
+}
+
+// GetComponentsForTeam returns all components owned by a team.
+func (s *Service) GetComponentsForTeam(teamName string) []ComponentOwnership {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Indexes.ComponentOwnership == nil {
+		return []ComponentOwnership{}
+	}
+
+	var result []ComponentOwnership
+	for componentName, owners := range s.data.Indexes.ComponentOwnership {
+		for _, owner := range owners {
+			if owner.Name == teamName {
+				result = append(result, ComponentOwnership{
+					Component:      componentName,
+					OwnershipTypes: owner.OwnershipTypes,
+				})
+				break
+			}
+		}
+	}
+	if result == nil {
+		return []ComponentOwnership{}
+	}
+	return result
+}
+
 // validateData checks that required data structures are present.
 func validateData(data *Data) error {
 	if len(data.Lookups.Employees) == 0 {

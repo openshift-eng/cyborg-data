@@ -39,7 +39,7 @@ import threading
 import time
 from collections.abc import Callable
 from io import BytesIO
-from typing import BinaryIO, TypeVar
+from typing import Any, BinaryIO, TypeVar
 
 from ._exceptions import ConfigurationError, GCSError
 from ._log import get_logger
@@ -53,63 +53,12 @@ DEFAULT_RETRY_DELAY = 1.0  # seconds
 DEFAULT_RETRY_BACKOFF = 2.0  # multiplier
 
 
-class GCSDataSource:
-    """
-    GCSDataSource is a stub for GCS support.
+try:
+    from google.cloud import storage
 
-    To enable actual GCS support, install the google-cloud-storage package
-    and use GCSDataSourceWithSDK instead.
-
-    For custom data sources, implement the DataSource protocol:
-
-        class MyCustomDataSource:
-            def load(self) -> BinaryIO: ...
-            def watch(self, callback) -> Optional[Exception]: ...
-            def __str__(self) -> str: ...
-    """
-
-    def __init__(self, config: GCSConfig) -> None:
-        """
-        Create a stub GCS data source.
-
-        For production use with actual GCS functionality, install google-cloud-storage
-        and use GCSDataSourceWithSDK instead.
-
-        Args:
-            config: GCS configuration with bucket, object path, etc.
-        """
-        self.config = config
-
-    def load(self) -> BinaryIO:
-        """
-        Returns an error indicating GCS support is not enabled.
-
-        Raises:
-            GCSError: Always, as this is a stub implementation.
-        """
-        raise GCSError(
-            "GCS support not enabled: install google-cloud-storage and use "
-            "GCSDataSourceWithSDK(), or implement a custom DataSource."
-        )
-
-    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
-        """
-        Returns an error indicating GCS support is not enabled.
-
-        Returns:
-            GCSError: Always, as this is a stub implementation.
-        """
-        return GCSError(
-            "GCS support not enabled: install google-cloud-storage and use "
-            "GCSDataSourceWithSDK()"
-        )
-
-    def __str__(self) -> str:
-        """Return a description of this data source."""
-        return (
-            f"gs://{self.config.bucket}/{self.config.object_path} "
-            "(stub - install google-cloud-storage for actual support)"
-        )
+    _HAS_GCS = True
+except ImportError:
+    _HAS_GCS = False
 
 
 def _retry_with_backoff(
@@ -169,206 +118,200 @@ def _retry_with_backoff(
     )
 
 
-try:
-    from google.cloud import storage  # type: ignore[import-untyped]
+class GCSDataSource:
+    """GCS data source using google-cloud-storage.
 
-    class GCSDataSourceWithSDK:
+    Requires the google-cloud-storage package:
+        pip install orgdatacore[gcs]
+
+    Features:
+    - Automatic retry with exponential backoff for transient failures
+    - Structured logging for observability
+    - Proper error handling with custom exceptions
+
+    Example:
+        from orgdatacore import GCSConfig, GCSDataSource
+        from datetime import timedelta
+
+        config = GCSConfig(
+            bucket="your-bucket",
+            object_path="path/to/data.json",
+            project_id="your-project",
+            check_interval=timedelta(minutes=5),
+        )
+        source = GCSDataSource(config)
+        service.load_from_data_source(source)
+    """
+
+    def __init__(
+        self,
+        config: GCSConfig,
+        *,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_delay: float = DEFAULT_RETRY_DELAY,
+        retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+    ) -> None:
+        """Create a GCS data source.
+
+        Args:
+            config: GCS configuration.
+            max_retries: Maximum retry attempts for transient failures.
+            retry_delay: Initial delay between retries in seconds.
+            retry_backoff: Multiplier for delay after each retry.
+
+        Raises:
+            ImportError: If google-cloud-storage is not installed.
+            ConfigurationError: If configuration is invalid.
         """
-        GCSDataSourceWithSDK provides actual GCS support using the Google Cloud SDK.
-
-        Requires the google-cloud-storage package to be installed:
-            pip install google-cloud-storage
-
-        Features:
-        - Automatic retry with exponential backoff for transient failures
-        - Structured logging for observability
-        - Proper error handling with custom exceptions
-
-        Example:
-            from orgdatacore import GCSConfig
-            from orgdatacore.datasources import GCSDataSourceWithSDK
-            from datetime import timedelta
-
-            config = GCSConfig(
-                bucket="your-bucket",
-                object_path="path/to/data.json",
-                project_id="your-project",
-                check_interval=timedelta(minutes=5),
+        if not _HAS_GCS:
+            raise ImportError(
+                "google-cloud-storage is required for GCS support. "
+                "Install it with: pip install orgdatacore[gcs]"
             )
-            source = GCSDataSourceWithSDK(config)
-            service.load_from_data_source(source)
-        """
+        if not config.bucket:
+            raise ConfigurationError("GCS bucket is required")
+        if not config.object_path:
+            raise ConfigurationError("GCS object_path is required")
 
-        def __init__(
-            self,
-            config: GCSConfig,
-            *,
-            max_retries: int = DEFAULT_MAX_RETRIES,
-            retry_delay: float = DEFAULT_RETRY_DELAY,
-            retry_backoff: float = DEFAULT_RETRY_BACKOFF,
-        ) -> None:
-            """Create a GCS data source with SDK support.
+        self.config = config
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.retry_backoff = retry_backoff
+        self._client: Any = None
+        self._stop_event = threading.Event()
 
-            Args:
-                config: GCS configuration.
-                max_retries: Maximum retry attempts for transient failures.
-                retry_delay: Initial delay between retries in seconds.
-                retry_backoff: Multiplier for delay after each retry.
-
-            Raises:
-                ConfigurationError: If configuration is invalid.
-            """
-            if not config.bucket:
-                raise ConfigurationError("GCS bucket is required")
-            if not config.object_path:
-                raise ConfigurationError("GCS object_path is required")
-
-            self.config = config
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.retry_backoff = retry_backoff
-            self._client: storage.Client | None = None
-            self._stop_event = threading.Event()
-
-        def _get_client(self) -> storage.Client:
-            """Get or create the GCS client."""
-            if self._client is None:
-                logger = get_logger()
-                logger.debug(
-                    "Creating GCS client", extra={"project_id": self.config.project_id}
-                )
-
-                if self.config.credentials_json:
-                    self._client = storage.Client.from_service_account_json(
-                        self.config.credentials_json
-                    )
-                else:
-                    self._client = storage.Client(
-                        project=self.config.project_id or None
-                    )
-            return self._client
-
-        def load(self) -> BinaryIO:
-            """Load and return a reader for the organizational data from GCS.
-
-            Returns:
-                File-like object containing the JSON data.
-
-            Raises:
-                GCSError: If loading fails after all retries.
-            """
+    def _get_client(self) -> Any:
+        """Get or create the GCS client."""
+        if self._client is None:
             logger = get_logger()
             logger.debug(
-                "Loading from GCS",
-                extra={"bucket": self.config.bucket, "object": self.config.object_path},
+                "Creating GCS client", extra={"project_id": self.config.project_id}
             )
 
-            def _download() -> BinaryIO:
-                client = self._get_client()
-                bucket = client.bucket(self.config.bucket)
-                blob = bucket.blob(self.config.object_path)
-                content = blob.download_as_bytes()
-                return BytesIO(content)
+            if self.config.credentials_json:
+                import json as _json
 
-            return _retry_with_backoff(
-                _download,
-                max_retries=self.max_retries,
-                initial_delay=self.retry_delay,
-                backoff=self.retry_backoff,
-                operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
+                creds_info = _json.loads(self.config.credentials_json)
+                self._client = storage.Client.from_service_account_info(creds_info)
+            else:
+                self._client = storage.Client(project=self.config.project_id or None)
+        return self._client
+
+    def load(self) -> BinaryIO:
+        """Load and return a reader for the organizational data from GCS.
+
+        Returns:
+            File-like object containing the JSON data.
+
+        Raises:
+            GCSError: If loading fails after all retries.
+        """
+        logger = get_logger()
+        logger.debug(
+            "Loading from GCS",
+            extra={"bucket": self.config.bucket, "object": self.config.object_path},
+        )
+
+        def _download() -> BinaryIO:
+            client = self._get_client()
+            bucket = client.bucket(self.config.bucket)
+            blob = bucket.blob(self.config.object_path)
+            content = blob.download_as_bytes()
+            return BytesIO(content)
+
+        return _retry_with_backoff(
+            _download,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
+        )
+
+    def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
+        """Monitor for changes and call callback when data is updated.
+
+        Uses polling based on the configured check interval.
+        Detects changes by comparing object generation numbers.
+
+        Args:
+            callback: Function to call when data changes.
+
+        Returns:
+            Exception if watcher setup fails, None otherwise.
+        """
+        logger = get_logger()
+
+        # Reset stop event so watch() can be called again after stop_watching()
+        self._stop_event = threading.Event()
+
+        try:
+            client = self._get_client()
+            bucket = client.bucket(self.config.bucket)
+            blob = bucket.blob(self.config.object_path)
+
+            # Get initial generation
+            blob.reload()
+            last_generation = blob.generation
+
+            logger.info(
+                "Starting GCS watcher",
+                extra={
+                    "bucket": self.config.bucket,
+                    "object": self.config.object_path,
+                    "check_interval": str(self.config.check_interval),
+                    "initial_generation": last_generation,
+                },
             )
+        except Exception as e:
+            logger.error("Failed to initialize GCS watcher", extra={"error": str(e)})
+            return GCSError(f"Failed to initialize GCS watcher: {e}")
 
-        def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:
-            """
-            Monitor for changes and call callback when data is updated.
+        def watcher() -> None:
+            nonlocal last_generation
+            interval = self.config.check_interval.total_seconds()
 
-            Uses polling based on the configured check interval.
-            Detects changes by comparing object generation numbers.
+            while not self._stop_event.is_set():
+                time.sleep(interval)
+                if self._stop_event.is_set():
+                    break
 
-            Args:
-                callback: Function to call when data changes.
-
-            Returns:
-                Exception if watcher setup fails, None otherwise.
-            """
-            logger = get_logger()
-
-            try:
-                client = self._get_client()
-                bucket = client.bucket(self.config.bucket)
-                blob = bucket.blob(self.config.object_path)
-
-                # Get initial generation
-                blob.reload()
-                last_generation = blob.generation
-
-                logger.info(
-                    "Starting GCS watcher",
-                    extra={
-                        "bucket": self.config.bucket,
-                        "object": self.config.object_path,
-                        "check_interval": str(self.config.check_interval),
-                        "initial_generation": last_generation,
-                    },
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to initialize GCS watcher", extra={"error": str(e)}
-                )
-                return GCSError(f"Failed to initialize GCS watcher: {e}")
-
-            def watcher() -> None:
-                nonlocal last_generation
-                interval = self.config.check_interval.total_seconds()
-
-                while not self._stop_event.is_set():
-                    time.sleep(interval)
-                    if self._stop_event.is_set():
-                        break
-
-                    try:
-                        blob.reload()
-                        if blob.generation != last_generation:
-                            logger.info(
-                                "GCS object changed, triggering reload",
-                                extra={
-                                    "old_generation": last_generation,
-                                    "new_generation": blob.generation,
-                                },
-                            )
-                            last_generation = blob.generation
-                            err = callback()
-                            if err:
-                                logger.error(
-                                    "Reload callback failed", extra={"error": str(err)}
-                                )
-                    except Exception as e:
-                        logger.error(
-                            "GCS watcher check failed", extra={"error": str(e)}
+                try:
+                    blob.reload()
+                    if blob.generation != last_generation:
+                        logger.info(
+                            "GCS object changed, triggering reload",
+                            extra={
+                                "old_generation": last_generation,
+                                "new_generation": blob.generation,
+                            },
                         )
+                        last_generation = blob.generation
+                        err = callback()
+                        if err:
+                            logger.error(
+                                "Reload callback failed", extra={"error": str(err)}
+                            )
+                except Exception as e:
+                    logger.error("GCS watcher check failed", extra={"error": str(e)})
 
-            thread = threading.Thread(target=watcher, daemon=True, name="gcs-watcher")
-            thread.start()
-            return None
+        thread = threading.Thread(target=watcher, daemon=True, name="gcs-watcher")
+        thread.start()
+        return None
 
-        def stop_watching(self) -> None:
-            """Stop the GCS watcher."""
-            logger = get_logger()
-            logger.info("Stopping GCS watcher")
-            self._stop_event.set()
+    def stop_watching(self) -> None:
+        """Stop the GCS watcher."""
+        logger = get_logger()
+        logger.info("Stopping GCS watcher")
+        self._stop_event.set()
 
-        def stop(self) -> None:
-            """Stop the GCS watcher.
+    def stop(self) -> None:
+        """Stop the GCS watcher.
 
-            Alias for stop_watching() to support the standard stop interface
-            expected by AsyncService.stop_watcher().
-            """
-            self.stop_watching()
+        Alias for stop_watching() to support the standard stop interface
+        expected by AsyncService.stop_watcher().
+        """
+        self.stop_watching()
 
-        def __str__(self) -> str:
-            """Return a description of this data source."""
-            return f"gs://{self.config.bucket}/{self.config.object_path}"
-
-except ImportError:
-    # google-cloud-storage not available
-    pass
+    def __str__(self) -> str:
+        """Return a description of this data source."""
+        return f"gs://{self.config.bucket}/{self.config.object_path}"

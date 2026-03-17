@@ -1,9 +1,11 @@
 """Tests for GCS data source functionality using fake implementations."""
 
+import importlib.util
+
 import pytest
 
 from orgdatacore import Service
-from orgdatacore._exceptions import GCSError
+from orgdatacore._exceptions import ConfigurationError, GCSError
 from orgdatacore._gcs import GCSDataSource, _retry_with_backoff
 from orgdatacore._internal.testing import (
     FakeGCSClient,
@@ -12,33 +14,30 @@ from orgdatacore._internal.testing import (
 )
 from orgdatacore._types import GCSConfig
 
+_has_gcs = importlib.util.find_spec("google.cloud.storage") is not None
 
-class TestGCSDataSourceStub:
-    """Tests for the GCS stub implementation (when SDK is not available)."""
 
-    def test_stub_load_raises_error(self) -> None:
-        """Test that stub implementation raises GCSError on load."""
+@pytest.mark.skipif(not _has_gcs, reason="google-cloud-storage not installed")
+class TestGCSDataSourceInit:
+    """Tests for GCSDataSource initialization."""
+
+    def test_creates_successfully(self) -> None:
+        """Test that GCSDataSource can be created when google-cloud-storage is installed."""
         config = GCSConfig(bucket="test-bucket", object_path="test/path.json")
         source = GCSDataSource(config)
+        assert "gs://test-bucket/test/path.json" in str(source)
 
-        with pytest.raises(GCSError, match="GCS support not enabled"):
-            source.load()
+    def test_requires_bucket(self) -> None:
+        """Test that empty bucket raises ConfigurationError."""
+        config = GCSConfig(bucket="", object_path="test/path.json")
+        with pytest.raises(ConfigurationError, match="bucket"):
+            GCSDataSource(config)
 
-    def test_stub_watch_returns_error(self) -> None:
-        """Test that stub implementation returns error on watch."""
-        config = GCSConfig(bucket="test-bucket", object_path="test/path.json")
-        source = GCSDataSource(config)
-
-        result = source.watch(lambda: None)
-        assert isinstance(result, GCSError)
-
-    def test_stub_str(self) -> None:
-        """Test stub string representation."""
-        config = GCSConfig(bucket="my-bucket", object_path="data/file.json")
-        source = GCSDataSource(config)
-
-        assert "gs://my-bucket/data/file.json" in str(source)
-        assert "stub" in str(source)
+    def test_requires_object_path(self) -> None:
+        """Test that empty object_path raises ConfigurationError."""
+        config = GCSConfig(bucket="test-bucket", object_path="")
+        with pytest.raises(ConfigurationError, match="object_path"):
+            GCSDataSource(config)
 
 
 class TestFakeGCSClient:

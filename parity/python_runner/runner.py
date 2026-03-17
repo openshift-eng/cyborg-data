@@ -6,15 +6,86 @@ Accepts method configuration via stdin and outputs JSON results.
 
 import json
 import sys
-from dataclasses import asdict, is_dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
+from pydantic import BaseModel
+
 from orgdatacore import Service  # noqa: E402
 from orgdatacore._internal.testing import FileDataSource  # noqa: E402
+
+
+@dataclass(frozen=True, slots=True)
+class EntityConfig:
+    """Defines which fields to serialize and how to sort for a given entity type."""
+
+    fields: tuple[str, ...]
+    sort_by: tuple[str, ...] = ()
+    preserve_order: bool = False
+
+
+ENTITY_REGISTRY: dict[str, EntityConfig] = {
+    "Employee": EntityConfig(
+        fields=("uid", "full_name", "email"),
+        sort_by=("uid",),
+    ),
+    "Team": EntityConfig(
+        fields=("uid", "name", "description"),
+        sort_by=("name",),
+    ),
+    "Org": EntityConfig(
+        fields=("uid", "name", "description"),
+        sort_by=("name",),
+    ),
+    "Pillar": EntityConfig(
+        fields=("uid", "name", "description"),
+        sort_by=("name",),
+    ),
+    "TeamGroup": EntityConfig(
+        fields=("uid", "name", "description"),
+        sort_by=("name",),
+    ),
+    "Component": EntityConfig(
+        fields=("name", "description"),
+        sort_by=("name",),
+    ),
+    "HierarchyPathEntry": EntityConfig(
+        fields=("name", "type"),
+        preserve_order=True,
+    ),
+    "OrgInfo": EntityConfig(
+        fields=("name", "type"),
+        sort_by=("name",),
+    ),
+    "JiraOwnerInfo": EntityConfig(
+        fields=("name", "type"),
+        sort_by=("name",),
+    ),
+    "JiraOwnership": EntityConfig(
+        fields=("project", "component"),
+        sort_by=("project", "component"),
+    ),
+    "MembershipInfo": EntityConfig(
+        fields=("name", "type"),
+        sort_by=("name", "type"),
+    ),
+    "EscalationContactInfo": EntityConfig(
+        fields=("name", "url", "description"),
+        preserve_order=True,
+    ),
+    "ComponentOwnerInfo": EntityConfig(
+        fields=("name", "type", "ownership_types"),
+        sort_by=("name", "type"),
+    ),
+    "ComponentOwnership": EntityConfig(
+        fields=("component", "ownership_types"),
+        sort_by=("component",),
+    ),
+}
 
 
 def main() -> None:
@@ -82,9 +153,9 @@ def serialize_output(output: Any) -> Any:
         return output
     if isinstance(output, (list, tuple)) and all(isinstance(x, str) for x in output):
         return sorted(output)
-    if isinstance(output, (list, tuple)) and output and is_dataclass(output[0]):
+    if isinstance(output, (list, tuple)) and output and isinstance(output[0], BaseModel):
         return serialize_entity_list(list(output))
-    if is_dataclass(output) and not isinstance(output, type):
+    if isinstance(output, BaseModel):
         return serialize_entity(output)
     if isinstance(output, dict):
         return output
@@ -95,66 +166,18 @@ def serialize_entity(entity: Any) -> dict[str, Any]:
     """Serialize a dataclass entity to match Go output format."""
     entity_type = type(entity).__name__
 
-    if entity_type == "Employee":
-        return {
-            "uid": entity.uid,
-            "full_name": entity.full_name,
-            "email": entity.email,
-        }
-    elif entity_type == "Team":
-        return {
-            "uid": entity.uid,
-            "name": entity.name,
-            "description": entity.description,
-        }
-    elif entity_type == "Org":
-        return {
-            "uid": entity.uid,
-            "name": entity.name,
-            "description": entity.description,
-        }
-    elif entity_type == "Pillar":
-        return {
-            "uid": entity.uid,
-            "name": entity.name,
-            "description": entity.description,
-        }
-    elif entity_type == "TeamGroup":
-        return {
-            "uid": entity.uid,
-            "name": entity.name,
-            "description": entity.description,
-        }
-    elif entity_type == "Component":
-        return {
-            "name": entity.name,
-            "description": entity.description,
-        }
-    elif entity_type == "HierarchyPathEntry":
-        return {
-            "name": entity.name,
-            "type": entity.type,
-        }
-    elif entity_type == "HierarchyNode":
+    if entity_type == "HierarchyNode":
         return serialize_hierarchy_node(entity)
-    elif entity_type == "OrgInfo":
-        return {
-            "name": entity.name,
-            "type": entity.type,
-        }
-    elif entity_type == "JiraOwnerInfo":
-        return {
-            "name": entity.name,
-            "type": entity.type,
-        }
-    elif entity_type == "JiraOwnership":
-        return {
-            "project": entity.project,
-            "component": entity.component,
-        }
-    else:
-        # Generic dataclass serialization
-        return asdict(entity)
+
+    config = ENTITY_REGISTRY.get(entity_type)
+    if config is not None:
+        d: dict[str, Any] = {}
+        for field_name in config.fields:
+            val = getattr(entity, field_name)
+            d[field_name] = list(val) if isinstance(val, tuple) else val
+        return d
+
+    return entity.model_dump()
 
 
 def serialize_entity_list(entities: list[Any]) -> list[dict[str, Any]]:
@@ -165,18 +188,14 @@ def serialize_entity_list(entities: list[Any]) -> list[dict[str, Any]]:
     result = [serialize_entity(e) for e in entities]
     entity_type = type(entities[0]).__name__
 
-    if entity_type == "Employee":
-        result.sort(key=lambda x: x.get("uid", ""))
-    elif entity_type in ("Team", "Org", "Pillar", "TeamGroup", "Component", "OrgInfo", "JiraOwnerInfo"):
-        result.sort(key=lambda x: x.get("name", ""))
-    elif entity_type == "JiraOwnership":
-        result.sort(key=lambda x: (x.get("project", ""), x.get("component", "")))
-    elif entity_type == "HierarchyPathEntry":
-        pass  # Order matters for hierarchy paths
-    elif result and "uid" in result[0]:
-        result.sort(key=lambda x: x.get("uid", ""))
-    elif result and "name" in result[0]:
-        result.sort(key=lambda x: x.get("name", ""))
+    config = ENTITY_REGISTRY.get(entity_type)
+    if config is not None and not config.preserve_order and config.sort_by:
+        result.sort(key=lambda x: tuple(x.get(k, "") for k in config.sort_by))
+    elif config is None:
+        if result and "uid" in result[0]:
+            result.sort(key=lambda x: x.get("uid", ""))
+        elif result and "name" in result[0]:
+            result.sort(key=lambda x: x.get("name", ""))
 
     return result
 
@@ -189,9 +208,9 @@ def serialize_hierarchy_node(node: Any) -> dict[str, Any]:
 
 
 def json_serializer(obj: Any) -> Any:
-    """Custom JSON serializer for dataclasses."""
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return asdict(obj)
+    """Custom JSON serializer for pydantic models."""
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
