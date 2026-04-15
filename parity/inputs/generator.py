@@ -91,6 +91,12 @@ class TestInputGenerator:
             return self.catalog.jira_components
         if name_lower == "name":
             return self.catalog.team_names + self.catalog.org_names + self.catalog.pillar_names
+        if name_lower in ("entity_name",):
+            return self.catalog.team_names + self.catalog.org_names
+        if name_lower in ("entity_type",):
+            return ["team", "org", "pillar", "team_group"]
+        if name_lower in ("context_type",):
+            return ["team_onboarding", "release_framework", "code_review_standards"]
 
         return []
 

@@ -85,6 +85,13 @@ type ServiceInterface interface {
 	GetTeamsByJiraProject(project string) []JiraOwnerInfo
 	GetTeamsByJiraComponent(project, component string) []JiraOwnerInfo
 	GetJiraOwnershipForTeam(teamName string) []JiraOwnership
+
+	// Context queries
+	GetContextForTeam(teamName string) []ContextItemInfo
+	GetContextForEntity(entityName string, entityType string) []ContextItemInfo
+	GetContextByType(entityName string, contextType string, entityType string) []ContextItemInfo
+	GetAllContextTypesForEntity(entityName string, entityType string) []string
+	GetContextTypeDescriptions() map[string]string
 }
 
 type OrgInfo struct {

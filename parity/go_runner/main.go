@@ -206,8 +206,13 @@ var methodParamNames = map[string][]string{
 	"IsSlackUserInTeam":      {"slack_id", "team_name"},
 	"IsEmployeeInOrg":        {"uid", "org_name"},
 	"IsSlackUserInOrg":       {"slack_id", "org_name"},
-	"GetHierarchyPath":       {"name", "entity_type"},
-	"GetTeamsByJiraComponent": {"project", "component"},
+	"GetHierarchyPath":             {"name", "entity_type"},
+	"GetTeamsByJiraComponent":      {"project", "component"},
+	"GetContextForTeam":            {"team_name"},
+	"GetContextForEntity":          {"entity_name", "entity_type"},
+	"GetContextByType":             {"entity_name", "context_type", "entity_type"},
+	"GetAllContextTypesForEntity":  {"entity_name", "entity_type"},
+	"GetContextTypeDescriptions":   {},
 }
 
 func inferParamNames(methodName string, methodType reflect.Type) []string {
@@ -338,6 +343,8 @@ func serializeOutput(output interface{}) interface{} {
 		return serializeComponentOwnerInfoList(val)
 	case []orgdatacore.ComponentOwnership:
 		return serializeComponentOwnershipList(val)
+	case []orgdatacore.ContextItemInfo:
+		return serializeContextItemInfoList(val)
 	default:
 		return output
 	}
@@ -640,6 +647,36 @@ func serializeComponentOwnershipList(ownerships []orgdatacore.ComponentOwnership
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i]["component"].(string) < result[j]["component"].(string)
+	})
+	return result
+}
+
+func serializeContextItemInfoList(items []orgdatacore.ContextItemInfo) interface{} {
+	result := make([]map[string]interface{}, len(items))
+	for i, item := range items {
+		var owner interface{}
+		if item.Owner != "" {
+			owner = item.Owner
+		}
+		types := make([]string, len(item.Types))
+		copy(types, item.Types)
+		sort.Strings(types)
+		result[i] = map[string]interface{}{
+			"types":         types,
+			"name":          item.Name,
+			"description":   item.Description,
+			"url":           item.URL,
+			"owner":         owner,
+			"inheritance":   item.Inheritance,
+			"source_entity": item.SourceEntity,
+			"source_type":   item.SourceType,
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i]["name"].(string) != result[j]["name"].(string) {
+			return result[i]["name"].(string) < result[j]["name"].(string)
+		}
+		return result[i]["source_entity"].(string) < result[j]["source_entity"].(string)
 	})
 	return result
 }
