@@ -88,6 +88,18 @@ type EscalationContactInfo struct {
 	Description string `json:"description,omitempty"`
 }
 
+// ContextItemInfo represents an authoritative document pointer
+type ContextItemInfo struct {
+	Types        []string `json:"types,omitempty"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	Owner        string   `json:"owner,omitempty"`
+	Inheritance  string   `json:"inheritance,omitempty"`
+	SourceEntity string   `json:"source_entity,omitempty"`
+	SourceType   string   `json:"source_type,omitempty"`
+}
+
 // ComponentOwnerInfo represents an entity that owns a component, with ownership types
 type ComponentOwnerInfo struct {
 	Name           string   `json:"name"`
@@ -137,6 +149,8 @@ type Group struct {
 	Resources             []ResourceInfo         `json:"resources,omitempty"`
 	Escalation            []EscalationContactInfo `json:"escalation,omitempty"`
 	ComponentRoles        []string               `json:"component_roles,omitempty"`
+	Context               []ContextItemInfo      `json:"context,omitempty"`
+	ResolvedContext       []ContextItemInfo      `json:"resolved_context,omitempty"`
 }
 
 // GroupType contains group type information
@@ -153,11 +167,12 @@ type Data struct {
 
 // Metadata contains summary information about the data
 type Metadata struct {
-	GeneratedAt    string `json:"generated_at"`
-	DataVersion    string `json:"data_version"`
-	TotalEmployees int    `json:"total_employees"`
-	TotalOrgs      int    `json:"total_orgs"`
-	TotalTeams     int    `json:"total_teams"`
+	GeneratedAt             string            `json:"generated_at"`
+	DataVersion             string            `json:"data_version"`
+	TotalEmployees          int               `json:"total_employees"`
+	TotalOrgs               int               `json:"total_orgs"`
+	TotalTeams              int               `json:"total_teams"`
+	ContextTypeDescriptions map[string]string `json:"context_type_descriptions,omitempty"`
 }
 
 // Lookups contains the main data objects
@@ -205,14 +220,16 @@ type TeamGroup struct {
 
 // Component represents a component in the organizational data
 type Component struct {
-	Name        string      `json:"name"`
-	Type        string      `json:"type"`
-	Description string      `json:"description,omitempty"`
-	Parent      *ParentInfo `json:"parent,omitempty"`
-	ParentPath  string      `json:"parent_path,omitempty"`
-	Repos       []RepoInfo  `json:"repos,omitempty"`
-	Jiras       []JiraInfo  `json:"jiras,omitempty"`
-	ReposList   []string    `json:"repos_list,omitempty"`
+	Name            string            `json:"name"`
+	Type            string            `json:"type"`
+	Description     string            `json:"description,omitempty"`
+	Parent          *ParentInfo       `json:"parent,omitempty"`
+	ParentPath      string            `json:"parent_path,omitempty"`
+	Repos           []RepoInfo        `json:"repos,omitempty"`
+	Jiras           []JiraInfo        `json:"jiras,omitempty"`
+	ReposList       []string          `json:"repos_list,omitempty"`
+	Context         []ContextItemInfo `json:"context,omitempty"`
+	ResolvedContext []ContextItemInfo `json:"resolved_context,omitempty"`
 }
 
 // UnmarshalJSON supports both flat and nested component formats.
@@ -234,10 +251,12 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 
 	if len(aux.Nested) > 0 {
 		var nested struct {
-			Type      json.RawMessage `json:"type,omitempty"`
-			Repos     []RepoInfo      `json:"repos,omitempty"`
-			Jiras     []JiraInfo      `json:"jiras,omitempty"`
-			ReposList []string        `json:"repos_list,omitempty"`
+			Type            json.RawMessage   `json:"type,omitempty"`
+			Repos           []RepoInfo        `json:"repos,omitempty"`
+			Jiras           []JiraInfo        `json:"jiras,omitempty"`
+			ReposList       []string          `json:"repos_list,omitempty"`
+			Context         []ContextItemInfo `json:"context,omitempty"`
+			ResolvedContext []ContextItemInfo `json:"resolved_context,omitempty"`
 		}
 		if err := json.Unmarshal(aux.Nested, &nested); err != nil {
 			return err
@@ -266,6 +285,12 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 		}
 		if len(nested.ReposList) > 0 && len(c.ReposList) == 0 {
 			c.ReposList = nested.ReposList
+		}
+		if len(nested.Context) > 0 && len(c.Context) == 0 {
+			c.Context = nested.Context
+		}
+		if len(nested.ResolvedContext) > 0 && len(c.ResolvedContext) == 0 {
+			c.ResolvedContext = nested.ResolvedContext
 		}
 	}
 

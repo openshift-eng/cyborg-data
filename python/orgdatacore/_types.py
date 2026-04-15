@@ -197,6 +197,21 @@ class EscalationContactInfo(BaseModel):
     description: str = ""
 
 
+class ContextItemInfo(BaseModel):
+    """Represents a context item (authoritative document pointer)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    types: tuple[str, ...] = ()
+    name: str = ""
+    description: str = ""
+    url: str = ""
+    owner: str = ""
+    inheritance: str = "additive"
+    source_entity: str = ""
+    source_type: str = ""
+
+
 class GroupType(BaseModel):
     """Contains group type information."""
 
@@ -221,6 +236,8 @@ class Group(BaseModel):
     resources: tuple[ResourceInfo, ...] = ()
     escalation: tuple[EscalationContactInfo, ...] = ()
     component_roles: tuple[str, ...] = ()
+    context: tuple[ContextItemInfo, ...] = ()
+    resolved_context: tuple[ContextItemInfo, ...] = ()
 
 
 class ParentInfo(BaseModel):
@@ -301,6 +318,8 @@ class Component(BaseModel):
     repos: tuple[RepoInfo, ...] = ()
     jiras: tuple[JiraInfo, ...] = ()
     repos_list: tuple[str, ...] = ()
+    context: tuple[ContextItemInfo, ...] = ()
+    resolved_context: tuple[ContextItemInfo, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -318,7 +337,7 @@ class Component(BaseModel):
                 result["type"] = type_val.get("name", "")
             elif isinstance(type_val, str):
                 result["type"] = type_val
-        for key in ("repos", "jiras", "repos_list"):
+        for key in ("repos", "jiras", "repos_list", "context", "resolved_context"):
             if not result.get(key):
                 result[key] = nested.get(key, [])
         return result
@@ -334,6 +353,7 @@ class Metadata(BaseModel):
     total_employees: int = 0
     total_orgs: int = 0
     total_teams: int = 0
+    context_type_descriptions: dict[str, str] = Field(default_factory=dict)
 
 
 class Lookups(BaseModel):

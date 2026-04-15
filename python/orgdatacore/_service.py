@@ -12,6 +12,7 @@ from ._types import (
     ComponentOwnerInfo,
     ComponentOwnership,
     ComponentOwnershipIndex,
+    ContextItemInfo,
     Data,
     DataSource,
     DataVersion,
@@ -1029,3 +1030,103 @@ class Service:
                             result.append({"project": project, "component": component})
                             break
             return result
+
+    def get_context_for_team(self, team_name: str) -> list[ContextItemInfo]:
+        """Get resolved context items for a team (including inherited).
+
+        Args:
+            team_name: The team name to look up.
+
+        Returns:
+            List of resolved context items, or empty list if not found.
+        """
+        with self._lock:
+            if self._data is None or not self._data.lookups.teams:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if team is None:
+                return []
+            return list(team.group.resolved_context)
+
+    def get_context_for_entity(
+        self, entity_name: str, entity_type: str = "team"
+    ) -> list[ContextItemInfo]:
+        """Get resolved context items for any entity type.
+
+        Args:
+            entity_name: Name of the entity.
+            entity_type: Type of entity ("team", "org", "pillar", "team_group").
+
+        Returns:
+            List of resolved context items, or empty list if not found.
+        """
+        with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            return list(entity.group.resolved_context)
+
+    def get_context_by_type(
+        self, entity_name: str, context_type: str, entity_type: str = "team"
+    ) -> list[ContextItemInfo]:
+        """Get resolved context items filtered by a specific context type.
+
+        Args:
+            entity_name: Name of the entity.
+            context_type: Context type to filter by (e.g., "release_framework").
+            entity_type: Type of entity ("team", "org", "pillar", "team_group").
+
+        Returns:
+            List of matching context items, or empty list if not found.
+        """
+        with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            return [
+                item
+                for item in entity.group.resolved_context
+                if context_type in item.types
+            ]
+
+    def get_all_context_types_for_entity(
+        self, entity_name: str, entity_type: str = "team"
+    ) -> list[str]:
+        """Get distinct context types available for an entity.
+
+        Args:
+            entity_name: Name of the entity.
+            entity_type: Type of entity ("team", "org", "pillar", "team_group").
+
+        Returns:
+            List of distinct context type strings.
+        """
+        with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            seen: set[str] = set()
+            result: list[str] = []
+            for item in entity.group.resolved_context:
+                for t in item.types:
+                    if t not in seen:
+                        seen.add(t)
+                        result.append(t)
+            return result
+
+    def get_context_type_descriptions(self) -> dict[str, str]:
+        """Get the description registry for all context types.
+
+        Returns a dict mapping context type enum values to their human-readable
+        descriptions, sourced from the index metadata.
+        """
+        with self._lock:
+            if self._data is None:
+                return {}
+            return dict(self._data.metadata.context_type_descriptions)

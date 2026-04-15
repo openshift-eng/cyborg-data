@@ -1035,6 +1035,134 @@ func (s *Service) GetComponentsForTeam(teamName string) []ComponentOwnership {
 	return result
 }
 
+// getEntityGroup returns the Group for an entity by name and type.
+// Must be called with s.mu held.
+func (s *Service) getEntityGroup(entityName, entityType string) *Group {
+	if s.data == nil {
+		return nil
+	}
+	switch strings.ToLower(entityType) {
+	case "team":
+		if team, ok := s.data.Lookups.Teams[entityName]; ok {
+			return &team.Group
+		}
+	case "org":
+		if org, ok := s.data.Lookups.Orgs[entityName]; ok {
+			return &org.Group
+		}
+	case "pillar":
+		if pillar, ok := s.data.Lookups.Pillars[entityName]; ok {
+			return &pillar.Group
+		}
+	case "team_group":
+		if tg, ok := s.data.Lookups.TeamGroups[entityName]; ok {
+			return &tg.Group
+		}
+	}
+	return nil
+}
+
+// GetContextForTeam returns resolved context items for a team (including inherited).
+func (s *Service) GetContextForTeam(teamName string) []ContextItemInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Teams == nil {
+		return []ContextItemInfo{}
+	}
+	team, exists := s.data.Lookups.Teams[teamName]
+	if !exists {
+		return []ContextItemInfo{}
+	}
+	if len(team.Group.ResolvedContext) == 0 {
+		return []ContextItemInfo{}
+	}
+	result := make([]ContextItemInfo, len(team.Group.ResolvedContext))
+	copy(result, team.Group.ResolvedContext)
+	return result
+}
+
+// GetContextForEntity returns resolved context items for any entity type.
+func (s *Service) GetContextForEntity(entityName string, entityType string) []ContextItemInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	group := s.getEntityGroup(entityName, entityType)
+	if group == nil {
+		return []ContextItemInfo{}
+	}
+	if len(group.ResolvedContext) == 0 {
+		return []ContextItemInfo{}
+	}
+	result := make([]ContextItemInfo, len(group.ResolvedContext))
+	copy(result, group.ResolvedContext)
+	return result
+}
+
+// GetContextByType returns resolved context items filtered by a specific context type.
+func (s *Service) GetContextByType(entityName string, contextType string, entityType string) []ContextItemInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	group := s.getEntityGroup(entityName, entityType)
+	if group == nil {
+		return []ContextItemInfo{}
+	}
+	var result []ContextItemInfo
+	for _, item := range group.ResolvedContext {
+		for _, t := range item.Types {
+			if t == contextType {
+				result = append(result, item)
+				break
+			}
+		}
+	}
+	if result == nil {
+		return []ContextItemInfo{}
+	}
+	return result
+}
+
+// GetAllContextTypesForEntity returns distinct context types available for an entity.
+func (s *Service) GetAllContextTypesForEntity(entityName string, entityType string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	group := s.getEntityGroup(entityName, entityType)
+	if group == nil {
+		return []string{}
+	}
+	seen := make(map[string]bool)
+	var result []string
+	for _, item := range group.ResolvedContext {
+		for _, t := range item.Types {
+			if !seen[t] {
+				seen[t] = true
+				result = append(result, t)
+			}
+		}
+	}
+	if result == nil {
+		return []string{}
+	}
+	return result
+}
+
+// GetContextTypeDescriptions returns the description registry for all context types.
+func (s *Service) GetContextTypeDescriptions() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Metadata.ContextTypeDescriptions == nil {
+		return map[string]string{}
+	}
+	result := make(map[string]string, len(s.data.Metadata.ContextTypeDescriptions))
+	for k, v := range s.data.Metadata.ContextTypeDescriptions {
+		result[k] = v
+	}
+	return result
+}
+
 // validateData checks that required data structures are present.
 func validateData(data *Data) error {
 	if len(data.Lookups.Employees) == 0 {

@@ -6,7 +6,13 @@
     "total_orgs": 2,
     "total_teams": 2,
     "total_pillars": 1,
-    "total_team_groups": 1
+    "total_team_groups": 1,
+    "context_type_descriptions": {
+      "team_overview": "Overview of a team/group/org: purpose, scope, how it fits within the larger organization.",
+      "release_framework": "High-level release strategy and cadence.",
+      "code_review_standards": "How code reviews are conducted, what reviewers look for.",
+      "team_onboarding": "New team member onboarding guide."
+    }
   },
   "lookups": {
     "employees": {
@@ -112,6 +118,52 @@
           "component_roles": [
             "platform-api",
             "auth-service"
+          ],
+          "context": [
+            {
+              "types": ["team_onboarding"],
+              "name": "Platform Onboarding Guide",
+              "description": "Getting started with the platform team",
+              "url": "https://docs.example.com/platform/onboarding",
+              "inheritance": "additive"
+            },
+            {
+              "types": ["release_framework"],
+              "name": "Platform Release Process",
+              "description": "Platform-specific release process",
+              "url": "https://docs.example.com/platform/release",
+              "inheritance": "supersedes"
+            }
+          ],
+          "resolved_context": [
+            {
+              "types": ["code_review_standards"],
+              "name": "Org Code Review Standards",
+              "description": "How code reviews are conducted across the org",
+              "url": "https://docs.example.com/code-review",
+              "owner": "c/structures/test-org.yaml",
+              "inheritance": "additive",
+              "source_entity": "test-org",
+              "source_type": "org"
+            },
+            {
+              "types": ["team_onboarding"],
+              "name": "Platform Onboarding Guide",
+              "description": "Getting started with the platform team",
+              "url": "https://docs.example.com/platform/onboarding",
+              "inheritance": "additive",
+              "source_entity": "platform-team",
+              "source_type": "team"
+            },
+            {
+              "types": ["release_framework"],
+              "name": "Platform Release Process",
+              "description": "Platform-specific release process",
+              "url": "https://docs.example.com/platform/release",
+              "inheritance": "supersedes",
+              "source_entity": "platform-team",
+              "source_type": "team"
+            }
           ]
         }
       }
@@ -124,7 +176,47 @@
         "type": "org",
         "group": {
           "type": {"name": "org", "visualize": true},
-          "resolved_people_uid_list": ["jsmith", "adoe", "bwilson"]
+          "resolved_people_uid_list": ["jsmith", "adoe", "bwilson"],
+          "context": [
+            {
+              "types": ["release_framework"],
+              "name": "Org Release Framework",
+              "description": "Organization-wide release process",
+              "url": "https://docs.example.com/release",
+              "owner": "release-team",
+              "inheritance": "additive"
+            },
+            {
+              "types": ["code_review_standards"],
+              "name": "Org Code Review Standards",
+              "description": "How code reviews are conducted across the org",
+              "url": "https://docs.example.com/code-review",
+              "owner": "c/structures/test-org.yaml",
+              "inheritance": "additive"
+            }
+          ],
+          "resolved_context": [
+            {
+              "types": ["release_framework"],
+              "name": "Org Release Framework",
+              "description": "Organization-wide release process",
+              "url": "https://docs.example.com/release",
+              "owner": "release-team",
+              "inheritance": "additive",
+              "source_entity": "test-org",
+              "source_type": "org"
+            },
+            {
+              "types": ["code_review_standards"],
+              "name": "Org Code Review Standards",
+              "description": "How code reviews are conducted across the org",
+              "url": "https://docs.example.com/code-review",
+              "owner": "c/structures/test-org.yaml",
+              "inheritance": "additive",
+              "source_entity": "test-org",
+              "source_type": "org"
+            }
+          ]
         }
       },
       "platform-org": {
