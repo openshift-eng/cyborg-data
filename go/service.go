@@ -11,12 +11,13 @@ import (
 )
 
 type Service struct {
-	mu             sync.RWMutex
-	data           *Data
-	version        DataVersion
-	logger         *slog.Logger
-	watcherRunning bool
-	watcherCancel  context.CancelFunc
+	mu                sync.RWMutex
+	data              *Data
+	version           DataVersion
+	logger            *slog.Logger
+	watcherRunning    bool
+	watcherCancel     context.CancelFunc
+	slackChannelIndex map[string][]string
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -55,6 +56,19 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 		LoadTime:      time.Now(),
 		OrgCount:      len(orgData.Lookups.Orgs),
 		EmployeeCount: len(orgData.Lookups.Employees),
+	}
+
+	s.slackChannelIndex = make(map[string][]string)
+	for _, team := range orgData.Lookups.Teams {
+		if team.Group.Slack == nil {
+			continue
+		}
+		for _, ch := range team.Group.Slack.Channels {
+			if ch.Channel != "" {
+				normalized := normalizeSlackChannel(ch.Channel)
+				s.slackChannelIndex[normalized] = append(s.slackChannelIndex[normalized], team.Name)
+			}
+		}
 	}
 
 	s.logger.Info("data loaded", "source", source.String(), "employees", s.version.EmployeeCount, "orgs", s.version.OrgCount)
@@ -237,6 +251,35 @@ func (s *Service) GetTeamByName(teamName string) *Team {
 		return &team
 	}
 	return nil
+}
+
+func normalizeSlackChannel(channel string) string {
+	return strings.ToLower(strings.TrimPrefix(strings.TrimSpace(channel), "#"))
+}
+
+func (s *Service) GetTeamsBySlackChannel(channel string) []Team {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.slackChannelIndex == nil || channel == "" {
+		return []Team{}
+	}
+
+	teamNames, exists := s.slackChannelIndex[normalizeSlackChannel(channel)]
+	if !exists {
+		return []Team{}
+	}
+
+	var teams []Team
+	for _, name := range teamNames {
+		if team, exists := s.data.Lookups.Teams[name]; exists {
+			teams = append(teams, team)
+		}
+	}
+	if teams == nil {
+		return []Team{}
+	}
+	return teams
 }
 
 func (s *Service) GetOrgByName(orgName string) *Org {

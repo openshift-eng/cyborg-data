@@ -54,6 +54,34 @@ class TestGetTeamByName:
             assert result is None
 
 
+class TestGetTeamsBySlackChannel:
+    """Tests for team lookup by Slack channel name."""
+
+    @pytest.mark.parametrize(
+        "channel,expected_names",
+        [
+            ("#test-team", ["test-team"]),
+            ("platform", ["platform-team"]),
+            ("test-alerts", ["test-team"]),
+            ("#Test-Team", ["test-team"]),
+            ("nonexistent", []),
+            ("", []),
+            ("  #test-team  ", ["test-team"]),
+            ("#", []),
+        ],
+    )
+    def test_get_teams_by_slack_channel(
+        self,
+        service: Service,
+        channel: str,
+        expected_names: list[str],
+    ):
+        """Test team lookup by Slack channel name."""
+        result = service.get_teams_by_slack_channel(channel)
+        result_names = sorted(t.name for t in result)
+        assert result_names == sorted(expected_names)
+
+
 class TestGetTeamsForUID:
     """Tests for team membership lookup by UID."""
 
