@@ -38,6 +38,10 @@ from ._types import (
 )
 
 
+def _normalize_slack_channel(channel: str) -> str:
+    return channel.strip().lstrip("#").lower()
+
+
 def _parse_jira_index(jira_raw: dict[str, Any]) -> JiraIndex:
     """Parse the Jira index from raw data."""
     project_component_owners: dict[str, dict[str, tuple[JiraOwnerInfo, ...]]] = {}
@@ -184,6 +188,7 @@ class Service:
         self._version = DataVersion()
         self._watcher_running = False
         self._stop_event = threading.Event()
+        self._slack_channel_index: dict[str, list[str]] = {}
 
         if data_source is not None:
             self.load_from_data_source(data_source)
@@ -241,6 +246,15 @@ class Service:
                 org_count=len(org_data.lookups.orgs),
                 employee_count=len(org_data.lookups.employees),
             )
+
+            self._slack_channel_index = {}
+            for team in org_data.lookups.teams.values():
+                if team.group.slack is None:
+                    continue
+                for ch in team.group.slack.channels:
+                    if ch.channel:
+                        normalized = _normalize_slack_channel(ch.channel)
+                        self._slack_channel_index.setdefault(normalized, []).append(team.name)
 
         logger.info(
             "Data loaded successfully",
@@ -423,6 +437,29 @@ class Service:
             if self._data is None or not self._data.lookups.teams:
                 return None
             return self._data.lookups.teams.get(team_name)
+
+    def get_teams_by_slack_channel(self, channel: str) -> list[Team]:
+        """Get teams associated with a Slack channel name.
+
+        Args:
+            channel: Slack channel name (e.g., "#test-team" or "test-team").
+                     The "#" prefix and casing are ignored.
+
+        Returns:
+            List of matching teams, or empty list if none found.
+        """
+        with self._lock:
+            if self._data is None or not channel:
+                return []
+
+            team_names = self._slack_channel_index.get(
+                _normalize_slack_channel(channel), []
+            )
+            return [
+                self._data.lookups.teams[name]
+                for name in team_names
+                if name in self._data.lookups.teams
+            ]
 
     def get_team_escalation(self, team_name: str) -> list[EscalationContactInfo]:
         """Get the escalation contacts for a team.

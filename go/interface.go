@@ -31,6 +31,7 @@ type ServiceInterface interface {
 	GetEmployeeByEmail(email string) *Employee
 	GetManagerForEmployee(uid string) *Employee
 	GetTeamByName(teamName string) *Team
+	GetTeamsBySlackChannel(channel string) []Team
 	GetOrgByName(orgName string) *Org
 	GetPillarByName(pillarName string) *Pillar
 	GetTeamGroupByName(teamGroupName string) *TeamGroup

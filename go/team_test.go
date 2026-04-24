@@ -59,6 +59,79 @@ func TestGetTeamByName(t *testing.T) {
 	}
 }
 
+// TestGetTeamsBySlackChannel tests team lookup by Slack channel name
+func TestGetTeamsBySlackChannel(t *testing.T) {
+	service := setupTestService(t)
+
+	tests := []struct {
+		name          string
+		channel       string
+		expectedNames []string
+	}{
+		{
+			name:          "channel with hash prefix",
+			channel:       "#test-team",
+			expectedNames: []string{"test-team"},
+		},
+		{
+			name:          "channel without hash prefix",
+			channel:       "platform",
+			expectedNames: []string{"platform-team"},
+		},
+		{
+			name:          "non-main channel",
+			channel:       "test-alerts",
+			expectedNames: []string{"test-team"},
+		},
+		{
+			name:          "case insensitive",
+			channel:       "#Test-Team",
+			expectedNames: []string{"test-team"},
+		},
+		{
+			name:          "nonexistent channel",
+			channel:       "nonexistent",
+			expectedNames: []string{},
+		},
+		{
+			name:          "empty channel",
+			channel:       "",
+			expectedNames: []string{},
+		},
+		{
+			name:          "whitespace padded",
+			channel:       "  #test-team  ",
+			expectedNames: []string{"test-team"},
+		},
+		{
+			name:          "hash only",
+			channel:       "#",
+			expectedNames: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.GetTeamsBySlackChannel(tt.channel)
+
+			var resultNames []string
+			for _, team := range result {
+				resultNames = append(resultNames, team.Name)
+			}
+
+			sort.Strings(resultNames)
+			sort.Strings(tt.expectedNames)
+
+			if len(resultNames) == 0 && len(tt.expectedNames) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(resultNames, tt.expectedNames) {
+				t.Errorf("GetTeamsBySlackChannel(%q) = %v, expected %v", tt.channel, resultNames, tt.expectedNames)
+			}
+		})
+	}
+}
+
 // TestGetTeamsForUID tests team membership lookup by UID
 func TestGetTeamsForUID(t *testing.T) {
 	service := setupTestService(t)
