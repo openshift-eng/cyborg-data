@@ -26,6 +26,7 @@ class EntityConfig:
     fields: tuple[str, ...]
     sort_by: tuple[str, ...] = ()
     preserve_order: bool = False
+    sorted_list_fields: tuple[str, ...] = ()
 
 
 ENTITY_REGISTRY: dict[str, EntityConfig] = {
@@ -84,6 +85,11 @@ ENTITY_REGISTRY: dict[str, EntityConfig] = {
     "ComponentOwnership": EntityConfig(
         fields=("component", "ownership_types"),
         sort_by=("component",),
+    ),
+    "ContextItemInfo": EntityConfig(
+        fields=("types", "name", "description", "url", "owner", "inheritance", "source_entity", "source_type"),
+        sort_by=("name", "source_entity"),
+        sorted_list_fields=("types",),
     ),
 }
 
@@ -174,7 +180,11 @@ def serialize_entity(entity: Any) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for field_name in config.fields:
             val = getattr(entity, field_name)
-            d[field_name] = list(val) if isinstance(val, tuple) else val
+            if isinstance(val, tuple):
+                lst = list(val)
+                d[field_name] = sorted(lst) if field_name in config.sorted_list_fields else lst
+            else:
+                d[field_name] = val
         return d
 
     return entity.model_dump()

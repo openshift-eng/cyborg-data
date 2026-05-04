@@ -31,6 +31,7 @@ from ._types import (
     Component,
     ComponentOwnerInfo,
     ComponentOwnership,
+    ContextItemInfo,
     Data,
     DataVersion,
     Employee,
@@ -942,6 +943,72 @@ class AsyncService:
                             result.append({"project": project, "component": component})
                             break
             return result
+
+    async def get_context_for_team(
+        self, team_name: str
+    ) -> list[ContextItemInfo]:
+        """Get resolved context items for a team (including inherited)."""
+        async with self._lock:
+            if self._data is None or not self._data.lookups.teams:
+                return []
+            team = self._data.lookups.teams.get(team_name)
+            if team is None:
+                return []
+            return list(team.group.resolved_context)
+
+    async def get_context_for_entity(
+        self, entity_name: str, entity_type: str = "team"
+    ) -> list[ContextItemInfo]:
+        """Get resolved context items for any entity type."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            return list(entity.group.resolved_context)
+
+    async def get_context_by_type(
+        self, entity_name: str, context_type: str, entity_type: str = "team"
+    ) -> list[ContextItemInfo]:
+        """Get resolved context items filtered by a specific context type."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            return [
+                item
+                for item in entity.group.resolved_context
+                if context_type in item.types
+            ]
+
+    async def get_all_context_types_for_entity(
+        self, entity_name: str, entity_type: str = "team"
+    ) -> list[str]:
+        """Get distinct context types available for an entity."""
+        async with self._lock:
+            if self._data is None:
+                return []
+            entity = self._get_entity_by_type(entity_name, entity_type)
+            if entity is None:
+                return []
+            seen: set[str] = set()
+            result: list[str] = []
+            for item in entity.group.resolved_context:
+                for t in item.types:
+                    if t not in seen:
+                        seen.add(t)
+                        result.append(t)
+            return result
+
+    async def get_context_type_descriptions(self) -> dict[str, str]:
+        """Get the description registry for all context types."""
+        async with self._lock:
+            if self._data is None:
+                return {}
+            return dict(self._data.metadata.context_type_descriptions)
 
 
 async def _async_retry_with_backoff(
