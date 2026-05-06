@@ -56,6 +56,7 @@
         "group": {
           "type": {"name": "team", "visualize": true},
           "resolved_people_uid_list": ["jsmith", "adoe"],
+          "people_ldap_groups": ["test-team-ldap"],
           "resolved_roles": [
             {"people": ["adoe"], "roles": ["manager"]},
             {"people": ["jsmith"], "roles": ["tech_lead"]}
@@ -88,6 +89,7 @@
         "group": {
           "type": {"name": "team", "visualize": true},
           "resolved_people_uid_list": ["bwilson"],
+          "people_ldap_groups": ["platform-team-ldap"],
           "resolved_roles": [
             {"people": ["bwilson"], "roles": ["tech_lead"]}
           ],

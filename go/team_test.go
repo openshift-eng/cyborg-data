@@ -653,3 +653,30 @@ func TestGroupExtendedFields(t *testing.T) {
 		t.Errorf("expected 1 component role, got %d", len(team.Group.ComponentRoles))
 	}
 }
+
+func TestTeamPeopleLDAPGroups(t *testing.T) {
+	service := setupTestService(t)
+
+	team := service.GetTeamByName("test-team")
+	if team == nil {
+		t.Fatal("expected team, got nil")
+	}
+
+	if len(team.Group.PeopleLDAPGroups) != 1 {
+		t.Fatalf("expected 1 LDAP group, got %d", len(team.Group.PeopleLDAPGroups))
+	}
+	if team.Group.PeopleLDAPGroups[0] != "test-team-ldap" {
+		t.Errorf("expected LDAP group 'test-team-ldap', got '%s'", team.Group.PeopleLDAPGroups[0])
+	}
+
+	platform := service.GetTeamByName("platform-team")
+	if platform == nil {
+		t.Fatal("expected platform-team, got nil")
+	}
+	if len(platform.Group.PeopleLDAPGroups) != 1 {
+		t.Fatalf("expected 1 LDAP group for platform-team, got %d", len(platform.Group.PeopleLDAPGroups))
+	}
+	if platform.Group.PeopleLDAPGroups[0] != "platform-team-ldap" {
+		t.Errorf("expected LDAP group 'platform-team-ldap', got '%s'", platform.Group.PeopleLDAPGroups[0])
+	}
+}

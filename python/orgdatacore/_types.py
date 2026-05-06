@@ -227,6 +227,7 @@ class Group(BaseModel):
 
     type: GroupType = Field(default_factory=GroupType)
     resolved_people_uid_list: tuple[str, ...] = ()
+    people_ldap_groups: tuple[str, ...] = ()
     slack: SlackConfig | None = None
     roles: tuple[RoleInfo, ...] = Field(default=(), alias="resolved_roles")
     jiras: tuple[JiraInfo, ...] = ()

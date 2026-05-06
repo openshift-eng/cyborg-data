@@ -140,6 +140,7 @@ type Team struct {
 type Group struct {
 	Type                  GroupType           `json:"type"`
 	ResolvedPeopleUIDList []string            `json:"resolved_people_uid_list"`
+	PeopleLDAPGroups      []string            `json:"people_ldap_groups,omitempty"`
 	Slack                 *SlackConfig        `json:"slack,omitempty"`
 	Roles                 []RoleInfo          `json:"resolved_roles,omitempty"`
 	Jiras                 []JiraInfo          `json:"jiras,omitempty"`
