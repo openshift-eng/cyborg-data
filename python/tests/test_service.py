@@ -11,6 +11,21 @@ from orgdatacore import DataLoadError, Service
 from orgdatacore._internal.testing import FakeDataSource, FileDataSource
 
 
+@pytest.fixture
+def pii_free_data_path() -> Path:
+    """Get path to the PII-free test data file."""
+    return Path(__file__).parent.parent.parent / "testdata" / "test_org_data_pii_free.json"
+
+
+@pytest.fixture
+def pii_free_service(pii_free_data_path: Path) -> Service:
+    """Create a service loaded with PII-free test data."""
+    svc = Service()
+    file_source = FileDataSource(str(pii_free_data_path))
+    svc.load_from_data_source(file_source)
+    return svc
+
+
 class TestNewService:
     """Tests for service creation."""
 
@@ -174,3 +189,41 @@ class TestHealthCheck:
     def test_is_ready_with_data(self, service: Service):
         """Service should be ready with data loaded."""
         assert service.is_ready() is True
+
+
+class TestPIIFreeData:
+    """Tests for PII-free data loading and behavior."""
+
+    def test_load_pii_free_data(self, pii_free_data_path: Path):
+        """Loading PII-free data should succeed without validation errors."""
+        service = Service()
+        file_source = FileDataSource(str(pii_free_data_path))
+        service.load_from_data_source(file_source)
+
+        version = service.get_version()
+        assert version.employee_count == 0
+        assert version.org_count == 2
+
+    def test_is_healthy_with_pii_free_data(self, pii_free_service: Service):
+        """Service should be healthy with PII-free data loaded."""
+        assert pii_free_service.is_healthy() is True
+
+    def test_is_ready_with_pii_free_data(self, pii_free_service: Service):
+        """Service should be ready with PII-free data loaded."""
+        assert pii_free_service.is_ready() is True
+
+    def test_team_queries_work(self, pii_free_service: Service):
+        """Team queries should work with PII-free data."""
+        team = pii_free_service.get_team_by_name("test-team")
+        assert team is not None
+        assert team.name == "test-team"
+
+    def test_employee_queries_return_none(self, pii_free_service: Service):
+        """Employee queries should return None with PII-free data."""
+        assert pii_free_service.get_employee_by_uid("jsmith") is None
+
+    def test_org_queries_work(self, pii_free_service: Service):
+        """Org queries should work with PII-free data."""
+        org = pii_free_service.get_org_by_name("test-org")
+        assert org is not None
+        assert org.name == "test-org"

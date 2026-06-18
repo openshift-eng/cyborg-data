@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "generated_at": "2024-01-15T12:00:00.000000",
+    "data_version": "test-abc123-pii-free",
+    "total_employees": 0,
+    "total_orgs": 2,
+    "total_teams": 2,
+    "total_pillars": 1,
+    "total_team_groups": 1,
+    "pii_free": true,
+    "context_type_descriptions": {
+      "team_overview": "Overview of a team/group/org: purpose, scope, how it fits within the larger organization.",
+      "release_framework": "High-level release strategy and cadence."
+    }
+  },
+  "lookups": {
+    "employees": {},
+    "teams": {
+      "test-team": {
+        "uid": "team-001",
+        "name": "test-team",
+        "description": "Core testing and QA team",
+        "type": "team",
+        "parent": {"name": "test-org", "type": "org"},
+        "group": {
+          "type": {"name": "team", "visualize": true},
+          "resolved_people_uid_list": [],
+          "jiras": [
+            {"project": "TEST", "types": ["main"]}
+          ],
+          "component_roles": ["auth-service"]
+        }
+      },
+      "platform-team": {
+        "uid": "team-002",
+        "name": "platform-team",
+        "description": "Platform infrastructure team",
+        "type": "team",
+        "parent": {"name": "backend-teams", "type": "team_group"},
+        "group": {
+          "type": {"name": "team", "visualize": true},
+          "resolved_people_uid_list": [],
+          "jiras": [
+            {"project": "PLAT", "types": ["main"]}
+          ],
+          "component_roles": ["platform-api"]
+        }
+      }
+    },
+    "orgs": {
+      "test-org": {
+        "uid": "org-001",
+        "name": "test-org",
+        "description": "Test organization",
+        "type": "org",
+        "group": {
+          "type": {"name": "org", "visualize": true},
+          "resolved_people_uid_list": []
+        }
+      },
+      "platform-org": {
+        "uid": "org-002",
+        "name": "platform-org",
+        "description": "Platform organization",
+        "type": "org",
+        "parent": {"name": "test-org", "type": "org"},
+        "group": {
+          "type": {"name": "org", "visualize": true},
+          "resolved_people_uid_list": []
+        }
+      }
+    },
+    "pillars": {
+      "engineering": {
+        "uid": "pillar-001",
+        "name": "engineering",
+        "description": "Engineering pillar",
+        "type": "pillar",
+        "parent": {"name": "platform-org", "type": "org"},
+        "group": {
+          "type": {"name": "pillar", "visualize": true},
+          "resolved_people_uid_list": []
+        }
+      }
+    },
+    "team_groups": {
+      "backend-teams": {
+        "uid": "tg-001",
+        "name": "backend-teams",
+        "description": "Backend engineering teams",
+        "type": "team_group",
+        "parent": {"name": "engineering", "type": "pillar"},
+        "group": {
+          "type": {"name": "team_group", "visualize": true},
+          "resolved_people_uid_list": []
+        }
+      }
+    },
+    "components": {
+      "platform-api": {
+        "name": "platform-api",
+        "description": "Platform API component",
+        "component": {
+          "type": {"name": "system", "visualize": true}
+        }
+      },
+      "auth-service": {
+        "name": "auth-service",
+        "description": "Authentication service",
+        "component": {
+          "type": {"name": "system", "visualize": true}
+        }
+      }
+    }
+  },
+  "indexes": {
+    "membership": {
+      "membership_index": {}
+    },
+    "slack_id_mappings": {
+      "slack_uid_to_uid": {}
+    },
+    "github_id_mappings": {
+      "github_id_to_uid": {}
+    },
+    "jira": {
+      "TEST": {
+        "Core": [
+          {"name": "test-team", "type": "team"}
+        ]
+      },
+      "PLAT": {
+        "Infrastructure": [
+          {"name": "platform-team", "type": "team"}
+        ]
+      }
+    },
+    "component_ownership": {
+      "platform-api": [
+        {"name": "platform-team", "type": "team", "ownership_types": ["owner"]}
+      ],
+      "auth-service": [
+        {"name": "test-team", "type": "team", "ownership_types": ["owner"]}
+      ]
+    }
+  }
+}

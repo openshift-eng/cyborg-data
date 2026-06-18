@@ -353,6 +353,7 @@ class Metadata(BaseModel):
     total_employees: int = 0
     total_orgs: int = 0
     total_teams: int = 0
+    pii_free: bool = False
     context_type_descriptions: dict[str, str] = Field(default_factory=dict)
 
 

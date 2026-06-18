@@ -1165,6 +1165,9 @@ func (s *Service) GetContextTypeDescriptions() map[string]string {
 
 // validateData checks that required data structures are present.
 func validateData(data *Data) error {
+	if data.Metadata.PIIFree {
+		return nil
+	}
 	if len(data.Lookups.Employees) == 0 {
 		return fmt.Errorf("%w: missing lookups.employees", ErrInvalidData)
 	}
