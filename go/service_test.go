@@ -100,6 +100,46 @@ func TestLoadFromDataSource(t *testing.T) {
 	}
 }
 
+// TestLoadPIIFreeData tests that PII-free data loads without validation errors
+func TestLoadPIIFreeData(t *testing.T) {
+	service := NewService()
+	testDataPath := filepath.Join("..", "testdata", "test_org_data_pii_free.json")
+	fileSource := testingsupport.NewFileDataSource(testDataPath)
+
+	err := service.LoadFromDataSource(context.Background(), fileSource)
+	if err != nil {
+		t.Fatalf("Failed to load PII-free data: %v", err)
+	}
+
+	version := service.GetVersion()
+	if version.EmployeeCount != 0 {
+		t.Errorf("Expected 0 employees, got %d", version.EmployeeCount)
+	}
+	if version.OrgCount != 2 {
+		t.Errorf("Expected 2 orgs, got %d", version.OrgCount)
+	}
+
+	// Team queries should still work
+	team := service.GetTeamByName("test-team")
+	if team == nil {
+		t.Fatal("Expected to find test-team")
+	}
+	if team.Name != "test-team" {
+		t.Errorf("Expected team name 'test-team', got %q", team.Name)
+	}
+
+	// Employee queries should return nil
+	if emp := service.GetEmployeeByUID("jsmith"); emp != nil {
+		t.Error("Expected nil for employee lookup in PII-free data")
+	}
+
+	// Org queries should work
+	org := service.GetOrgByName("test-org")
+	if org == nil {
+		t.Fatal("Expected to find test-org")
+	}
+}
+
 // TestGetVersion tests version information
 func TestGetVersion(t *testing.T) {
 	service := NewService()

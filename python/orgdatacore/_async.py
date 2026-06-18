@@ -283,8 +283,7 @@ class AsyncService:
         """Check if the service is ready to serve requests."""
         if self._data is None:
             return False
-        # Data has lookups and indexes (always present when data is loaded)
-        return bool(self._data.lookups.employees)
+        return bool(self._data.lookups.employees) or self._data.metadata.pii_free
 
     def get_data_age(self) -> timedelta:
         """Get the duration since data was last loaded.

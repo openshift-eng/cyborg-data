@@ -150,6 +150,16 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
 
 def _validate_data(data: Data, source: DataSource) -> None:
     """Validate that required data structures are present."""
+    if data.metadata.pii_free:
+        if data.lookups.employees:
+            raise DataLoadError(
+                f"invalid data from {source}: pii_free is set but lookups.employees is not empty"
+            )
+        if data.indexes.membership.membership_index:
+            raise DataLoadError(
+                f"invalid data from {source}: pii_free is set but membership_index is not empty"
+            )
+        return
     if not data.lookups.employees:
         raise DataLoadError(f"invalid data from {source}: missing lookups.employees")
     if not data.indexes.membership.membership_index:
@@ -331,8 +341,7 @@ class Service:
         with self._lock:
             if self._data is None:
                 return False
-            # Data has lookups and indexes (always present when data is loaded)
-            return bool(self._data.lookups.employees)
+            return bool(self._data.lookups.employees) or self._data.metadata.pii_free
 
     def get_version(self) -> DataVersion:
         """Get the current data version."""
