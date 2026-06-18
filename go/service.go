@@ -1166,6 +1166,12 @@ func (s *Service) GetContextTypeDescriptions() map[string]string {
 // validateData checks that required data structures are present.
 func validateData(data *Data) error {
 	if data.Metadata.PIIFree {
+		if len(data.Lookups.Employees) > 0 {
+			return fmt.Errorf("%w: pii_free is set but lookups.employees is not empty", ErrInvalidData)
+		}
+		if len(data.Indexes.Membership.MembershipIndex) > 0 {
+			return fmt.Errorf("%w: pii_free is set but membership_index is not empty", ErrInvalidData)
+		}
 		return nil
 	}
 	if len(data.Lookups.Employees) == 0 {

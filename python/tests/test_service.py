@@ -227,3 +227,40 @@ class TestPIIFreeData:
         org = pii_free_service.get_org_by_name("test-org")
         assert org is not None
         assert org.name == "test-org"
+
+    def test_rejects_pii_free_with_employees(self):
+        """Should reject data claiming pii_free but containing employees."""
+        import json
+
+        data = {
+            "metadata": {"pii_free": True},
+            "lookups": {
+                "employees": {"uid1": {"uid": "uid1", "full_name": "Test"}},
+                "teams": {},
+            },
+            "indexes": {"membership": {"membership_index": {}}},
+        }
+        source = FakeDataSource(data=json.dumps(data))
+        service = Service()
+        with pytest.raises(DataLoadError, match="pii_free is set but lookups.employees is not empty"):
+            service.load_from_data_source(source)
+
+    def test_rejects_pii_free_with_membership(self):
+        """Should reject data claiming pii_free but containing membership data."""
+        import json
+
+        data = {
+            "metadata": {"pii_free": True},
+            "lookups": {"employees": {}, "teams": {}},
+            "indexes": {
+                "membership": {
+                    "membership_index": {
+                        "uid1": [{"name": "team1", "type": "team"}]
+                    }
+                }
+            },
+        }
+        source = FakeDataSource(data=json.dumps(data))
+        service = Service()
+        with pytest.raises(DataLoadError, match="pii_free is set but membership_index is not empty"):
+            service.load_from_data_source(source)

@@ -147,6 +147,14 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
 def _validate_data(data: Data, source: DataSource) -> None:
     """Validate that required data structures are present."""
     if data.metadata.pii_free:
+        if data.lookups.employees:
+            raise DataLoadError(
+                f"invalid data from {source}: pii_free is set but lookups.employees is not empty"
+            )
+        if data.indexes.membership.membership_index:
+            raise DataLoadError(
+                f"invalid data from {source}: pii_free is set but membership_index is not empty"
+            )
         return
     if not data.lookups.employees:
         raise DataLoadError(f"invalid data from {source}: missing lookups.employees")
