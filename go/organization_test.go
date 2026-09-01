@@ -311,3 +311,49 @@ func TestOrgInfoTypes(t *testing.T) {
 		}
 	}
 }
+
+// TestGetUserOrganizationsNameCollision covers a hierarchy where a team shares
+// its parent team_group's name. Deduping the result by (name, type) — not name
+// alone — is required, otherwise the team_group is wrongly dropped because a
+// team with the same name was already recorded.
+func TestGetUserOrganizationsNameCollision(t *testing.T) {
+	service := NewService()
+	service.data = &Data{
+		Lookups: Lookups{
+			Teams: map[string]Team{
+				"shared": {Name: "shared", Type: "team", Parent: &ParentInfo{Name: "shared", Type: "team_group"}},
+			},
+			TeamGroups: map[string]TeamGroup{
+				"shared": {Name: "shared", Type: "team_group", Parent: &ParentInfo{Name: "acme", Type: "org"}},
+			},
+			Orgs: map[string]Org{"acme": {Name: "acme", Type: "org"}},
+		},
+		Indexes: Indexes{
+			Membership: MembershipIndex{MembershipIndex: map[string][]MembershipInfo{
+				"euser": {{Name: "shared", Type: "team"}},
+			}},
+			SlackIDMappings: SlackIDMappings{SlackUIDToUID: map[string]string{"Suser": "euser"}},
+		},
+	}
+
+	// euser is a member of team "shared" -> team_group "shared" -> org "acme".
+	// All three must appear, each with its own type.
+	expected := []OrgInfo{
+		{Name: "shared", Type: OrgTypeTeam},
+		{Name: "shared", Type: OrgTypeTeamGroup},
+		{Name: "acme", Type: OrgTypeOrganization},
+	}
+	result := service.GetUserOrganizations("Suser")
+	for _, exp := range expected {
+		found := false
+		for _, actual := range result {
+			if actual.Name == exp.Name && actual.Type == exp.Type {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("GetUserOrganizations missing %+v; got %+v", exp, result)
+		}
+	}
+}

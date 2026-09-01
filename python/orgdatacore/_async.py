@@ -654,7 +654,10 @@ class AsyncService:
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
-            seen: set[str] = set()
+            # Dedupe by (name, type): names are not unique across types, so
+            # keying on name alone would drop a legitimately distinct entity
+            # (e.g. a team_group sharing a team's name) from the result.
+            seen: set[tuple[str, str]] = set()
 
             type_to_org_info_type = {
                 "org": OrgInfoType.ORGANIZATION,
@@ -665,24 +668,27 @@ class AsyncService:
 
             for m in memberships:
                 if m.type == MembershipType.ORG:
-                    if m.name not in seen:
+                    key = (m.name, "org")
+                    if key not in seen:
                         result.append(
                             OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION)
                         )
-                        seen.add(m.name)
+                        seen.add(key)
                 elif m.type == MembershipType.TEAM:
-                    if m.name not in seen:
+                    key = (m.name, "team")
+                    if key not in seen:
                         result.append(OrgInfo(name=m.name, type=OrgInfoType.TEAM))
-                        seen.add(m.name)
+                        seen.add(key)
 
                     hierarchy_path = self._get_hierarchy_path(m.name, "team")
                     for entry in hierarchy_path[1:]:
-                        if entry.name not in seen:
+                        entry_key = (entry.name, entry.type.lower())
+                        if entry_key not in seen:
                             org_type = type_to_org_info_type.get(
                                 entry.type.lower(), OrgInfoType.ORGANIZATION
                             )
                             result.append(OrgInfo(name=entry.name, type=org_type))
-                            seen.add(entry.name)
+                            seen.add(entry_key)
 
             return result
 

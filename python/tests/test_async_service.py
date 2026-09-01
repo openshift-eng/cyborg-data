@@ -17,7 +17,9 @@ from orgdatacore import (
     MembershipIndex,
     MembershipInfo,
     Org,
+    OrgInfo,
     ParentInfo,
+    SlackIDMappings,
     Team,
     TeamGroup,
 )
@@ -784,3 +786,49 @@ class TestAsyncService:
         assert [(c.name, c.type) for c in team_group.children] == [("shared", "team")]
         team = team_group.children[0]
         assert [(c.name, c.type) for c in team.children] == [("leaf", "team")]
+
+    @pytest.mark.asyncio
+    async def test_get_user_organizations_name_collision(self) -> None:
+        """A team sharing its parent team_group's name must not be deduped away.
+
+        Deduping the result by (name, type) — not name alone — is required,
+        otherwise the team_group is wrongly dropped because a team with the same
+        name was already recorded.
+        """
+        service = AsyncService()
+        service._data = Data(
+            lookups=Lookups(
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                },
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                orgs={"acme": Org(name="acme", type="org")},
+            ),
+            indexes=Indexes(
+                membership=MembershipIndex(
+                    membership_index={
+                        "euser": (MembershipInfo(name="shared", type="team"),),
+                    },
+                ),
+                slack_id_mappings=SlackIDMappings(
+                    slack_uid_to_uid={"Suser": "euser"},
+                ),
+            ),
+        )
+
+        # euser is in team "shared" -> team_group "shared" -> org "acme".
+        # All three must appear, each with its own type.
+        result = await service.get_user_organizations("Suser")
+        assert OrgInfo(name="shared", type="Team") in result
+        assert OrgInfo(name="shared", type="Team Group") in result
+        assert OrgInfo(name="acme", type="Organization") in result

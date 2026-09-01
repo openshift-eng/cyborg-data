@@ -458,19 +458,24 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 	}
 
 	var orgs []OrgInfo
-	seen := make(map[string]bool)
+	// Dedupe by (name, type): names are not unique across types, so keying on
+	// name alone would drop a legitimately distinct entity (e.g. a team_group
+	// sharing a team's name) from the result.
+	seen := make(map[HierarchyPathEntry]bool)
 
 	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
 		switch m.Type {
 		case string(MembershipOrg):
-			if !seen[m.Name] {
+			key := HierarchyPathEntry{Name: m.Name, Type: "org"}
+			if !seen[key] {
 				orgs = append(orgs, OrgInfo{Name: m.Name, Type: OrgTypeOrganization})
-				seen[m.Name] = true
+				seen[key] = true
 			}
 		case string(MembershipTeam):
-			if !seen[m.Name] {
+			key := HierarchyPathEntry{Name: m.Name, Type: "team"}
+			if !seen[key] {
 				orgs = append(orgs, OrgInfo{Name: m.Name, Type: OrgTypeTeam})
-				seen[m.Name] = true
+				seen[key] = true
 			}
 			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
 			addHierarchyPathItems(&orgs, &seen, hierarchyPath)
@@ -479,7 +484,7 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 	return orgs
 }
 
-func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[string]bool, hierarchyPath []HierarchyPathEntry) {
+func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[HierarchyPathEntry]bool, hierarchyPath []HierarchyPathEntry) {
 	typeToOrgInfoType := map[string]OrgInfoType{
 		"org":        OrgTypeOrganization,
 		"pillar":     OrgTypePillar,
@@ -491,13 +496,14 @@ func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[string]bool, hierarchyPath
 		if i == 0 {
 			continue
 		}
-		if !(*seen)[entry.Name] {
+		key := HierarchyPathEntry{Name: entry.Name, Type: strings.ToLower(entry.Type)}
+		if !(*seen)[key] {
 			orgType, ok := typeToOrgInfoType[strings.ToLower(entry.Type)]
 			if !ok {
 				orgType = OrgTypeOrganization
 			}
 			*orgs = append(*orgs, OrgInfo{Name: entry.Name, Type: orgType})
-			(*seen)[entry.Name] = true
+			(*seen)[key] = true
 		}
 	}
 }
