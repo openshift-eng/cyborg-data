@@ -245,3 +245,45 @@ class TestGetDescendantsTree:
         """Test get_descendants_tree returns None when no data loaded."""
         tree = empty_service.get_descendants_tree("test-org")
         assert tree is None
+
+    def test_get_descendants_tree_name_collision(self) -> None:
+        """A team_group and a team sharing a name must not merge their subtrees.
+
+        The tree must key both the children map and the visited set by
+        (name, type): keying by name alone merges the two nodes' children and
+        stops the recursion early, producing a wrong tree.
+        """
+        service = Service()
+        service._data = Data(
+            lookups=Lookups(
+                orgs={"acme": Org(name="acme", type="org")},
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                    "leaf": Team(
+                        name="leaf",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team"),
+                    ),
+                },
+            ),
+        )
+
+        # acme(org) -> shared(team_group) -> shared(team) -> leaf(team)
+        tree = service.get_descendants_tree("acme")
+        assert tree is not None
+        assert [(c.name, c.type) for c in tree.children] == [("shared", "team_group")]
+        team_group = tree.children[0]
+        assert [(c.name, c.type) for c in team_group.children] == [("shared", "team")]
+        team = team_group.children[0]
+        assert [(c.name, c.type) for c in team.children] == [("leaf", "team")]

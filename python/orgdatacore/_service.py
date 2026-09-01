@@ -947,8 +947,10 @@ class Service:
             if self._data is None:
                 return None
 
-            # Build children map by scanning all entities
-            children_map: dict[str, list[tuple[str, str]]] = {}
+            # Build children map keyed by the parent's (name, type). Names are
+            # not unique across types, so keying by name alone would merge the
+            # children of different same-named parents into a single bucket.
+            children_map: dict[tuple[str, str], list[tuple[str, str]]] = {}
             all_entities: list[tuple[str, Team | Org | Pillar | TeamGroup, str]] = [
                 *(
                     (name, info, "team")
@@ -974,15 +976,16 @@ class Service:
 
             for name, info, etype in all_entities:
                 if info.parent:
-                    if info.parent.name not in children_map:
-                        children_map[info.parent.name] = []
-                    children_map[info.parent.name].append((name, etype))
+                    key = (info.parent.name, info.parent.type)
+                    children_map.setdefault(key, []).append((name, etype))
 
-            def build_node(name: str, type_: str, visited: set[str]) -> HierarchyNode:
-                if name in visited:
+            def build_node(
+                name: str, type_: str, visited: set[tuple[str, str]]
+            ) -> HierarchyNode:
+                if (name, type_) in visited:
                     return HierarchyNode(name=name, type=type_, children=())
-                visited.add(name)
-                children = children_map.get(name, [])
+                visited.add((name, type_))
+                children = children_map.get((name, type_), [])
                 child_nodes = tuple(build_node(n, t, visited) for n, t in children)
                 return HierarchyNode(name=name, type=type_, children=child_nodes)
 

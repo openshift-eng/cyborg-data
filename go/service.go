@@ -724,39 +724,46 @@ func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
 		return nil
 	}
 
-	// Build children map by scanning all entities
-	childrenMap := make(map[string][]struct{ name, typ string })
+	// Build children map keyed by the parent's (name, type). Names are not
+	// unique across types, so keying by name alone would merge the children of
+	// different same-named parents into a single bucket.
+	childrenMap := make(map[HierarchyPathEntry][]struct{ name, typ string })
 
 	for name, team := range s.data.Lookups.Teams {
 		if team.Parent != nil {
-			childrenMap[team.Parent.Name] = append(childrenMap[team.Parent.Name], struct{ name, typ string }{name, "team"})
+			pk := HierarchyPathEntry{Name: team.Parent.Name, Type: team.Parent.Type}
+			childrenMap[pk] = append(childrenMap[pk], struct{ name, typ string }{name, "team"})
 		}
 	}
 	for name, org := range s.data.Lookups.Orgs {
 		if org.Parent != nil {
-			childrenMap[org.Parent.Name] = append(childrenMap[org.Parent.Name], struct{ name, typ string }{name, "org"})
+			pk := HierarchyPathEntry{Name: org.Parent.Name, Type: org.Parent.Type}
+			childrenMap[pk] = append(childrenMap[pk], struct{ name, typ string }{name, "org"})
 		}
 	}
 	for name, pillar := range s.data.Lookups.Pillars {
 		if pillar.Parent != nil {
-			childrenMap[pillar.Parent.Name] = append(childrenMap[pillar.Parent.Name], struct{ name, typ string }{name, "pillar"})
+			pk := HierarchyPathEntry{Name: pillar.Parent.Name, Type: pillar.Parent.Type}
+			childrenMap[pk] = append(childrenMap[pk], struct{ name, typ string }{name, "pillar"})
 		}
 	}
 	for name, tg := range s.data.Lookups.TeamGroups {
 		if tg.Parent != nil {
-			childrenMap[tg.Parent.Name] = append(childrenMap[tg.Parent.Name], struct{ name, typ string }{name, "team_group"})
+			pk := HierarchyPathEntry{Name: tg.Parent.Name, Type: tg.Parent.Type}
+			childrenMap[pk] = append(childrenMap[pk], struct{ name, typ string }{name, "team_group"})
 		}
 	}
 
-	// Build tree recursively
-	var buildNode func(name, typ string, visited map[string]bool) HierarchyNode
-	buildNode = func(name, typ string, visited map[string]bool) HierarchyNode {
-		if visited[name] {
+	// Build tree recursively, guarding cycles by (name, type) for the same reason.
+	var buildNode func(name, typ string, visited map[HierarchyPathEntry]bool) HierarchyNode
+	buildNode = func(name, typ string, visited map[HierarchyPathEntry]bool) HierarchyNode {
+		key := HierarchyPathEntry{Name: name, Type: typ}
+		if visited[key] {
 			return HierarchyNode{Name: name, Type: typ, Children: []HierarchyNode{}}
 		}
-		visited[name] = true
+		visited[key] = true
 
-		children := childrenMap[name]
+		children := childrenMap[key]
 		childNodes := make([]HierarchyNode, 0, len(children))
 		for _, c := range children {
 			childNodes = append(childNodes, buildNode(c.name, c.typ, visited))
@@ -765,7 +772,7 @@ func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
 		return HierarchyNode{Name: name, Type: typ, Children: childNodes}
 	}
 
-	node := buildNode(entityName, entityType, make(map[string]bool))
+	node := buildNode(entityName, entityType, make(map[HierarchyPathEntry]bool))
 	return &node
 }
 
