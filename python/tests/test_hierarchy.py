@@ -1,6 +1,18 @@
 """Tests for hierarchy traversal methods."""
 
-from orgdatacore import HierarchyPathEntry, Service
+from orgdatacore import (
+    Data,
+    HierarchyPathEntry,
+    Indexes,
+    Lookups,
+    MembershipIndex,
+    MembershipInfo,
+    Org,
+    ParentInfo,
+    Service,
+    Team,
+    TeamGroup,
+)
 
 
 class TestGetHierarchyPath:
@@ -91,6 +103,52 @@ class TestGetHierarchyPath:
         """Test get_hierarchy_path returns empty list when no data loaded."""
         path = empty_service.get_hierarchy_path("test-team", "team")
         assert path == []
+
+    def test_get_hierarchy_path_name_collision(self) -> None:
+        """A team sharing its parent team_group's name must still reach the org.
+
+        The walk must key visited entities by (name, type): keying by name alone
+        stops at the team and never reaches the org, which wrongly denies org
+        membership (e.g. clusterbot's "Hybrid Platforms" check).
+        """
+        service = Service()
+        service._data = Data(
+            lookups=Lookups(
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                },
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                orgs={"acme": Org(name="acme", type="org")},
+            ),
+            indexes=Indexes(
+                membership=MembershipIndex(
+                    membership_index={
+                        "euser": (MembershipInfo(name="shared", type="team"),),
+                    },
+                ),
+            ),
+        )
+
+        path = service.get_hierarchy_path("shared", "team")
+        assert path == [
+            HierarchyPathEntry(name="shared", type="team"),
+            HierarchyPathEntry(name="shared", type="team_group"),
+            HierarchyPathEntry(name="acme", type="org"),
+        ]
+
+        # The membership symptom: the org is only reachable by walking past the
+        # name-colliding team_group.
+        assert service.is_employee_in_org("euser", "acme")
 
 
 class TestGetDescendantsTree:

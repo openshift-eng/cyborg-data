@@ -581,8 +581,10 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 	}
 
 	path := []HierarchyPathEntry{{Name: entityName, Type: entityType}}
-	visited := make(map[string]bool)
-	visited[entityName] = true
+	// Guard against cycles by tracking visited entities by both name and type.
+	// Different entity types can share a name (e.g. a team and its parent
+	// team_group), so keying on name alone would stop the walk prematurely.
+	visited := map[HierarchyPathEntry]bool{{Name: entityName, Type: entityType}: true}
 
 	currentName := entityName
 	currentType := entityType
@@ -592,11 +594,12 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 		if parent == nil {
 			break
 		}
-		if visited[parent.Name] {
+		parentEntry := HierarchyPathEntry{Name: parent.Name, Type: parent.Type}
+		if visited[parentEntry] {
 			break
 		}
-		visited[parent.Name] = true
-		path = append(path, HierarchyPathEntry{Name: parent.Name, Type: parent.Type})
+		visited[parentEntry] = true
+		path = append(path, parentEntry)
 		currentName = parent.Name
 		currentType = parent.Type
 	}

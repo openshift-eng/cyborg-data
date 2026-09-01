@@ -122,6 +122,51 @@ func TestGetHierarchyPathDeepTeamDetails(t *testing.T) {
 	}
 }
 
+// TestGetHierarchyPathNameCollision covers a team whose name collides with its
+// parent team_group's name. The walk must key visited entities by (name, type):
+// keying by name alone stops at the team and never reaches the org, which
+// wrongly denies org membership (e.g. clusterbot's "Hybrid Platforms" check).
+func TestGetHierarchyPathNameCollision(t *testing.T) {
+	service := NewService()
+	service.data = &Data{
+		Lookups: Lookups{
+			Teams: map[string]Team{
+				"shared": {Name: "shared", Type: "team", Parent: &ParentInfo{Name: "shared", Type: "team_group"}},
+			},
+			TeamGroups: map[string]TeamGroup{
+				"shared": {Name: "shared", Type: "team_group", Parent: &ParentInfo{Name: "acme", Type: "org"}},
+			},
+			Orgs: map[string]Org{"acme": {Name: "acme", Type: "org"}},
+		},
+		Indexes: Indexes{
+			Membership: MembershipIndex{MembershipIndex: map[string][]MembershipInfo{
+				"euser": {{Name: "shared", Type: "team"}},
+			}},
+		},
+	}
+
+	expected := []HierarchyPathEntry{
+		{Name: "shared", Type: "team"},
+		{Name: "shared", Type: "team_group"},
+		{Name: "acme", Type: "org"},
+	}
+	path := service.GetHierarchyPath("shared", "team")
+	if len(path) != len(expected) {
+		t.Fatalf("Expected %d entries, got %d: %+v", len(expected), len(path), path)
+	}
+	for i, exp := range expected {
+		if path[i] != exp {
+			t.Errorf("Entry %d: expected %+v, got %+v", i, exp, path[i])
+		}
+	}
+
+	// The membership symptom: the org is only reachable by walking past the
+	// name-colliding team_group.
+	if !service.IsEmployeeInOrg("euser", "acme") {
+		t.Error("Expected euser to be in org 'acme' via the name-colliding team hierarchy")
+	}
+}
+
 func TestGetHierarchyPathNoData(t *testing.T) {
 	service := NewService()
 
