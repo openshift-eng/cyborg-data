@@ -915,14 +915,18 @@ class Service:
             return []
 
         path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
-        visited = {entity_name}
+        # Guard against cycles by tracking visited entities by both name and
+        # type. Different entity types can share a name (e.g. a team and its
+        # parent team_group), so keying on name alone would stop the walk
+        # prematurely.
+        visited = {(entity_name, entity_type)}
         current: Team | Org | Pillar | TeamGroup | None = entity
 
         while current and current.parent:
             parent = current.parent
-            if parent.name in visited:
+            if (parent.name, parent.type) in visited:
                 break
-            visited.add(parent.name)
+            visited.add((parent.name, parent.type))
             path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
             current = self._get_entity_by_type(parent.name, parent.type)
 
