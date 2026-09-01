@@ -558,6 +558,31 @@ func (s *Service) getEntityType(entityName string) string {
 	return ""
 }
 
+// entityExists reports whether an entity of the given type exists.
+// Unlike getEntityType, it checks the type-specific lookup, so it correctly
+// resolves names shared across types (e.g. a team and a team_group both named
+// "shared"). Must be called with s.mu held.
+func (s *Service) entityExists(entityName, entityType string) bool {
+	if s.data == nil {
+		return false
+	}
+	switch strings.ToLower(entityType) {
+	case "team":
+		_, ok := s.data.Lookups.Teams[entityName]
+		return ok
+	case "org":
+		_, ok := s.data.Lookups.Orgs[entityName]
+		return ok
+	case "pillar":
+		_, ok := s.data.Lookups.Pillars[entityName]
+		return ok
+	case "team_group":
+		_, ok := s.data.Lookups.TeamGroups[entityName]
+		return ok
+	}
+	return false
+}
+
 // computeHierarchyPath builds the hierarchy path by walking parent references.
 // Must be called with s.mu held.
 func (s *Service) computeHierarchyPath(entityName, entityType string) []HierarchyPathEntry {
@@ -572,12 +597,12 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 			return []HierarchyPathEntry{}
 		}
 	} else {
-		// Validate entity exists with given type
-		actualType := s.getEntityType(entityName)
-		if actualType == "" || !strings.EqualFold(actualType, entityType) {
+		// Validate the entity exists with the requested type specifically.
+		// Names are not unique across types, so we must check the type's own
+		// lookup rather than inferring a single type from the name.
+		if !s.entityExists(entityName, entityType) {
 			return []HierarchyPathEntry{}
 		}
-		entityType = actualType
 	}
 
 	path := []HierarchyPathEntry{{Name: entityName, Type: entityType}}

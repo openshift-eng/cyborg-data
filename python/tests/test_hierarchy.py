@@ -150,6 +150,13 @@ class TestGetHierarchyPath:
         # name-colliding team_group.
         assert service.is_employee_in_org("euser", "acme")
 
+        # Reciprocal: requesting the same name with the team_group type must
+        # resolve the team_group, not be rejected because a team shares the name.
+        assert service.get_hierarchy_path("shared", "team_group") == [
+            HierarchyPathEntry(name="shared", type="team_group"),
+            HierarchyPathEntry(name="acme", type="org"),
+        ]
+
 
 class TestGetDescendantsTree:
     """Tests for get_descendants_tree method."""

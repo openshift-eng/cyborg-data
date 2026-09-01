@@ -165,6 +165,22 @@ func TestGetHierarchyPathNameCollision(t *testing.T) {
 	if !service.IsEmployeeInOrg("euser", "acme") {
 		t.Error("Expected euser to be in org 'acme' via the name-colliding team hierarchy")
 	}
+
+	// Reciprocal: requesting the same name with the team_group type must
+	// resolve the team_group, not be rejected because a team shares the name.
+	tgPath := service.GetHierarchyPath("shared", "team_group")
+	tgExpected := []HierarchyPathEntry{
+		{Name: "shared", Type: "team_group"},
+		{Name: "acme", Type: "org"},
+	}
+	if len(tgPath) != len(tgExpected) {
+		t.Fatalf("team_group path: expected %d entries, got %d: %+v", len(tgExpected), len(tgPath), tgPath)
+	}
+	for i, exp := range tgExpected {
+		if tgPath[i] != exp {
+			t.Errorf("team_group path entry %d: expected %+v, got %+v", i, exp, tgPath[i])
+		}
+	}
 }
 
 func TestGetHierarchyPathNoData(t *testing.T) {
