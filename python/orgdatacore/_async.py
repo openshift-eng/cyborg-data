@@ -537,14 +537,18 @@ class AsyncService:
             return []
 
         path = [HierarchyPathEntry(name=entity_name, type=entity_type)]
-        visited = {entity_name}
+        # Guard against cycles by tracking visited entities by both name and
+        # type. Different entity types can share a name (e.g. a team and its
+        # parent team_group), so keying on name alone would stop the walk
+        # prematurely.
+        visited = {(entity_name, entity_type)}
         current: Team | Org | Pillar | TeamGroup | None = entity
 
         while current and current.parent:
             parent = current.parent
-            if parent.name in visited:
+            if (parent.name, parent.type) in visited:
                 break
-            visited.add(parent.name)
+            visited.add((parent.name, parent.type))
             path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
             current = self._get_entity_by_type(parent.name, parent.type)
 
@@ -596,8 +600,10 @@ class AsyncService:
             if not entity_type:
                 return None
 
-            # Build children map by scanning all entities
-            children_map: dict[str, list[tuple[str, str]]] = {}
+            # Build children map keyed by the parent's (name, type). Names are
+            # not unique across types, so keying by name alone would merge the
+            # children of different same-named parents into a single bucket.
+            children_map: dict[tuple[str, str], list[tuple[str, str]]] = {}
             all_entities: list[tuple[str, Team | Org | Pillar | TeamGroup, str]] = [
                 *(
                     (name, info, "team")
@@ -619,15 +625,16 @@ class AsyncService:
 
             for name, info, etype in all_entities:
                 if info.parent:
-                    if info.parent.name not in children_map:
-                        children_map[info.parent.name] = []
-                    children_map[info.parent.name].append((name, etype))
+                    key = (info.parent.name, info.parent.type)
+                    children_map.setdefault(key, []).append((name, etype))
 
-            def build_node(name: str, type_: str, visited: set[str]) -> HierarchyNode:
-                if name in visited:
+            def build_node(
+                name: str, type_: str, visited: set[tuple[str, str]]
+            ) -> HierarchyNode:
+                if (name, type_) in visited:
                     return HierarchyNode(name=name, type=type_, children=())
-                visited.add(name)
-                children = children_map.get(name, [])
+                visited.add((name, type_))
+                children = children_map.get((name, type_), [])
                 child_nodes = tuple(build_node(n, t, visited) for n, t in children)
                 return HierarchyNode(name=name, type=type_, children=child_nodes)
 
@@ -647,7 +654,10 @@ class AsyncService:
 
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
-            seen: set[str] = set()
+            # Dedupe by (name, type): names are not unique across types, so
+            # keying on name alone would drop a legitimately distinct entity
+            # (e.g. a team_group sharing a team's name) from the result.
+            seen: set[tuple[str, str]] = set()
 
             type_to_org_info_type = {
                 "org": OrgInfoType.ORGANIZATION,
@@ -658,24 +668,27 @@ class AsyncService:
 
             for m in memberships:
                 if m.type == MembershipType.ORG:
-                    if m.name not in seen:
+                    key = (m.name, "org")
+                    if key not in seen:
                         result.append(
                             OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION)
                         )
-                        seen.add(m.name)
+                        seen.add(key)
                 elif m.type == MembershipType.TEAM:
-                    if m.name not in seen:
+                    key = (m.name, "team")
+                    if key not in seen:
                         result.append(OrgInfo(name=m.name, type=OrgInfoType.TEAM))
-                        seen.add(m.name)
+                        seen.add(key)
 
                     hierarchy_path = self._get_hierarchy_path(m.name, "team")
                     for entry in hierarchy_path[1:]:
-                        if entry.name not in seen:
+                        entry_key = (entry.name, entry.type.lower())
+                        if entry_key not in seen:
                             org_type = type_to_org_info_type.get(
                                 entry.type.lower(), OrgInfoType.ORGANIZATION
                             )
                             result.append(OrgInfo(name=entry.name, type=org_type))
-                            seen.add(entry.name)
+                            seen.add(entry_key)
 
             return result
 

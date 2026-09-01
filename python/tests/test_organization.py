@@ -2,7 +2,20 @@
 
 import pytest
 
-from orgdatacore import OrgInfo, Service
+from orgdatacore import (
+    Data,
+    Indexes,
+    Lookups,
+    MembershipIndex,
+    MembershipInfo,
+    Org,
+    OrgInfo,
+    ParentInfo,
+    Service,
+    SlackIDMappings,
+    Team,
+    TeamGroup,
+)
 
 
 class TestGetOrgByName:
@@ -129,6 +142,51 @@ class TestGetUserOrganizations:
             key = f"{org.name}:{org.type}"
             assert key not in seen, f"Duplicate organization: {org}"
             seen.add(key)
+
+    def test_name_collision(self) -> None:
+        """A team sharing its parent team_group's name must not be deduped away.
+
+        Deduping the result by (name, type) — not name alone — is required,
+        otherwise the team_group is wrongly dropped because a team with the same
+        name was already recorded.
+        """
+        service = Service()
+        service._data = Data(
+            lookups=Lookups(
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                },
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                orgs={"acme": Org(name="acme", type="org")},
+            ),
+            indexes=Indexes(
+                membership=MembershipIndex(
+                    membership_index={
+                        "euser": (MembershipInfo(name="shared", type="team"),),
+                    },
+                ),
+                slack_id_mappings=SlackIDMappings(
+                    slack_uid_to_uid={"Suser": "euser"},
+                ),
+            ),
+        )
+
+        # euser is in team "shared" -> team_group "shared" -> org "acme".
+        # All three must appear, each with its own type.
+        result = service.get_user_organizations("Suser")
+        assert OrgInfo(name="shared", type="Team") in result
+        assert OrgInfo(name="shared", type="Team Group") in result
+        assert OrgInfo(name="acme", type="Organization") in result
 
 
 class TestOrganizationalHierarchy:

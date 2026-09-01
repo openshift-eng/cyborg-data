@@ -7,7 +7,22 @@ from typing import BinaryIO
 
 import pytest
 
-from orgdatacore import AsyncService, DataLoadError
+from orgdatacore import (
+    AsyncService,
+    Data,
+    DataLoadError,
+    HierarchyPathEntry,
+    Indexes,
+    Lookups,
+    MembershipIndex,
+    MembershipInfo,
+    Org,
+    OrgInfo,
+    ParentInfo,
+    SlackIDMappings,
+    Team,
+    TeamGroup,
+)
 from orgdatacore._internal.testing import create_test_data_json
 
 
@@ -681,3 +696,139 @@ class TestAsyncService:
         assert stop_called, "source.stop() should have been called"
         assert service._watcher_task is None
         assert not service._watcher_running
+
+    @pytest.mark.asyncio
+    async def test_get_hierarchy_path_name_collision(self) -> None:
+        """A team sharing its parent team_group's name must still reach the org.
+
+        The async walk must key visited entities by (name, type): keying by name
+        alone stops at the team and never reaches the org, which wrongly denies
+        org membership (e.g. clusterbot's "Hybrid Platforms" check).
+        """
+        service = AsyncService()
+        service._data = Data(
+            lookups=Lookups(
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                },
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                orgs={"acme": Org(name="acme", type="org")},
+            ),
+            indexes=Indexes(
+                membership=MembershipIndex(
+                    membership_index={
+                        "euser": (MembershipInfo(name="shared", type="team"),),
+                    },
+                ),
+            ),
+        )
+
+        path = await service.get_hierarchy_path("shared", "team")
+        assert path == [
+            HierarchyPathEntry(name="shared", type="team"),
+            HierarchyPathEntry(name="shared", type="team_group"),
+            HierarchyPathEntry(name="acme", type="org"),
+        ]
+
+        # The membership symptom: the org is only reachable by walking past the
+        # name-colliding team_group.
+        assert await service.is_employee_in_org("euser", "acme")
+
+    @pytest.mark.asyncio
+    async def test_get_descendants_tree_name_collision(self) -> None:
+        """A team_group and a team sharing a name must not merge their subtrees.
+
+        The async tree must key both the children map and the visited set by
+        (name, type): keying by name alone merges the two nodes' children and
+        stops the recursion early, producing a wrong tree.
+        """
+        service = AsyncService()
+        service._data = Data(
+            lookups=Lookups(
+                orgs={"acme": Org(name="acme", type="org")},
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                    "leaf": Team(
+                        name="leaf",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team"),
+                    ),
+                },
+            ),
+        )
+
+        # acme(org) -> shared(team_group) -> shared(team) -> leaf(team)
+        tree = await service.get_descendants_tree("acme")
+        assert tree is not None
+        assert [(c.name, c.type) for c in tree.children] == [("shared", "team_group")]
+        team_group = tree.children[0]
+        assert [(c.name, c.type) for c in team_group.children] == [("shared", "team")]
+        team = team_group.children[0]
+        assert [(c.name, c.type) for c in team.children] == [("leaf", "team")]
+
+    @pytest.mark.asyncio
+    async def test_get_user_organizations_name_collision(self) -> None:
+        """A team sharing its parent team_group's name must not be deduped away.
+
+        Deduping the result by (name, type) — not name alone — is required,
+        otherwise the team_group is wrongly dropped because a team with the same
+        name was already recorded.
+        """
+        service = AsyncService()
+        service._data = Data(
+            lookups=Lookups(
+                teams={
+                    "shared": Team(
+                        name="shared",
+                        type="team",
+                        parent=ParentInfo(name="shared", type="team_group"),
+                    ),
+                },
+                team_groups={
+                    "shared": TeamGroup(
+                        name="shared",
+                        type="team_group",
+                        parent=ParentInfo(name="acme", type="org"),
+                    ),
+                },
+                orgs={"acme": Org(name="acme", type="org")},
+            ),
+            indexes=Indexes(
+                membership=MembershipIndex(
+                    membership_index={
+                        "euser": (MembershipInfo(name="shared", type="team"),),
+                    },
+                ),
+                slack_id_mappings=SlackIDMappings(
+                    slack_uid_to_uid={"Suser": "euser"},
+                ),
+            ),
+        )
+
+        # euser is in team "shared" -> team_group "shared" -> org "acme".
+        # All three must appear, each with its own type.
+        result = await service.get_user_organizations("Suser")
+        assert OrgInfo(name="shared", type="Team") in result
+        assert OrgInfo(name="shared", type="Team Group") in result
+        assert OrgInfo(name="acme", type="Organization") in result

@@ -165,6 +165,22 @@ func TestGetHierarchyPathNameCollision(t *testing.T) {
 	if !service.IsEmployeeInOrg("euser", "acme") {
 		t.Error("Expected euser to be in org 'acme' via the name-colliding team hierarchy")
 	}
+
+	// Reciprocal: requesting the same name with the team_group type must
+	// resolve the team_group, not be rejected because a team shares the name.
+	tgPath := service.GetHierarchyPath("shared", "team_group")
+	tgExpected := []HierarchyPathEntry{
+		{Name: "shared", Type: "team_group"},
+		{Name: "acme", Type: "org"},
+	}
+	if len(tgPath) != len(tgExpected) {
+		t.Fatalf("team_group path: expected %d entries, got %d: %+v", len(tgExpected), len(tgPath), tgPath)
+	}
+	for i, exp := range tgExpected {
+		if tgPath[i] != exp {
+			t.Errorf("team_group path entry %d: expected %+v, got %+v", i, exp, tgPath[i])
+		}
+	}
 }
 
 func TestGetHierarchyPathNoData(t *testing.T) {
@@ -301,5 +317,42 @@ func TestGetDescendantsTreeNoData(t *testing.T) {
 	tree := service.GetDescendantsTree("test-org")
 	if tree != nil {
 		t.Error("Expected nil tree when no data loaded")
+	}
+}
+
+// TestGetDescendantsTreeNameCollision covers a team_group and a team that share
+// a name. The tree must key both the children map and the visited set by
+// (name, type): keying by name alone merges the two nodes' children and stops
+// the recursion early, producing a wrong tree.
+func TestGetDescendantsTreeNameCollision(t *testing.T) {
+	service := NewService()
+	service.data = &Data{
+		Lookups: Lookups{
+			Orgs: map[string]Org{"acme": {Name: "acme", Type: "org"}},
+			TeamGroups: map[string]TeamGroup{
+				"shared": {Name: "shared", Type: "team_group", Parent: &ParentInfo{Name: "acme", Type: "org"}},
+			},
+			Teams: map[string]Team{
+				"shared": {Name: "shared", Type: "team", Parent: &ParentInfo{Name: "shared", Type: "team_group"}},
+				"leaf":   {Name: "leaf", Type: "team", Parent: &ParentInfo{Name: "shared", Type: "team"}},
+			},
+		},
+	}
+
+	// acme(org) -> shared(team_group) -> shared(team) -> leaf(team)
+	tree := service.GetDescendantsTree("acme")
+	if tree == nil {
+		t.Fatal("Expected non-nil tree")
+	}
+	if len(tree.Children) != 1 || tree.Children[0].Name != "shared" || tree.Children[0].Type != "team_group" {
+		t.Fatalf("Expected acme's only child to be shared/team_group, got %+v", tree.Children)
+	}
+	tg := tree.Children[0]
+	if len(tg.Children) != 1 || tg.Children[0].Type != "team" {
+		t.Fatalf("Expected team_group shared's only child to be shared/team, got %+v", tg.Children)
+	}
+	team := tg.Children[0]
+	if len(team.Children) != 1 || team.Children[0].Name != "leaf" {
+		t.Fatalf("Expected team shared's only child to be leaf, got %+v", team.Children)
 	}
 }
