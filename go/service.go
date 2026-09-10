@@ -44,6 +44,8 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 		return NewLoadError(source.String(), fmt.Errorf("failed to parse JSON: %w", err))
 	}
 
+	normalizeData(&orgData)
+
 	if err := validateData(&orgData); err != nil {
 		return NewLoadError(source.String(), err)
 	}
@@ -424,7 +426,7 @@ func (s *Service) isEmployeeInOrg(uid string, orgName string) bool {
 		if m.Type == string(MembershipTeam) {
 			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
 			for _, entry := range hierarchyPath {
-				if strings.ToLower(entry.Type) == "org" && entry.Name == orgName {
+				if entry.Type == "org" && entry.Name == orgName {
 					return true
 				}
 			}
@@ -496,9 +498,9 @@ func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[HierarchyPathEntry]bool, h
 		if i == 0 {
 			continue
 		}
-		key := HierarchyPathEntry{Name: entry.Name, Type: strings.ToLower(entry.Type)}
+		key := HierarchyPathEntry{Name: entry.Name, Type: entry.Type}
 		if !(*seen)[key] {
-			orgType, ok := typeToOrgInfoType[strings.ToLower(entry.Type)]
+			orgType, ok := typeToOrgInfoType[entry.Type]
 			if !ok {
 				orgType = OrgTypeOrganization
 			}
@@ -603,6 +605,10 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 			return []HierarchyPathEntry{}
 		}
 	} else {
+		// Normalize the caller-supplied type to canonical lowercase so the
+		// first path entry carries the same casing as the parent-derived
+		// entries below (which are normalized at load).
+		entityType = strings.ToLower(entityType)
 		// Validate the entity exists with the requested type specifically.
 		// Names are not unique across types, so we must check the type's own
 		// lookup rather than inferring a single type from the name.
@@ -732,7 +738,8 @@ func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
 
 	// Build children map keyed by the parent's (name, type). Names are not
 	// unique across types, so keying by name alone would merge the children of
-	// different same-named parents into a single bucket.
+	// different same-named parents into a single bucket. Parent types are
+	// canonical lowercase (normalized at load), matching the child types below.
 	childrenMap := make(map[HierarchyPathEntry][]struct{ name, typ string })
 
 	for name, team := range s.data.Lookups.Teams {
@@ -1265,4 +1272,45 @@ func validateData(data *Data) error {
 		return fmt.Errorf("%w: missing indexes.membership.membership_index", ErrInvalidData)
 	}
 	return nil
+}
+
+// normalizeData canonicalizes hierarchy type values to lowercase across the
+// loaded data. Entity type values (team/org/pillar/team_group) can arrive from
+// the data source in any casing, yet call sites key maps and compare on them.
+// Canonicalizing here — at the deserialization boundary — is what lets query
+// code read a type directly instead of defensively lowercasing it everywhere.
+func normalizeData(data *Data) {
+	for name, team := range data.Lookups.Teams {
+		team.Type = strings.ToLower(team.Type)
+		if team.Parent != nil {
+			team.Parent.Type = strings.ToLower(team.Parent.Type)
+		}
+		data.Lookups.Teams[name] = team
+	}
+	for name, org := range data.Lookups.Orgs {
+		org.Type = strings.ToLower(org.Type)
+		if org.Parent != nil {
+			org.Parent.Type = strings.ToLower(org.Parent.Type)
+		}
+		data.Lookups.Orgs[name] = org
+	}
+	for name, pillar := range data.Lookups.Pillars {
+		pillar.Type = strings.ToLower(pillar.Type)
+		if pillar.Parent != nil {
+			pillar.Parent.Type = strings.ToLower(pillar.Parent.Type)
+		}
+		data.Lookups.Pillars[name] = pillar
+	}
+	for name, tg := range data.Lookups.TeamGroups {
+		tg.Type = strings.ToLower(tg.Type)
+		if tg.Parent != nil {
+			tg.Parent.Type = strings.ToLower(tg.Parent.Type)
+		}
+		data.Lookups.TeamGroups[name] = tg
+	}
+	for _, members := range data.Indexes.Membership.MembershipIndex {
+		for i := range members {
+			members[i].Type = strings.ToLower(members[i].Type)
+		}
+	}
 }

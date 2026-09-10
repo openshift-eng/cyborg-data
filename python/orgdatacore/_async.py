@@ -532,6 +532,10 @@ class AsyncService:
         if self._data is None:
             return []
 
+        # Normalize the caller-supplied type to canonical lowercase so the first
+        # path entry carries the same casing as the parent-derived entries below
+        # (which are normalized at load).
+        entity_type = entity_type.lower()
         entity = self._get_entity_by_type(entity_name, entity_type)
         if entity is None:
             return []
@@ -682,10 +686,10 @@ class AsyncService:
 
                     hierarchy_path = self._get_hierarchy_path(m.name, "team")
                     for entry in hierarchy_path[1:]:
-                        entry_key = (entry.name, entry.type.lower())
+                        entry_key = (entry.name, entry.type)
                         if entry_key not in seen:
                             org_type = type_to_org_info_type.get(
-                                entry.type.lower(), OrgInfoType.ORGANIZATION
+                                entry.type, OrgInfoType.ORGANIZATION
                             )
                             result.append(OrgInfo(name=entry.name, type=org_type))
                             seen.add(entry_key)

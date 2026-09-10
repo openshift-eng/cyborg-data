@@ -1,6 +1,8 @@
 package orgdatacore
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -354,5 +356,72 @@ func TestGetDescendantsTreeNameCollision(t *testing.T) {
 	team := tg.Children[0]
 	if len(team.Children) != 1 || team.Children[0].Name != "leaf" {
 		t.Fatalf("Expected team shared's only child to be leaf, got %+v", team.Children)
+	}
+}
+
+// TestMixedCaseTypesNormalizedAtLoad verifies hierarchy types are canonicalized
+// to lowercase at the load boundary, so traversal resolves regardless of the
+// casing the data source used for entity and parent types.
+func TestMixedCaseTypesNormalizedAtLoad(t *testing.T) {
+	data := &Data{
+		Lookups: Lookups{
+			Employees: map[string]Employee{"u1": {UID: "u1", Email: "u1@example.com"}},
+			Orgs:      map[string]Org{"acme": {Name: "acme", Type: "ORG"}},
+			TeamGroups: map[string]TeamGroup{
+				"grp": {Name: "grp", Type: "Team_Group", Parent: &ParentInfo{Name: "acme", Type: "ORG"}},
+			},
+			Teams: map[string]Team{
+				"t": {Name: "t", Type: "TEAM", Parent: &ParentInfo{Name: "grp", Type: "TEAM_GROUP"}},
+			},
+		},
+		Indexes: Indexes{
+			Membership: MembershipIndex{MembershipIndex: map[string][]MembershipInfo{
+				"u1": {{Name: "t", Type: "TEAM"}},
+			}},
+		},
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	service := NewService()
+	if err := service.LoadFromDataSource(context.Background(), NewFakeDataSource(string(jsonData))); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	// Descendants resolve: the children map keys on parent type "ORG"/"TEAM_GROUP"
+	// which, once normalized, match the canonical lowercase child types.
+	tree := service.GetDescendantsTree("acme")
+	if tree == nil {
+		t.Fatal("Expected non-nil tree")
+	}
+	if len(tree.Children) != 1 || tree.Children[0].Name != "grp" {
+		t.Fatalf("Expected acme's only child to be grp, got %+v", tree.Children)
+	}
+	grp := tree.Children[0]
+	if len(grp.Children) != 1 || grp.Children[0].Name != "t" {
+		t.Fatalf("Expected grp's only child to be t, got %+v", grp.Children)
+	}
+
+	// Hierarchy path entries carry canonical lowercase types (from normalized
+	// parent refs), so consumers need not defensively lowercase them. A
+	// caller-supplied type in any casing normalizes to the same canonical path,
+	// including the first entry (which is derived from the caller's argument).
+	wantTypes := []string{"team", "team_group", "org"}
+	for _, callerType := range []string{"team", "TEAM", "Team"} {
+		path := service.GetHierarchyPath("t", callerType)
+		if len(path) != len(wantTypes) {
+			t.Fatalf("GetHierarchyPath(t, %q): expected %d path entries, got %+v", callerType, len(wantTypes), path)
+		}
+		for i, wt := range wantTypes {
+			if path[i].Type != wt {
+				t.Errorf("GetHierarchyPath(t, %q): path[%d].Type = %q, want %q", callerType, i, path[i].Type, wt)
+			}
+		}
+	}
+
+	// Entity own types are normalized in the lookups too.
+	if tm := service.GetTeamByName("t"); tm == nil || tm.Type != "team" {
+		t.Errorf("expected team 't' type normalized to 'team', got %+v", tm)
 	}
 }

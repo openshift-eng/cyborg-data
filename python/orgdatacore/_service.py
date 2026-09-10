@@ -727,10 +727,10 @@ class Service:
             "team": OrgInfoType.PARENT_TEAM,
         }
         for entry in hierarchy_path[1:]:
-            key = (entry.name, entry.type.lower())
+            key = (entry.name, entry.type)
             if key not in seen:
                 org_type = type_to_org_info_type.get(
-                    entry.type.lower(), OrgInfoType.ORGANIZATION
+                    entry.type, OrgInfoType.ORGANIZATION
                 )
                 orgs.append(OrgInfo(name=entry.name, type=org_type))
                 seen.add(key)
@@ -916,6 +916,10 @@ class Service:
         if self._data is None:
             return []
 
+        # Normalize the caller-supplied type to canonical lowercase so the first
+        # path entry carries the same casing as the parent-derived entries below
+        # (which are normalized at load).
+        entity_type = entity_type.lower()
         entity = self._get_entity_by_type(entity_name, entity_type)
         if entity is None:
             return []

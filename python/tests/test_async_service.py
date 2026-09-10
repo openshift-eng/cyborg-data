@@ -477,6 +477,25 @@ class TestAsyncService:
         assert path[0].type == "team"
 
     @pytest.mark.asyncio
+    async def test_get_hierarchy_path_caller_type_case_insensitive(self) -> None:
+        """A caller-supplied type in any casing resolves to the same path.
+
+        The type is normalized to canonical lowercase, so the first entry (which
+        is derived from the caller's argument) carries lowercase like the rest.
+        """
+        source = AsyncFakeDataSource(data=create_test_data_json())
+        service = AsyncService()
+        await service.load_from_data_source(source)
+
+        baseline = await service.get_hierarchy_path("test-squad", "team")
+        for caller_type in ("TEAM", "Team"):
+            path = await service.get_hierarchy_path("test-squad", caller_type)
+            assert [(e.name, e.type) for e in path] == [
+                (e.name, e.type) for e in baseline
+            ], caller_type
+        assert baseline[0].type == "team"
+
+    @pytest.mark.asyncio
     async def test_get_descendants_tree(self) -> None:
         """Test getting descendants tree for an entity."""
         source = AsyncFakeDataSource(data=create_test_data_json())
@@ -786,6 +805,42 @@ class TestAsyncService:
         assert [(c.name, c.type) for c in team_group.children] == [("shared", "team")]
         team = team_group.children[0]
         assert [(c.name, c.type) for c in team.children] == [("leaf", "team")]
+
+    @pytest.mark.asyncio
+    async def test_get_descendants_tree_mixed_case_parent_type(self) -> None:
+        """Descendants resolve even when parent types arrive in non-lowercase.
+
+        Hierarchy types are canonicalized to lowercase at the deserialization
+        boundary, so keying the children map on the parent type resolves
+        regardless of the casing the data source used.
+        """
+        service = AsyncService()
+        service._data = Data(
+            lookups=Lookups(
+                orgs={"acme": Org(name="acme", type="ORG")},
+                team_groups={
+                    "grp": TeamGroup(
+                        name="grp",
+                        type="Team_Group",
+                        parent=ParentInfo(name="acme", type="ORG"),
+                    ),
+                },
+                teams={
+                    "t": Team(
+                        name="t",
+                        type="TEAM",
+                        parent=ParentInfo(name="grp", type="TEAM_GROUP"),
+                    ),
+                },
+            ),
+        )
+
+        # acme(org) -> grp(team_group, parent type "ORG") -> t(team, parent "TEAM_GROUP")
+        tree = await service.get_descendants_tree("acme")
+        assert tree is not None
+        assert [(c.name, c.type) for c in tree.children] == [("grp", "team_group")]
+        grp = tree.children[0]
+        assert [(c.name, c.type) for c in grp.children] == [("t", "team")]
 
     @pytest.mark.asyncio
     async def test_get_user_organizations_name_collision(self) -> None:

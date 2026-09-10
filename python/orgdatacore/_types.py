@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, BinaryIO, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PIIMode(StrEnum):
@@ -240,7 +240,23 @@ class Group(BaseModel):
     resolved_context: tuple[ContextItemInfo, ...] = ()
 
 
-class ParentInfo(BaseModel):
+class _CanonicalType(BaseModel):
+    """Base for hierarchy entities whose ``type`` must be canonical lowercase.
+
+    Entity type values (team/org/pillar/team_group) can arrive from the data
+    source in any casing, yet several call sites key maps or compare on them.
+    Canonicalizing to lowercase here — at the deserialization boundary — is what
+    lets query code read ``type`` directly instead of defensively lowercasing it
+    at every consumption site.
+    """
+
+    @field_validator("type", check_fields=False)
+    @classmethod
+    def _canonicalize_type(cls, value: str) -> str:
+        return value.lower()
+
+
+class ParentInfo(_CanonicalType):
     """Parent reference for hierarchy traversal."""
 
     model_config = ConfigDict(frozen=True)
@@ -249,7 +265,7 @@ class ParentInfo(BaseModel):
     type: str = ""
 
 
-class Team(BaseModel):
+class Team(_CanonicalType):
     """Represents a team in the organizational data."""
 
     model_config = ConfigDict(frozen=True)
@@ -263,7 +279,7 @@ class Team(BaseModel):
     group: Group = Field(default_factory=Group)
 
 
-class Org(BaseModel):
+class Org(_CanonicalType):
     """Represents an organization in the organizational data."""
 
     model_config = ConfigDict(frozen=True)
@@ -277,7 +293,7 @@ class Org(BaseModel):
     group: Group = Field(default_factory=Group)
 
 
-class Pillar(BaseModel):
+class Pillar(_CanonicalType):
     """Represents a pillar in the organizational hierarchy."""
 
     model_config = ConfigDict(frozen=True)
@@ -291,7 +307,7 @@ class Pillar(BaseModel):
     group: Group = Field(default_factory=Group)
 
 
-class TeamGroup(BaseModel):
+class TeamGroup(_CanonicalType):
     """Represents a team group in the organizational hierarchy."""
 
     model_config = ConfigDict(frozen=True)
@@ -370,7 +386,7 @@ class Lookups(BaseModel):
     components: dict[str, Component] = Field(default_factory=dict)
 
 
-class MembershipInfo(BaseModel):
+class MembershipInfo(_CanonicalType):
     """Represents a membership entry with name and type."""
 
     model_config = ConfigDict(frozen=True)
