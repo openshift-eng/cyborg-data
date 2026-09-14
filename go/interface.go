@@ -96,8 +96,9 @@ type ServiceInterface interface {
 }
 
 type OrgInfo struct {
-	Name string      `json:"name"`
-	Type OrgInfoType `json:"type"`
+	Name     string      `json:"name"`
+	Type     OrgInfoType `json:"type"`
+	StableID string      `json:"stable_id,omitempty"`
 }
 
 type GCSConfig struct {

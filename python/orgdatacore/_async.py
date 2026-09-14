@@ -26,7 +26,14 @@ from typing import Any, BinaryIO
 
 from ._exceptions import ConfigurationError, DataLoadError, GCSError
 from ._log import get_logger
-from ._service import _normalize_slack_channel, parse_data
+from ._service import (
+    _ancestor_org_info_type,
+    _EntityRef,
+    _NameTypeKey,
+    _normalize_slack_channel,
+    _to_entity_type,
+    parse_data,
+)
 from ._types import (
     Component,
     ComponentOwnerInfo,
@@ -35,6 +42,7 @@ from ._types import (
     Data,
     DataVersion,
     Employee,
+    EntityType,
     EscalationContactInfo,
     GCSConfig,
     HierarchyNode,
@@ -84,6 +92,14 @@ class AsyncService:
         self._watcher_task: asyncio.Task[None] | None = None
         self._watcher_source: Any | None = None
         self._slack_channel_index: dict[str, list[str]] = {}
+
+        # Derived identity indexes, rebuilt on every load. Populated only when
+        # the index carries stable IDs (_use_stable_ids); otherwise traversal
+        # falls back to the legacy name+type behavior.
+        self._entity_by_id: dict[str, _EntityRef] = {}
+        self._children_by_id: dict[str, list[str]] = {}
+        self._id_by_name_type: dict[_NameTypeKey, str] = {}
+        self._use_stable_ids: bool = False
 
     async def initialize(self) -> None:
         """Initialize the service if a data source was provided.
@@ -160,6 +176,8 @@ class AsyncService:
                     if ch.channel:
                         normalized = _normalize_slack_channel(ch.channel)
                         self._slack_channel_index.setdefault(normalized, []).append(team.name)
+
+            self._build_derived_indexes()
 
         logger.info(
             "Data loaded successfully (async)",
@@ -494,9 +512,11 @@ class AsyncService:
                 ):
                     return True
                 elif membership.type == MembershipType.TEAM:
-                    hierarchy_path = self._get_hierarchy_path(membership.name, "team")
+                    hierarchy_path = self._get_hierarchy_path(
+                        membership.name, EntityType.TEAM
+                    )
                     for entry in hierarchy_path:
-                        if entry.type == "org" and entry.name == org_name:
+                        if entry.type == EntityType.ORG and entry.name == org_name:
                             return True
 
             return False
@@ -507,6 +527,111 @@ class AsyncService:
         if not uid:
             return False
         return await self.is_employee_in_org(uid, org_name)
+
+    def _build_derived_indexes(self) -> None:
+        """Build stable-ID relationship indexes from the loaded data.
+
+        Caller must hold the lock. Enables ``_use_stable_ids`` only when the
+        index is a sound identity graph: every entity carries a unique
+        ``stable_id``, every parent edge carries a ``parent_id``, and every
+        ``parent_id`` resolves to a known entity. Any defect (or an old-format
+        index) falls back to the legacy name+type traversal rather than silently
+        returning wrong ancestry.
+        """
+        self._entity_by_id = {}
+        self._children_by_id = {}
+        self._id_by_name_type = {}
+        self._use_stable_ids = False
+        if self._data is None:
+            return
+
+        any_stable_id = True
+        all_edges_identified = True
+        duplicate_stable_id = False
+
+        def register(
+            name: str,
+            typ: EntityType,
+            stable_id: str,
+            parent_id: str,
+            has_parent: bool,
+        ) -> None:
+            nonlocal any_stable_id, all_edges_identified, duplicate_stable_id
+            if not stable_id:
+                any_stable_id = False
+                return
+            if stable_id in self._entity_by_id:
+                duplicate_stable_id = True
+            self._entity_by_id[stable_id] = _EntityRef(
+                name=name, type=typ, parent_id=parent_id, stable_id=stable_id
+            )
+            self._id_by_name_type[_NameTypeKey(name, typ)] = stable_id
+            if has_parent and not parent_id:
+                all_edges_identified = False
+
+        for name, team in self._data.lookups.teams.items():
+            register(name, EntityType.TEAM, team.stable_id, team.parent_id, team.parent is not None)
+        for name, org in self._data.lookups.orgs.items():
+            register(name, EntityType.ORG, org.stable_id, org.parent_id, org.parent is not None)
+        for name, pillar in self._data.lookups.pillars.items():
+            register(
+                name, EntityType.PILLAR, pillar.stable_id, pillar.parent_id, pillar.parent is not None
+            )
+        for name, tg in self._data.lookups.team_groups.items():
+            register(
+                name, EntityType.TEAM_GROUP, tg.stable_id, tg.parent_id, tg.parent is not None
+            )
+
+        # Every parent_id must resolve to a known entity, otherwise traversal
+        # would silently truncate ancestry or drop a descendants branch.
+        all_parents_resolve = all(
+            ref.parent_id in self._entity_by_id
+            for ref in self._entity_by_id.values()
+            if ref.parent_id
+        )
+
+        if (
+            not self._entity_by_id
+            or not any_stable_id
+            or not all_edges_identified
+            or duplicate_stable_id
+            or not all_parents_resolve
+        ):
+            self._entity_by_id = {}
+            self._id_by_name_type = {}
+            return
+
+        for stable_id, ref in self._entity_by_id.items():
+            if ref.parent_id:
+                self._children_by_id.setdefault(ref.parent_id, []).append(stable_id)
+
+        self._use_stable_ids = True
+
+    def _get_entity_type(self, entity_name: str) -> str:
+        """Look up entity type by scanning lookups (first match)."""
+        if self._data is None:
+            return ""
+        if entity_name in self._data.lookups.teams:
+            return "team"
+        if entity_name in self._data.lookups.orgs:
+            return "org"
+        if entity_name in self._data.lookups.pillars:
+            return "pillar"
+        if entity_name in self._data.lookups.team_groups:
+            return "team_group"
+        return ""
+
+    def _resolve_start_id(self, entity_name: str, entity_type: str) -> str:
+        """Map a (name, type) pair to a stable ID. Caller must hold the lock."""
+        if not entity_type:
+            inferred = self._get_entity_type(entity_name)
+            if not inferred:
+                return ""
+            entity_type = inferred
+        etype = _to_entity_type(entity_type.lower())
+        if etype is None:
+            return ""
+        return self._id_by_name_type.get(_NameTypeKey(entity_name, etype), "")
 
     def _get_entity_by_type(
         self, entity_name: str, entity_type: str
@@ -532,6 +657,9 @@ class AsyncService:
         if self._data is None:
             return []
 
+        if self._use_stable_ids:
+            return self._compute_hierarchy_path_by_id(entity_name, entity_type)
+
         entity = self._get_entity_by_type(entity_name, entity_type)
         if entity is None:
             return []
@@ -548,6 +676,30 @@ class AsyncService:
             path.append(HierarchyPathEntry(name=parent.name, type=parent.type))
             current = self._get_entity_by_type(parent.name, parent.type)
 
+        return path
+
+    def _compute_hierarchy_path_by_id(
+        self, entity_name: str, entity_type: str
+    ) -> list[HierarchyPathEntry]:
+        """Walk the parent chain by stable ID. Caller must hold the lock."""
+        start_id = self._resolve_start_id(entity_name, entity_type)
+        if not start_id:
+            return []
+
+        path: list[HierarchyPathEntry] = []
+        visited: set[str] = set()
+        current_id = start_id
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            ref = self._entity_by_id.get(current_id)
+            if ref is None:
+                break
+            path.append(
+                HierarchyPathEntry(
+                    name=ref.name, type=ref.type, stable_id=ref.stable_id
+                )
+            )
+            current_id = ref.parent_id
         return path
 
     async def get_hierarchy_path(
@@ -581,6 +733,9 @@ class AsyncService:
         async with self._lock:
             if self._data is None:
                 return None
+
+            if self._use_stable_ids:
+                return self._get_descendants_tree_by_id(entity_name)
 
             # Look up entity type
             entity_type = ""
@@ -633,6 +788,41 @@ class AsyncService:
 
             return build_node(entity_name, entity_type, set())
 
+    def _get_descendants_tree_by_id(self, entity_name: str) -> HierarchyNode | None:
+        """Build the descendants tree using stable-ID edges. Caller holds lock."""
+        entity_type = self._get_entity_type(entity_name)
+        if not entity_type:
+            return None
+        start_id = self._id_by_name_type.get(
+            _NameTypeKey(entity_name, EntityType(entity_type)), ""
+        )
+        if not start_id:
+            return None
+
+        def build_node(stable_id: str, visited: set[str]) -> HierarchyNode:
+            ref = self._entity_by_id[stable_id]
+            if stable_id in visited:
+                return HierarchyNode(
+                    name=ref.name, type=ref.type, stable_id=ref.stable_id, children=()
+                )
+            visited.add(stable_id)
+            child_ids = sorted(
+                self._children_by_id.get(stable_id, []),
+                key=lambda cid: (
+                    self._entity_by_id[cid].name,
+                    self._entity_by_id[cid].type,
+                ),
+            )
+            child_nodes = tuple(build_node(cid, visited) for cid in child_ids)
+            return HierarchyNode(
+                name=ref.name,
+                type=ref.type,
+                stable_id=ref.stable_id,
+                children=child_nodes,
+            )
+
+        return build_node(start_id, set())
+
     async def get_user_organizations(self, slack_user_id: str) -> list[OrgInfo]:
         """Get the complete organizational hierarchy a Slack user belongs to."""
         async with self._lock:
@@ -645,39 +835,113 @@ class AsyncService:
             if not uid:
                 return []
 
+            if self._use_stable_ids:
+                return self._user_organizations_by_id(uid)
+
             memberships = self._data.indexes.membership.membership_index.get(uid, ())
             result: list[OrgInfo] = []
-            seen: set[str] = set()
-
-            type_to_org_info_type = {
-                "org": OrgInfoType.ORGANIZATION,
-                "pillar": OrgInfoType.PILLAR,
-                "team_group": OrgInfoType.TEAM_GROUP,
-                "team": OrgInfoType.PARENT_TEAM,
-            }
+            # Legacy mode: dedupe by (name, type). Names are not unique across
+            # types, so keying on name alone would drop a legitimately distinct
+            # entity (e.g. a team_group sharing a team's name) from the result.
+            seen: set[_NameTypeKey] = set()
 
             for m in memberships:
                 if m.type == MembershipType.ORG:
-                    if m.name not in seen:
+                    key = _NameTypeKey(m.name, EntityType.ORG)
+                    if key not in seen:
                         result.append(
                             OrgInfo(name=m.name, type=OrgInfoType.ORGANIZATION)
                         )
-                        seen.add(m.name)
+                        seen.add(key)
                 elif m.type == MembershipType.TEAM:
-                    if m.name not in seen:
+                    key = _NameTypeKey(m.name, EntityType.TEAM)
+                    if key not in seen:
                         result.append(OrgInfo(name=m.name, type=OrgInfoType.TEAM))
-                        seen.add(m.name)
+                        seen.add(key)
 
-                    hierarchy_path = self._get_hierarchy_path(m.name, "team")
+                    hierarchy_path = self._get_hierarchy_path(m.name, EntityType.TEAM)
                     for entry in hierarchy_path[1:]:
-                        if entry.name not in seen:
-                            org_type = type_to_org_info_type.get(
-                                entry.type.lower(), OrgInfoType.ORGANIZATION
+                        # Free-form index type: skip unknown/empty rather than
+                        # raising, matching Go.
+                        entry_type = _to_entity_type(entry.type.lower())
+                        if entry_type is None:
+                            continue
+                        entry_key = _NameTypeKey(entry.name, entry_type)
+                        if entry_key not in seen:
+                            result.append(
+                                OrgInfo(
+                                    name=entry.name,
+                                    type=_ancestor_org_info_type(entry_type),
+                                    stable_id=entry.stable_id,
+                                )
                             )
-                            result.append(OrgInfo(name=entry.name, type=org_type))
-                            seen.add(entry.name)
+                            seen.add(entry_key)
 
             return result
+
+    def _user_organizations_by_id(self, uid: str) -> list[OrgInfo]:
+        """Resolve a user's organizations by stable ID. Caller must hold lock.
+
+        Each membership is resolved through its ``stable_id`` (the canonical
+        identity), team ancestry is walked by ``parent_id``, and results are
+        deduplicated by stable ID. Used only when ``_use_stable_ids`` is true.
+        """
+        assert self._data is not None
+        memberships = self._data.indexes.membership.membership_index.get(uid, ())
+        result: list[OrgInfo] = []
+        seen: set[str] = set()
+
+        for m in memberships:
+            if m.type not in (MembershipType.ORG, MembershipType.TEAM):
+                continue
+
+            stable_id = m.stable_id
+            if not stable_id:
+                etype = _to_entity_type(m.type)
+                if etype is not None:
+                    stable_id = self._id_by_name_type.get(
+                        _NameTypeKey(m.name, etype), ""
+                    )
+            ref = self._entity_by_id.get(stable_id)
+            if ref is None:
+                continue
+
+            if stable_id not in seen:
+                seen.add(stable_id)
+                direct_type = (
+                    OrgInfoType.ORGANIZATION
+                    if m.type == MembershipType.ORG
+                    else OrgInfoType.TEAM
+                )
+                result.append(
+                    OrgInfo(name=ref.name, type=direct_type, stable_id=ref.stable_id)
+                )
+
+            if m.type != MembershipType.TEAM:
+                continue
+            # Walk ancestors with a per-walk visited set. Using the shared seen
+            # set as the stop condition would halt at an ancestor already
+            # recorded by an earlier (e.g. direct org) membership and drop its
+            # higher ancestors. visited also terminates cyclic parent links.
+            visited: set[str] = set()
+            parent_id = ref.parent_id
+            while parent_id and parent_id not in visited:
+                visited.add(parent_id)
+                parent = self._entity_by_id.get(parent_id)
+                if parent is None:
+                    break
+                if parent_id not in seen:
+                    seen.add(parent_id)
+                    result.append(
+                        OrgInfo(
+                            name=parent.name,
+                            type=_ancestor_org_info_type(parent.type),
+                            stable_id=parent.stable_id,
+                        )
+                    )
+                parent_id = parent.parent_id
+
+        return result
 
     async def get_all_employees(self) -> list[Employee]:
         """Get all employees."""
