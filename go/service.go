@@ -5,10 +5,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
+
+// entityRef holds the identity-keyed view of a hierarchy entity used for
+// relationship traversal. Names are not unique across types, so parent and
+// child edges are followed by stable ID rather than by name.
+type entityRef struct {
+	name     string
+	typ      EntityType
+	parentID string
+	stableID string
+}
+
+// nameTypeKey resolves a (name, type) pair to a stable ID.
+type nameTypeKey struct {
+	name string
+	typ  EntityType
+}
 
 type Service struct {
 	mu                sync.RWMutex
@@ -18,6 +35,14 @@ type Service struct {
 	watcherRunning    bool
 	watcherCancel     context.CancelFunc
 	slackChannelIndex map[string][]string
+
+	// Derived identity indexes, rebuilt on every load. Populated only when the
+	// index carries stable IDs (useStableIDs); otherwise traversal falls back
+	// to the legacy name+type behavior.
+	entityByID   map[string]entityRef
+	childrenByID map[string][]string
+	idByNameType map[nameTypeKey]string
+	useStableIDs bool
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -71,8 +96,86 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 		}
 	}
 
+	s.buildDerivedIndexes()
+
 	s.logger.Info("data loaded", "source", source.String(), "employees", s.version.EmployeeCount, "orgs", s.version.OrgCount)
 	return nil
+}
+
+// buildDerivedIndexes constructs the stable-ID relationship indexes from the
+// loaded data. Must be called with s.mu held. It enables useStableIDs only when
+// the index is a sound identity graph: every entity carries a unique stable_id,
+// every parent edge carries a parent_id, and every parent_id resolves to a
+// known entity. Any defect (or an old-format index) falls back to name+type
+// traversal rather than silently returning wrong ancestry.
+func (s *Service) buildDerivedIndexes() {
+	s.entityByID = make(map[string]entityRef)
+	s.childrenByID = make(map[string][]string)
+	s.idByNameType = make(map[nameTypeKey]string)
+	s.useStableIDs = false
+	if s.data == nil {
+		return
+	}
+
+	anyStableID := true
+	allEdgesIdentified := true
+	duplicateStableID := false
+
+	register := func(name string, typ EntityType, stableID, parentID string, hasParent bool) {
+		if stableID == "" {
+			anyStableID = false
+			return
+		}
+		if _, exists := s.entityByID[stableID]; exists {
+			duplicateStableID = true
+		}
+		s.entityByID[stableID] = entityRef{name: name, typ: typ, parentID: parentID, stableID: stableID}
+		s.idByNameType[nameTypeKey{name: name, typ: typ}] = stableID
+		if hasParent && parentID == "" {
+			allEdgesIdentified = false
+		}
+	}
+
+	for name, e := range s.data.Lookups.Teams {
+		register(name, EntityTeam, e.StableID, e.ParentID, e.Parent != nil)
+	}
+	for name, e := range s.data.Lookups.Orgs {
+		register(name, EntityOrg, e.StableID, e.ParentID, e.Parent != nil)
+	}
+	for name, e := range s.data.Lookups.Pillars {
+		register(name, EntityPillar, e.StableID, e.ParentID, e.Parent != nil)
+	}
+	for name, e := range s.data.Lookups.TeamGroups {
+		register(name, EntityTeamGroup, e.StableID, e.ParentID, e.Parent != nil)
+	}
+
+	// Every parent_id must resolve to a known entity, otherwise traversal would
+	// silently truncate ancestry or drop a descendants branch.
+	allParentsResolve := true
+	for _, ref := range s.entityByID {
+		if ref.parentID != "" {
+			if _, ok := s.entityByID[ref.parentID]; !ok {
+				allParentsResolve = false
+				break
+			}
+		}
+	}
+
+	if len(s.entityByID) == 0 || !anyStableID || !allEdgesIdentified ||
+		duplicateStableID || !allParentsResolve {
+		// Old-format or malformed index: use legacy traversal.
+		s.entityByID = make(map[string]entityRef)
+		s.childrenByID = make(map[string][]string)
+		s.idByNameType = make(map[nameTypeKey]string)
+		return
+	}
+
+	for id, ref := range s.entityByID {
+		if ref.parentID != "" {
+			s.childrenByID[ref.parentID] = append(s.childrenByID[ref.parentID], id)
+		}
+	}
+	s.useStableIDs = true
 }
 
 func (s *Service) StartDataSourceWatcher(ctx context.Context, source DataSource) error {
@@ -418,13 +521,13 @@ func (s *Service) isEmployeeInOrg(uid string, orgName string) bool {
 	}
 
 	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
-		if m.Type == string(MembershipOrg) && m.Name == orgName {
+		if MembershipType(m.Type) == MembershipOrg && m.Name == orgName {
 			return true
 		}
-		if m.Type == string(MembershipTeam) {
-			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
+		if MembershipType(m.Type) == MembershipTeam {
+			hierarchyPath := s.computeHierarchyPath(m.Name, EntityTeam.String())
 			for _, entry := range hierarchyPath {
-				if strings.ToLower(entry.Type) == "org" && entry.Name == orgName {
+				if EntityType(strings.ToLower(entry.Type)) == EntityOrg && entry.Name == orgName {
 					return true
 				}
 			}
@@ -457,47 +560,132 @@ func (s *Service) GetUserOrganizations(slackUserID string) []OrgInfo {
 		return []OrgInfo{}
 	}
 
+	if s.useStableIDs {
+		return s.userOrganizationsByID(uid)
+	}
+
 	var orgs []OrgInfo
-	seen := make(map[string]bool)
+	// Legacy mode: dedupe by (name, type). Names are not unique across types, so
+	// keying on name alone would drop a legitimately distinct entity (e.g. a
+	// team_group sharing a team's name) from the result.
+	seen := make(map[nameTypeKey]bool)
 
 	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
-		switch m.Type {
-		case string(MembershipOrg):
-			if !seen[m.Name] {
+		switch MembershipType(m.Type) {
+		case MembershipOrg:
+			key := nameTypeKey{name: m.Name, typ: EntityOrg}
+			if !seen[key] {
 				orgs = append(orgs, OrgInfo{Name: m.Name, Type: OrgTypeOrganization})
-				seen[m.Name] = true
+				seen[key] = true
 			}
-		case string(MembershipTeam):
-			if !seen[m.Name] {
+		case MembershipTeam:
+			key := nameTypeKey{name: m.Name, typ: EntityTeam}
+			if !seen[key] {
 				orgs = append(orgs, OrgInfo{Name: m.Name, Type: OrgTypeTeam})
-				seen[m.Name] = true
+				seen[key] = true
 			}
-			hierarchyPath := s.computeHierarchyPath(m.Name, "team")
+			hierarchyPath := s.computeHierarchyPath(m.Name, EntityTeam.String())
 			addHierarchyPathItems(&orgs, &seen, hierarchyPath)
 		}
 	}
 	return orgs
 }
 
-func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[string]bool, hierarchyPath []HierarchyPathEntry) {
-	typeToOrgInfoType := map[string]OrgInfoType{
-		"org":        OrgTypeOrganization,
-		"pillar":     OrgTypePillar,
-		"team_group": OrgTypeTeamGroup,
-		"team":       OrgTypeParentTeam,
+// directOrgInfoType maps a membership type to the OrgInfoType reported for a
+// direct membership (as opposed to an inherited ancestor).
+func directOrgInfoType(m MembershipType) OrgInfoType {
+	if m == MembershipOrg {
+		return OrgTypeOrganization
 	}
+	return OrgTypeTeam
+}
 
+// userOrganizationsByID resolves a user's organizations by stable ID: each
+// membership is resolved through its stable_id (the canonical identity), and
+// team ancestry is walked by parent_id. Deduping is by stable ID. Must be
+// called with s.mu held and only when s.useStableIDs is true.
+func (s *Service) userOrganizationsByID(uid string) []OrgInfo {
+	var orgs []OrgInfo
+	seen := make(map[string]bool)
+
+	for _, m := range s.data.Indexes.Membership.MembershipIndex[uid] {
+		mType := MembershipType(m.Type)
+		if mType != MembershipOrg && mType != MembershipTeam {
+			continue
+		}
+
+		id := m.StableID
+		if id == "" {
+			// Membership without a stable_id (e.g. an older index still in the
+			// stable path): resolve it by (name, type).
+			id = s.idByNameType[nameTypeKey{name: m.Name, typ: EntityType(strings.ToLower(m.Type))}]
+		}
+		ref, ok := s.entityByID[id]
+		if !ok {
+			continue
+		}
+
+		if !seen[id] {
+			seen[id] = true
+			orgs = append(orgs, OrgInfo{Name: ref.name, Type: directOrgInfoType(mType), StableID: ref.stableID})
+		}
+
+		if mType != MembershipTeam {
+			continue
+		}
+		// Walk ancestors with a per-walk visited set. Using the shared seen set
+		// as the stop condition would halt at an ancestor already recorded by an
+		// earlier (e.g. direct org) membership and drop its higher ancestors.
+		// visited also terminates cyclic parent links.
+		visited := make(map[string]bool)
+		for pid := ref.parentID; pid != "" && !visited[pid]; {
+			visited[pid] = true
+			parent, ok := s.entityByID[pid]
+			if !ok {
+				break
+			}
+			if !seen[pid] {
+				seen[pid] = true
+				orgs = append(orgs, OrgInfo{Name: parent.name, Type: ancestorOrgInfoType(parent.typ), StableID: parent.stableID})
+			}
+			pid = parent.parentID
+		}
+	}
+	return orgs
+}
+
+// ancestorOrgInfoType maps a hierarchy-ancestor entity type to the OrgInfoType
+// reported by GetUserOrganizations (a team seen as an ancestor is a parent team).
+func ancestorOrgInfoType(t EntityType) OrgInfoType {
+	switch t {
+	case EntityOrg:
+		return OrgTypeOrganization
+	case EntityPillar:
+		return OrgTypePillar
+	case EntityTeamGroup:
+		return OrgTypeTeamGroup
+	case EntityTeam:
+		return OrgTypeParentTeam
+	default:
+		return OrgTypeOrganization
+	}
+}
+
+func addHierarchyPathItems(orgs *[]OrgInfo, seen *map[nameTypeKey]bool, hierarchyPath []HierarchyPathEntry) {
 	for i, entry := range hierarchyPath {
 		if i == 0 {
 			continue
 		}
-		if !(*seen)[entry.Name] {
-			orgType, ok := typeToOrgInfoType[strings.ToLower(entry.Type)]
-			if !ok {
-				orgType = OrgTypeOrganization
-			}
-			*orgs = append(*orgs, OrgInfo{Name: entry.Name, Type: orgType})
-			(*seen)[entry.Name] = true
+		entryType := EntityType(strings.ToLower(entry.Type))
+		// entry.Type is a free-form string; skip unknown/empty types rather than
+		// mislabeling them (keeps parity with the Python implementation).
+		if !entryType.IsValid() {
+			continue
+		}
+		key := nameTypeKey{name: entry.Name, typ: entryType}
+		if !(*seen)[key] {
+			*orgs = append(*orgs, OrgInfo{Name: entry.Name, Type: ancestorOrgInfoType(entryType), StableID: entry.StableID})
+			(*seen)[key] = true
 		}
 	}
 }
@@ -565,6 +753,10 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 		return []HierarchyPathEntry{}
 	}
 
+	if s.useStableIDs {
+		return s.computeHierarchyPathByID(entityName, entityType)
+	}
+
 	// Check entity exists - either infer type or validate provided type
 	if entityType == "" {
 		entityType = s.getEntityType(entityName)
@@ -605,6 +797,43 @@ func (s *Service) computeHierarchyPath(entityName, entityType string) []Hierarch
 	}
 
 	return path
+}
+
+// computeHierarchyPathByID walks the parent chain by stable ID. Must be called
+// with s.mu held and only when s.useStableIDs is true. Because relationships
+// are keyed by identity, an explicitly requested type resolves the correct
+// entity even when its name is shared across types.
+func (s *Service) computeHierarchyPathByID(entityName, entityType string) []HierarchyPathEntry {
+	startID := s.resolveStartID(entityName, entityType)
+	if startID == "" {
+		return []HierarchyPathEntry{}
+	}
+
+	path := []HierarchyPathEntry{}
+	visited := map[string]bool{}
+	for id := startID; id != "" && !visited[id]; {
+		visited[id] = true
+		ref, ok := s.entityByID[id]
+		if !ok {
+			break
+		}
+		path = append(path, HierarchyPathEntry{Name: ref.name, Type: ref.typ.String(), StableID: ref.stableID})
+		id = ref.parentID
+	}
+	return path
+}
+
+// resolveStartID maps a (name, type) pair to a stable ID. When entityType is
+// empty the type is inferred by name (first match, as with the legacy path).
+// Must be called with s.mu held.
+func (s *Service) resolveStartID(entityName, entityType string) string {
+	if entityType == "" {
+		entityType = s.getEntityType(entityName)
+		if entityType == "" {
+			return ""
+		}
+	}
+	return s.idByNameType[nameTypeKey{name: entityName, typ: EntityType(strings.ToLower(entityType))}]
 }
 
 func (s *Service) GetAllEmployeeUIDs() []string {
@@ -694,6 +923,10 @@ func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
 		return nil
 	}
 
+	if s.useStableIDs {
+		return s.getDescendantsTreeByID(entityName)
+	}
+
 	entityType := s.getEntityType(entityName)
 	if entityType == "" {
 		return nil
@@ -741,6 +974,50 @@ func (s *Service) GetDescendantsTree(entityName string) *HierarchyNode {
 	}
 
 	node := buildNode(entityName, entityType, make(map[string]bool))
+	return &node
+}
+
+// getDescendantsTreeByID builds the descendants tree using stable-ID edges.
+// Must be called with s.mu held and only when s.useStableIDs is true. Keying
+// children and cycle detection by stable ID keeps the subtrees of same-named
+// parents distinct. The root type is still inferred by name (the public API
+// accepts only a name), but the tree below it is collision-safe.
+func (s *Service) getDescendantsTreeByID(entityName string) *HierarchyNode {
+	entityType := s.getEntityType(entityName)
+	if entityType == "" {
+		return nil
+	}
+	startID := s.idByNameType[nameTypeKey{name: entityName, typ: EntityType(entityType)}]
+	if startID == "" {
+		return nil
+	}
+
+	var buildNode func(id string, visited map[string]bool) HierarchyNode
+	buildNode = func(id string, visited map[string]bool) HierarchyNode {
+		ref := s.entityByID[id]
+		if visited[id] {
+			return HierarchyNode{Name: ref.name, Type: ref.typ.String(), StableID: ref.stableID, Children: []HierarchyNode{}}
+		}
+		visited[id] = true
+
+		childIDs := append([]string(nil), s.childrenByID[id]...)
+		// Deterministic ordering (map iteration is random).
+		sort.Slice(childIDs, func(i, j int) bool {
+			a, b := s.entityByID[childIDs[i]], s.entityByID[childIDs[j]]
+			if a.name != b.name {
+				return a.name < b.name
+			}
+			return a.typ < b.typ
+		})
+
+		childNodes := make([]HierarchyNode, 0, len(childIDs))
+		for _, cid := range childIDs {
+			childNodes = append(childNodes, buildNode(cid, visited))
+		}
+		return HierarchyNode{Name: ref.name, Type: ref.typ.String(), StableID: ref.stableID, Children: childNodes}
+	}
+
+	node := buildNode(startID, make(map[string]bool))
 	return &node
 }
 

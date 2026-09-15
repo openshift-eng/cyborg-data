@@ -23,6 +23,16 @@ class MembershipType(StrEnum):
     ORG = "org"
 
 
+class EntityType(StrEnum):
+    """Hierarchy entity types (matches the Go EntityType enum)."""
+
+    EMPLOYEE = "employee"
+    TEAM = "team"
+    ORG = "org"
+    PILLAR = "pillar"
+    TEAM_GROUP = "team_group"
+
+
 class OrgInfoType(StrEnum):
     """Organization info types returned by get_user_organizations."""
 
@@ -260,6 +270,8 @@ class Team(BaseModel):
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
+    parent_id: str = ""
+    stable_id: str = ""
     group: Group = Field(default_factory=Group)
 
 
@@ -274,6 +286,8 @@ class Org(BaseModel):
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
+    parent_id: str = ""
+    stable_id: str = ""
     group: Group = Field(default_factory=Group)
 
 
@@ -288,6 +302,8 @@ class Pillar(BaseModel):
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
+    parent_id: str = ""
+    stable_id: str = ""
     group: Group = Field(default_factory=Group)
 
 
@@ -302,6 +318,8 @@ class TeamGroup(BaseModel):
     description: str = ""
     type: str = ""
     parent: ParentInfo | None = None
+    parent_id: str = ""
+    stable_id: str = ""
     group: Group = Field(default_factory=Group)
 
 
@@ -377,6 +395,7 @@ class MembershipInfo(BaseModel):
 
     name: str = ""
     type: str = ""
+    stable_id: str = ""
 
 
 class HierarchyPathEntry(BaseModel):
@@ -386,6 +405,7 @@ class HierarchyPathEntry(BaseModel):
 
     name: str = ""
     type: str = ""
+    stable_id: str = ""
 
 
 class MembershipIndex(BaseModel):
@@ -421,6 +441,7 @@ class HierarchyNode(BaseModel):
 
     name: str = ""
     type: str = ""
+    stable_id: str = ""
     children: tuple["HierarchyNode", ...] = ()
 
 
@@ -510,6 +531,7 @@ class OrgInfo(BaseModel):
 
     name: str = ""
     type: str = ""
+    stable_id: str = ""
 
 
 class DataVersion(BaseModel):

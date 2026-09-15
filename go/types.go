@@ -128,11 +128,13 @@ type ParentInfo struct {
 // Team represents a team in the organizational data
 type Team struct {
 	UID         string      `json:"uid"`
+	StableID    string      `json:"stable_id,omitempty"`
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentID    string      `json:"parent_id,omitempty"`
 	Group       Group       `json:"group"`
 }
 
@@ -189,33 +191,39 @@ type Lookups struct {
 // Org represents an organization in the organizational data
 type Org struct {
 	UID         string      `json:"uid"`
+	StableID    string      `json:"stable_id,omitempty"`
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentID    string      `json:"parent_id,omitempty"`
 	Group       Group       `json:"group"`
 }
 
 // Pillar represents a pillar in the organizational hierarchy
 type Pillar struct {
 	UID         string      `json:"uid"`
+	StableID    string      `json:"stable_id,omitempty"`
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentID    string      `json:"parent_id,omitempty"`
 	Group       Group       `json:"group"`
 }
 
 // TeamGroup represents a team group in the organizational hierarchy
 type TeamGroup struct {
 	UID         string      `json:"uid"`
+	StableID    string      `json:"stable_id,omitempty"`
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentID    string      `json:"parent_id,omitempty"`
 	Group       Group       `json:"group"`
 }
 
@@ -324,20 +332,23 @@ type MembershipIndex struct {
 
 // MembershipInfo represents a membership entry with name and type
 type MembershipInfo struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	StableID string `json:"stable_id,omitempty"`
 }
 
 // HierarchyPathEntry represents a single entry in a hierarchy path
 type HierarchyPathEntry struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	StableID string `json:"stable_id,omitempty"`
 }
 
 // HierarchyNode represents a node in the descendants tree with nested children
 type HierarchyNode struct {
 	Name     string          `json:"name"`
 	Type     string          `json:"type"`
+	StableID string          `json:"stable_id,omitempty"`
 	Children []HierarchyNode `json:"children"`
 }
 
