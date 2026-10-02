@@ -104,7 +104,10 @@ func (a *AnonymizingDataSource) ListVersions(ctx context.Context) ([]DataVersion
 	return hist.ListVersions(ctx)
 }
 
-// LoadVersion loads a historical version from the inner source and anonymizes it.
+// LoadVersion loads a historical version from the inner source and anonymizes it
+// using a *separate* nonce state, so time-traveling does not disturb the live
+// nonce tables that Resolve/AnonymizeUID and the live data depend on. (Each
+// historical snapshot is therefore anonymized independently.)
 func (a *AnonymizingDataSource) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
 	hist, ok := a.source.(HistoricalDataSource)
 	if !ok {
@@ -114,7 +117,9 @@ func (a *AnonymizingDataSource) LoadVersion(ctx context.Context, ref DataVersion
 	if err != nil {
 		return nil, err
 	}
-	return a.transform(reader)
+	// A throwaway anonymizer carries its own nonce tables; the live receiver's
+	// state is left untouched.
+	return NewAnonymizingDataSource(a.source, a.piiMode).transform(reader)
 }
 
 func (a *AnonymizingDataSource) Watch(ctx context.Context, callback func() error) error {

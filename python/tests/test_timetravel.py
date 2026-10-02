@@ -1,10 +1,11 @@
 """Tests for the time-travel (as_of) API."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from orgdatacore import (
+    AnonymizingDataSource,
     AsyncService,
     RedactingDataSource,
     Service,
@@ -117,6 +118,60 @@ class TestAsOf:
         first = svc.as_of(history, t0)
         second = svc.as_of(history, t0)
         assert first is not second
+
+
+class TestReviewFixes:
+    """Regression tests for the issues CodeRabbit flagged."""
+
+    def test_timezone_aware_time_does_not_raise(
+        self, history: FakeGCSDataSource, t0: datetime
+    ) -> None:
+        # Fixture created times are naive; a tz-aware request must not TypeError.
+        svc = Service()
+        aware = t0.replace(tzinfo=UTC) + timedelta(hours=12)
+        view = svc.as_of(history, aware)
+        assert view.get_data_version() == "v1"
+
+    def test_cache_key_isolates_wrapped_sources(
+        self, history: FakeGCSDataSource, t0: datetime
+    ) -> None:
+        # A redacting wrapper must not be served the cached unredacted snapshot
+        # just because it shares a version id with the raw source (PII leak).
+        svc = Service()
+        raw_view = svc.as_of(history, t0)
+        assert raw_view.get_employee_by_uid("emp1").full_name == "User"
+
+        redacting = RedactingDataSource(history, PIIMode.REDACTED)
+        red_view = svc.as_of(redacting, t0)
+        assert red_view.get_employee_by_uid("emp1").full_name == "[REDACTED]"
+
+    def test_version_listing_is_cached(
+        self, history: FakeGCSDataSource, t0: datetime
+    ) -> None:
+        calls = {"n": 0}
+        original = history.list_versions
+
+        def counting():  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            return original()
+
+        history.list_versions = counting  # type: ignore[method-assign]
+        svc = Service()
+        svc.as_of(history, t0 + timedelta(hours=12))
+        svc.as_of(history, t0 + timedelta(hours=36))
+        assert calls["n"] == 1
+
+    def test_anonymize_load_version_preserves_live_state(
+        self, history: FakeGCSDataSource, t0: datetime
+    ) -> None:
+        anon = AnonymizingDataSource(history, PIIMode.ANONYMIZED)
+        svc = Service()
+        svc.load_from_data_source(anon)  # live load builds nonce tables
+        before = anon.uid_to_nonce_map
+        assert before
+
+        svc.as_of(anon, t0)  # historical load through the same wrapper
+        assert anon.uid_to_nonce_map == before
 
 
 class TestListVersions:

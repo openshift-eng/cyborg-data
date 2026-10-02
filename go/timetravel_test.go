@@ -6,12 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
 	testingsupport "github.com/openshift-eng/cyborg-data/go/internal/testing"
 )
+
+// countingHistorical counts ListVersions calls, to verify the version-list cache.
+type countingHistorical struct {
+	historicalFake
+	listCalls *int
+}
+
+func (c countingHistorical) ListVersions(ctx context.Context) ([]DataVersionRef, error) {
+	*c.listCalls++
+	return c.historicalFake.ListVersions(ctx)
+}
 
 // historicalFake adapts the internal fake GCS source into a HistoricalDataSource.
 // It lives here (package orgdatacore) because DataVersionRef cannot be referenced
@@ -201,6 +213,77 @@ func TestAsOfThroughRedactingSource(t *testing.T) {
 	}
 	if emp.FullName != "[REDACTED]" {
 		t.Errorf("expected redacted full name, got %q", emp.FullName)
+	}
+}
+
+func TestAsOfCacheKeyIsolatesWrappedSources(t *testing.T) {
+	// A snapshot resolved through a raw source must never be served to a
+	// redacting wrapper over the same source (shared generation ID) -- that
+	// would leak PII.
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	raw := newHistoryFixture(t0)
+	svc := NewService()
+	ctx := context.Background()
+
+	rawView, err := svc.AsOf(ctx, raw, t0)
+	if err != nil {
+		t.Fatalf("raw AsOf error: %v", err)
+	}
+	if got := rawView.GetEmployeeByUID("emp1").FullName; got != "User" {
+		t.Fatalf("raw view full name = %q, want %q", got, "User")
+	}
+
+	redacting := NewRedactingDataSource(raw, PIIModeRedacted)
+	redView, err := svc.AsOf(ctx, redacting, t0)
+	if err != nil {
+		t.Fatalf("redacting AsOf error: %v", err)
+	}
+	if got := redView.GetEmployeeByUID("emp1").FullName; got != "[REDACTED]" {
+		t.Errorf("PII leak: redacting view full name = %q, want %q (cache served the raw snapshot?)", got, "[REDACTED]")
+	}
+}
+
+func TestAsOfCachesVersionListing(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	calls := 0
+	src := countingHistorical{historicalFake: newHistoryFixture(t0), listCalls: &calls}
+	svc := NewService()
+	ctx := context.Background()
+
+	if _, err := svc.AsOf(ctx, src, t0.Add(12*time.Hour)); err != nil {
+		t.Fatalf("AsOf error: %v", err)
+	}
+	if _, err := svc.AsOf(ctx, src, t0.Add(36*time.Hour)); err != nil {
+		t.Fatalf("AsOf error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected version listing to be fetched once (cached), got %d calls", calls)
+	}
+}
+
+func TestAnonymizeLoadVersionPreservesLiveState(t *testing.T) {
+	// Time-traveling through an anonymizing wrapper must not disturb the live
+	// nonce tables that the live data depends on.
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	base := newHistoryFixture(t0)
+	anon := NewAnonymizingDataSource(base, PIIModeAnonymized)
+	svc := NewService()
+	ctx := context.Background()
+
+	if err := svc.LoadFromDataSource(ctx, anon); err != nil {
+		t.Fatalf("live load error: %v", err)
+	}
+	before := anon.UIDToNonceMap()
+	if len(before) == 0 {
+		t.Fatal("expected a live nonce map after load")
+	}
+
+	if _, err := svc.AsOf(ctx, anon, t0); err != nil {
+		t.Fatalf("historical AsOf error: %v", err)
+	}
+	after := anon.UIDToNonceMap()
+	if !reflect.DeepEqual(before, after) {
+		t.Errorf("historical load disturbed live nonce tables:\n before=%v\n after =%v", before, after)
 	}
 }
 

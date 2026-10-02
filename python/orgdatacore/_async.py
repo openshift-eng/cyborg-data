@@ -19,6 +19,7 @@ Example:
 import asyncio
 import inspect
 import json
+import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -34,6 +35,7 @@ from ._exceptions import (
 from ._log import get_logger
 from ._service import (
     DEFAULT_HISTORY_CACHE_SIZE,
+    DEFAULT_VERSIONS_CACHE_TTL,
     _ancestor_org_info_type,
     _EntityRef,
     _NameTypeKey,
@@ -95,6 +97,7 @@ class AsyncService:
         *,
         data_source: Any | None = None,
         history_cache_size: int = DEFAULT_HISTORY_CACHE_SIZE,
+        versions_cache_ttl: float = DEFAULT_VERSIONS_CACHE_TTL,
     ) -> None:
         """Initialize a new async organizational data service.
 
@@ -102,6 +105,8 @@ class AsyncService:
             data_source: Optional async data source to load from immediately.
             history_cache_size: Number of historical snapshots as_of keeps cached
                 in memory (LRU). A size <= 0 disables caching.
+            versions_cache_ttl: Seconds as_of/list_versions reuse a cached version
+                listing before re-querying the source. <= 0 disables it.
         """
         self._lock = asyncio.Lock()
         self._data: Data | None = None
@@ -112,9 +117,14 @@ class AsyncService:
         self._watcher_source: Any | None = None
         self._slack_channel_index: dict[str, list[str]] = {}
 
-        # Historical snapshot cache for as_of, keyed by version id (LRU).
+        # Historical snapshot cache for as_of, keyed by "source@version_id" (LRU),
+        # so snapshots from a raw source and a wrapper over it never collide.
         self._history_cache: OrderedDict[str, AsyncService] = OrderedDict()
         self._history_cache_size = history_cache_size
+
+        # Short-TTL cache of version listings, keyed by source string.
+        self._versions_cache: dict[str, tuple[float, list[DataVersionRef]]] = {}
+        self._versions_ttl = versions_cache_ttl
 
         # Derived identity indexes, rebuilt on every load. Populated only when
         # the index carries stable IDs (_use_stable_ids); otherwise traversal
@@ -235,8 +245,7 @@ class AsyncService:
             raise TimeTravelNotSupportedError(
                 f"data source does not support time travel: {source}"
             )
-        refs = await self._call_list_versions(source)
-        return sorted(refs, key=lambda r: r.created)
+        return list(await self._list_versions_cached(source))
 
     async def as_of(self, source: Any, t: datetime) -> "AsyncService":
         """Return a read-only AsyncService bound to the version live at time ``t``.
@@ -254,10 +263,13 @@ class AsyncService:
                 f"data source does not support time travel: {source}"
             )
 
-        refs = await self._call_list_versions(source)
+        refs = await self._list_versions_cached(source)
         ref = _resolve_version(refs, t)
 
-        cached = self._get_cached_view(ref.id)
+        # Key the snapshot cache by source *and* version so a snapshot resolved
+        # through, e.g., a redacting wrapper is never served to a raw source.
+        cache_key = f"{source}@{ref.id}"
+        cached = self._get_cached_view(cache_key)
         if cached is not None:
             return cached
 
@@ -267,9 +279,24 @@ class AsyncService:
             reader = await asyncio.to_thread(source.load_version, ref)
 
         view = AsyncService()
-        await view._apply_reader(reader, f"{source}@{ref.id}")
-        self._put_cached_view(ref.id, view)
+        await view._apply_reader(reader, cache_key)
+        self._put_cached_view(cache_key, view)
         return view
+
+    async def _list_versions_cached(self, source: Any) -> list[DataVersionRef]:
+        """Return the sorted version listing for source, reusing a cached listing
+        within versions_cache_ttl. Returned list is the cached one (read-only).
+        """
+        key = str(source)
+        if self._versions_ttl > 0:
+            entry = self._versions_cache.get(key)
+            if entry is not None and (time.monotonic() - entry[0]) < self._versions_ttl:
+                return entry[1]
+        refs = await self._call_list_versions(source)
+        refs = sorted(refs, key=lambda r: r.created)
+        if self._versions_ttl > 0:
+            self._versions_cache[key] = (time.monotonic(), refs)
+        return refs
 
     async def _call_list_versions(self, source: Any) -> list[DataVersionRef]:
         try:
@@ -283,19 +310,19 @@ class AsyncService:
             raise DataLoadError(f"failed to list versions from {source}: {e}") from e
         return refs
 
-    def _get_cached_view(self, version_id: str) -> "AsyncService | None":
+    def _get_cached_view(self, key: str) -> "AsyncService | None":
         if self._history_cache_size <= 0:
             return None
-        view = self._history_cache.get(version_id)
+        view = self._history_cache.get(key)
         if view is not None:
-            self._history_cache.move_to_end(version_id)
+            self._history_cache.move_to_end(key)
         return view
 
-    def _put_cached_view(self, version_id: str, view: "AsyncService") -> None:
+    def _put_cached_view(self, key: str, view: "AsyncService") -> None:
         if self._history_cache_size <= 0:
             return
-        self._history_cache[version_id] = view
-        self._history_cache.move_to_end(version_id)
+        self._history_cache[key] = view
+        self._history_cache.move_to_end(key)
         while len(self._history_cache) > self._history_cache_size:
             self._history_cache.popitem(last=False)
 

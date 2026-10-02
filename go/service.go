@@ -45,11 +45,26 @@ type Service struct {
 	idByNameType map[nameTypeKey]string
 	useStableIDs bool
 
-	// Historical snapshot cache for AsOf, keyed by version ID (LRU).
+	// Historical snapshot cache for AsOf, keyed by "source@versionID" (LRU).
+	// The source is part of the key so snapshots from a raw source and from a
+	// wrapper (e.g. redacting) over it never collide.
 	historyMu        sync.Mutex
 	historyCache     map[string]*Service
 	historyOrder     []string
 	historyCacheSize int
+
+	// Short-TTL cache of version listings, keyed by source string, so repeated
+	// AsOf/ListVersions calls don't re-list the source every time.
+	versionsMu    sync.Mutex
+	versionsCache map[string]versionsCacheEntry
+	versionsTTL   time.Duration
+}
+
+// versionsCacheEntry holds a sorted (oldest-first) version listing with the time
+// it was fetched, for TTL expiry.
+type versionsCacheEntry struct {
+	refs      []DataVersionRef
+	fetchedAt time.Time
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -57,7 +72,11 @@ func NewService(opts ...ServiceOption) *Service {
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	return &Service{logger: cfg.logger, historyCacheSize: cfg.historyCacheSize}
+	return &Service{
+		logger:           cfg.logger,
+		historyCacheSize: cfg.historyCacheSize,
+		versionsTTL:      cfg.versionsCacheTTL,
+	}
 }
 
 func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) error {

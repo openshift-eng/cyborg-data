@@ -2,8 +2,9 @@
 
 import json
 import threading
+import time
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, BinaryIO, NamedTuple, cast
 
 from ._exceptions import (
@@ -202,20 +203,35 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
     )
 
 
+def _as_utc(d: datetime) -> datetime:
+    """Normalize a datetime to UTC, treating naive datetimes as UTC.
+
+    GCS version timestamps are timezone-aware (UTC) while callers often pass a
+    naive ``datetime.now()``; comparing the two directly raises TypeError.
+    """
+    return d.replace(tzinfo=UTC) if d.tzinfo is None else d.astimezone(UTC)
+
+
 def _resolve_version(refs: list[DataVersionRef], t: datetime) -> DataVersionRef:
     """Return the newest ref whose created time is at or before ``t``.
 
-    Raises VersionNotAvailableError if refs is empty or ``t`` predates every ref.
+    Requested and version times are normalized to UTC before comparison, so naive
+    and timezone-aware datetimes can be mixed. Raises VersionNotAvailableError if
+    refs is empty or ``t`` predates every ref.
     """
+    t = _as_utc(t)
     best: DataVersionRef | None = None
+    best_created: datetime | None = None
     earliest: datetime | None = None
     for r in refs:
-        if earliest is None or r.created < earliest:
-            earliest = r.created
-        if r.created > t:
+        created = _as_utc(r.created)
+        if earliest is None or created < earliest:
+            earliest = created
+        if created > t:
             continue
-        if best is None or r.created > best.created:
+        if best_created is None or created > best_created:
             best = r
+            best_created = created
     if best is None:
         if earliest is None:
             raise VersionNotAvailableError("no versions retained")
@@ -254,6 +270,11 @@ def _validate_data(data: Data, source: object) -> None:
 # snapshot is a full org dataset, so this is deliberately small.
 DEFAULT_HISTORY_CACHE_SIZE = 4
 
+# Seconds that as_of/list_versions reuse a cached version listing before
+# re-querying the source. Keeps repeated historical queries from re-listing the
+# source on every call.
+DEFAULT_VERSIONS_CACHE_TTL = 60.0
+
 
 class Service:
     """
@@ -277,6 +298,7 @@ class Service:
         *,
         data_source: DataSource | None = None,
         history_cache_size: int = DEFAULT_HISTORY_CACHE_SIZE,
+        versions_cache_ttl: float = DEFAULT_VERSIONS_CACHE_TTL,
     ) -> None:
         """
         Create a new organizational data service.
@@ -288,6 +310,8 @@ class Service:
             history_cache_size: Number of historical snapshots as_of keeps cached
                         in memory (LRU). A size <= 0 disables caching (every
                         as_of re-downloads). Must be passed as keyword argument.
+            versions_cache_ttl: Seconds as_of/list_versions reuse a cached version
+                        listing before re-querying the source. <= 0 disables it.
         """
         self._lock = threading.RLock()
         self._data: Data | None = None
@@ -296,10 +320,17 @@ class Service:
         self._stop_event = threading.Event()
         self._slack_channel_index: dict[str, list[str]] = {}
 
-        # Historical snapshot cache for as_of, keyed by version id (LRU).
+        # Historical snapshot cache for as_of, keyed by "source@version_id" (LRU).
+        # The source is part of the key so snapshots from a raw source and from a
+        # wrapper (e.g. redacting) over it never collide.
         self._history_lock = threading.Lock()
         self._history_cache: OrderedDict[str, Service] = OrderedDict()
         self._history_cache_size = history_cache_size
+
+        # Short-TTL cache of version listings, keyed by source string.
+        self._versions_lock = threading.Lock()
+        self._versions_cache: dict[str, tuple[float, list[DataVersionRef]]] = {}
+        self._versions_ttl = versions_cache_ttl
 
         # Derived identity indexes, rebuilt on every load. Populated only when
         # the index carries stable IDs (_use_stable_ids); otherwise traversal
@@ -606,13 +637,31 @@ class Service:
             raise TimeTravelNotSupportedError(
                 f"data source does not support time travel: {source}"
             )
+        # Return a copy so callers can't mutate the cached listing.
+        return list(self._list_versions_cached(source))
+
+    def _list_versions_cached(self, source: DataSource) -> list[DataVersionRef]:
+        """Return the sorted version listing for source, reusing a cached listing
+        within versions_cache_ttl. The returned list is the cached one; callers
+        must treat it as read-only.
+        """
+        key = str(source)
+        if self._versions_ttl > 0:
+            with self._versions_lock:
+                entry = self._versions_cache.get(key)
+                if entry is not None and (time.monotonic() - entry[0]) < self._versions_ttl:
+                    return entry[1]
         try:
-            refs = source.list_versions()
+            refs = source.list_versions()  # type: ignore[attr-defined]
         except TimeTravelNotSupportedError:
             raise
         except Exception as e:
             raise DataLoadError(f"failed to list versions from {source}: {e}") from e
-        return sorted(refs, key=lambda r: r.created)
+        refs = sorted(refs, key=lambda r: r.created)
+        if self._versions_ttl > 0:
+            with self._versions_lock:
+                self._versions_cache[key] = (time.monotonic(), refs)
+        return refs
 
     def as_of(self, source: DataSource, t: datetime) -> "Service":
         """Return a read-only Service bound to the index version live at time ``t``.
@@ -640,16 +689,14 @@ class Service:
                 f"data source does not support time travel: {source}"
             )
 
-        try:
-            refs = source.list_versions()
-        except TimeTravelNotSupportedError:
-            raise
-        except Exception as e:
-            raise DataLoadError(f"failed to list versions from {source}: {e}") from e
-
+        refs = self._list_versions_cached(source)
         ref = _resolve_version(refs, t)
 
-        cached = self._get_cached_view(ref.id)
+        # Key the snapshot cache by source *and* version so a snapshot resolved
+        # through, e.g., a redacting wrapper is never served to a raw source (or
+        # vice versa) just because they share a version id.
+        cache_key = f"{source}@{ref.id}"
+        cached = self._get_cached_view(cache_key)
         if cached is not None:
             return cached
 
@@ -661,25 +708,25 @@ class Service:
             ) from e
 
         view = Service()
-        view._load_reader(reader, f"{source}@{ref.id}")
-        self._put_cached_view(ref.id, view)
+        view._load_reader(reader, cache_key)
+        self._put_cached_view(cache_key, view)
         return view
 
-    def _get_cached_view(self, version_id: str) -> "Service | None":
+    def _get_cached_view(self, key: str) -> "Service | None":
         if self._history_cache_size <= 0:
             return None
         with self._history_lock:
-            view = self._history_cache.get(version_id)
+            view = self._history_cache.get(key)
             if view is not None:
-                self._history_cache.move_to_end(version_id)
+                self._history_cache.move_to_end(key)
             return view
 
-    def _put_cached_view(self, version_id: str, view: "Service") -> None:
+    def _put_cached_view(self, key: str, view: "Service") -> None:
         if self._history_cache_size <= 0:
             return
         with self._history_lock:
-            self._history_cache[version_id] = view
-            self._history_cache.move_to_end(version_id)
+            self._history_cache[key] = view
+            self._history_cache.move_to_end(key)
             while len(self._history_cache) > self._history_cache_size:
                 self._history_cache.popitem(last=False)
 

@@ -152,12 +152,12 @@ The main class providing access to organizational data.
 exposing the full query API:
 
 ```python
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 service = Service()
 
-# A day ago:
-past = service.as_of(source, datetime.now() - timedelta(days=1))
+# A day ago (use a timezone-aware time; GCS version timestamps are UTC):
+past = service.as_of(source, datetime.now(UTC) - timedelta(days=1))
 emp = past.get_employee_by_uid("jdoe")   # state as it was 24h ago
 print(past.get_data_version())           # which version was resolved
 

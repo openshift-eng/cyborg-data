@@ -9,16 +9,51 @@ import (
 // ListVersions returns all retained versions of the index exposed by source,
 // sorted oldest-first by creation time. The source must implement
 // HistoricalDataSource; otherwise ErrTimeTravelNotSupported is returned.
+//
+// Results are cached per source for a short TTL (see WithVersionsCacheTTL).
 func (s *Service) ListVersions(ctx context.Context, source DataSource) ([]DataVersionRef, error) {
 	hist, ok := source.(HistoricalDataSource)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, source.String())
 	}
-	refs, err := hist.ListVersions(ctx)
+	refs, err := s.listVersionsCached(ctx, hist, source.String())
 	if err != nil {
 		return nil, NewLoadError(source.String(), err)
 	}
+	// Return a copy so callers can't mutate the cached slice.
+	out := make([]DataVersionRef, len(refs))
+	copy(out, refs)
+	return out, nil
+}
+
+// listVersionsCached returns the sorted version listing for key, reusing a
+// cached listing within versionsTTL. The returned slice is the cached one and
+// must be treated as read-only by callers.
+func (s *Service) listVersionsCached(ctx context.Context, hist HistoricalDataSource, key string) ([]DataVersionRef, error) {
+	if s.versionsTTL > 0 {
+		s.versionsMu.Lock()
+		entry, ok := s.versionsCache[key]
+		if ok && time.Since(entry.fetchedAt) < s.versionsTTL {
+			s.versionsMu.Unlock()
+			return entry.refs, nil
+		}
+		s.versionsMu.Unlock()
+	}
+
+	refs, err := hist.ListVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	sortVersionsByCreated(refs)
+
+	if s.versionsTTL > 0 {
+		s.versionsMu.Lock()
+		if s.versionsCache == nil {
+			s.versionsCache = make(map[string]versionsCacheEntry)
+		}
+		s.versionsCache[key] = versionsCacheEntry{refs: refs, fetchedAt: time.Now()}
+		s.versionsMu.Unlock()
+	}
 	return refs, nil
 }
 
@@ -40,7 +75,7 @@ func (s *Service) AsOf(ctx context.Context, source DataSource, t time.Time) (Ser
 		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, source.String())
 	}
 
-	refs, err := hist.ListVersions(ctx)
+	refs, err := s.listVersionsCached(ctx, hist, source.String())
 	if err != nil {
 		return nil, NewLoadError(source.String(), err)
 	}
@@ -50,7 +85,11 @@ func (s *Service) AsOf(ctx context.Context, source DataSource, t time.Time) (Ser
 		return nil, err
 	}
 
-	if cached := s.getCachedView(ref.ID); cached != nil {
+	// Key the snapshot cache by source *and* version so a snapshot resolved
+	// through, e.g., a redacting wrapper is never served to a raw source (or
+	// vice versa) just because they share a generation ID.
+	cacheKey := source.String() + "@" + ref.ID
+	if cached := s.getCachedView(cacheKey); cached != nil {
 		return cached, nil
 	}
 
@@ -65,12 +104,11 @@ func (s *Service) AsOf(ctx context.Context, source DataSource, t time.Time) (Ser
 	}()
 
 	view := NewService(WithLogger(s.logger))
-	sourceName := fmt.Sprintf("%s@%s", source.String(), ref.ID)
-	if err := view.loadFromReader(reader, sourceName); err != nil {
+	if err := view.loadFromReader(reader, cacheKey); err != nil {
 		return nil, err
 	}
 
-	s.putCachedView(ref.ID, view)
+	s.putCachedView(cacheKey, view)
 	return view, nil
 }
 
@@ -113,21 +151,21 @@ func sortVersionsByCreated(refs []DataVersionRef) {
 	}
 }
 
-func (s *Service) getCachedView(id string) *Service {
+func (s *Service) getCachedView(key string) *Service {
 	if s.historyCacheSize <= 0 {
 		return nil
 	}
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
-	view, ok := s.historyCache[id]
+	view, ok := s.historyCache[key]
 	if !ok {
 		return nil
 	}
-	s.touchHistoryLocked(id)
+	s.touchHistoryLocked(key)
 	return view
 }
 
-func (s *Service) putCachedView(id string, view *Service) {
+func (s *Service) putCachedView(key string, view *Service) {
 	if s.historyCacheSize <= 0 {
 		return
 	}
@@ -136,11 +174,11 @@ func (s *Service) putCachedView(id string, view *Service) {
 	if s.historyCache == nil {
 		s.historyCache = make(map[string]*Service)
 	}
-	if _, exists := s.historyCache[id]; !exists {
-		s.historyOrder = append(s.historyOrder, id)
+	if _, exists := s.historyCache[key]; !exists {
+		s.historyOrder = append(s.historyOrder, key)
 	}
-	s.historyCache[id] = view
-	s.touchHistoryLocked(id)
+	s.historyCache[key] = view
+	s.touchHistoryLocked(key)
 
 	// Evict oldest entries beyond the configured size.
 	for len(s.historyOrder) > s.historyCacheSize {
@@ -150,13 +188,13 @@ func (s *Service) putCachedView(id string, view *Service) {
 	}
 }
 
-// touchHistoryLocked moves id to the most-recently-used end of historyOrder.
+// touchHistoryLocked moves key to the most-recently-used end of historyOrder.
 // Must be called with historyMu held.
-func (s *Service) touchHistoryLocked(id string) {
+func (s *Service) touchHistoryLocked(key string) {
 	for i, existing := range s.historyOrder {
-		if existing == id {
+		if existing == key {
 			s.historyOrder = append(s.historyOrder[:i], s.historyOrder[i+1:]...)
-			s.historyOrder = append(s.historyOrder, id)
+			s.historyOrder = append(s.historyOrder, key)
 			return
 		}
 	}
