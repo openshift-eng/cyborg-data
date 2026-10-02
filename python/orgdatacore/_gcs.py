@@ -38,12 +38,13 @@ Example custom implementation:
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any, BinaryIO, TypeVar
 
 from ._exceptions import ConfigurationError, GCSError
 from ._log import get_logger
-from ._types import GCSConfig
+from ._types import DataVersionRef, GCSConfig
 
 _T = TypeVar("_T")
 
@@ -225,6 +226,79 @@ class GCSDataSource:
             initial_delay=self.retry_delay,
             backoff=self.retry_backoff,
             operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
+        )
+
+    def list_versions(self) -> list[DataVersionRef]:
+        """List every retained generation of the configured object.
+
+        This relies on the bucket retaining noncurrent versions (object
+        versioning); if it does not, only the live generation is returned. The
+        GCS generation number is the object's creation time in microseconds since
+        the Unix epoch, which is used as the version's created time.
+
+        Returns:
+            Version refs for all retained generations (unsorted).
+
+        Raises:
+            GCSError: If listing fails after all retries.
+        """
+
+        def _list() -> list[DataVersionRef]:
+            client = self._get_client()
+            blobs = client.list_blobs(
+                self.config.bucket,
+                prefix=self.config.object_path,
+                versions=True,
+            )
+            refs: list[DataVersionRef] = []
+            for blob in blobs:
+                # Prefix matching can return siblings; keep only the exact object.
+                if blob.name != self.config.object_path:
+                    continue
+                created = datetime.fromtimestamp(
+                    blob.generation / 1_000_000, tz=UTC
+                )
+                refs.append(DataVersionRef(id=str(blob.generation), created=created))
+            return refs
+
+        return _retry_with_backoff(
+            _list,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS list versions gs://{self.config.bucket}/{self.config.object_path}",
+        )
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a specific generation of the object.
+
+        Args:
+            ref: Version to load (its id is the GCS generation).
+
+        Returns:
+            File-like object containing the JSON data for that generation.
+
+        Raises:
+            GCSError: If the id is invalid or loading fails after all retries.
+        """
+        try:
+            generation = int(ref.id)
+        except ValueError as e:
+            raise GCSError(f"invalid version id {ref.id!r}: {e}") from e
+
+        def _download() -> BinaryIO:
+            client = self._get_client()
+            bucket = client.bucket(self.config.bucket)
+            blob = bucket.blob(self.config.object_path, generation=generation)
+            content = blob.download_as_bytes()
+            return BytesIO(content)
+
+        return _retry_with_backoff(
+            _download,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS download generation {generation} gs://{self.config.bucket}/{self.config.object_path}",
         )
 
     def watch(self, callback: Callable[[], Exception | None]) -> Exception | None:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"sort"
 	"strings"
@@ -43,6 +44,12 @@ type Service struct {
 	childrenByID map[string][]string
 	idByNameType map[nameTypeKey]string
 	useStableIDs bool
+
+	// Historical snapshot cache for AsOf, keyed by version ID (LRU).
+	historyMu        sync.Mutex
+	historyCache     map[string]*Service
+	historyOrder     []string
+	historyCacheSize int
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -50,7 +57,7 @@ func NewService(opts ...ServiceOption) *Service {
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	return &Service{logger: cfg.logger}
+	return &Service{logger: cfg.logger, historyCacheSize: cfg.historyCacheSize}
 }
 
 func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) error {
@@ -64,13 +71,20 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 		}
 	}()
 
+	return s.loadFromReader(reader, source.String())
+}
+
+// loadFromReader decodes, validates, and swaps in the index JSON read from
+// reader. It is the shared core of LoadFromDataSource and AsOf. sourceName is
+// used only for error messages and logging; reader is not closed here.
+func (s *Service) loadFromReader(reader io.Reader, sourceName string) error {
 	var orgData Data
 	if err := json.NewDecoder(reader).Decode(&orgData); err != nil {
-		return NewLoadError(source.String(), fmt.Errorf("failed to parse JSON: %w", err))
+		return NewLoadError(sourceName, fmt.Errorf("failed to parse JSON: %w", err))
 	}
 
 	if err := validateData(&orgData); err != nil {
-		return NewLoadError(source.String(), err)
+		return NewLoadError(sourceName, err)
 	}
 
 	s.mu.Lock()
@@ -98,7 +112,7 @@ func (s *Service) LoadFromDataSource(ctx context.Context, source DataSource) err
 
 	s.buildDerivedIndexes()
 
-	s.logger.Info("data loaded", "source", source.String(), "employees", s.version.EmployeeCount, "orgs", s.version.OrgCount)
+	s.logger.Info("data loaded", "source", sourceName, "employees", s.version.EmployeeCount, "orgs", s.version.OrgCount)
 	return nil
 }
 
@@ -236,6 +250,29 @@ func (s *Service) GetVersion() DataVersion {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.version
+}
+
+// GetDataVersion returns the producer-side version string embedded in the loaded
+// index (metadata.data_version), or "" if no data is loaded. This identifies
+// which upstream-generated version is currently in memory, including after AsOf.
+func (s *Service) GetDataVersion() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.data == nil {
+		return ""
+	}
+	return s.data.Metadata.DataVersion
+}
+
+// GetGeneratedAt returns the producer-side generation timestamp embedded in the
+// loaded index (metadata.generated_at), or "" if no data is loaded.
+func (s *Service) GetGeneratedAt() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.data == nil {
+		return ""
+	}
+	return s.data.Metadata.GeneratedAt
 }
 
 // GetDataAge returns the duration since data was last loaded.

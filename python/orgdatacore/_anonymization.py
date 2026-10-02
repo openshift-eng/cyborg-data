@@ -11,13 +11,16 @@ import secrets
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from ._exceptions import TimeTravelNotSupportedError
 from ._serialization import data_to_json_bytes
 from ._service import parse_data
 from ._types import (
     Data,
+    DataVersionRef,
     Employee,
     GitHubIDMappings,
     Group,
+    HistoricalDataSource,
     MembershipIndex,
     PIIMode,
     SlackIDMappings,
@@ -324,8 +327,14 @@ class AnonymizingDataSource:
 
     def load(self) -> BinaryIO:
         """Load data, optionally anonymizing PII fields."""
-        reader: BinaryIO = self._source.load()
+        return self._transform(self._source.load())
 
+    def _transform(self, reader: BinaryIO) -> BinaryIO:
+        """Apply anonymization to a reader from the inner source.
+
+        When pii_mode is not ANONYMIZED the reader is returned unchanged;
+        otherwise it is consumed and closed and an anonymized stream is returned.
+        """
         if self._pii_mode != PIIMode.ANONYMIZED:
             return reader
 
@@ -341,6 +350,30 @@ class AnonymizingDataSource:
         """Delegate to the underlying data source."""
         result: Exception | None = self._source.watch(callback)
         return result
+
+    def list_versions(self) -> list[DataVersionRef]:
+        """Forward to the inner source so time travel works through anonymization.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._source.list_versions()
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a historical version from the inner source and anonymize it.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._transform(self._source.load_version(ref))
 
     def __str__(self) -> str:
         mode_suffix = (

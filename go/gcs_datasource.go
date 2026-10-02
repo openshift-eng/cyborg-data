@@ -4,12 +4,15 @@ package orgdatacore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -108,6 +111,54 @@ func (g *GCSDataSourceImpl) checkAndReload(ctx context.Context, callback func() 
 			g.logger.Error("reload failed", "source", g.String(), "error", err)
 		}
 	}
+}
+
+// ListVersions returns every retained generation of the configured object. This
+// relies on the bucket retaining noncurrent versions (object versioning); if it
+// does not, only the live generation is returned. The GCS generation number is
+// the object's creation time in microseconds since the Unix epoch, which is used
+// as the version's Created time.
+func (g *GCSDataSourceImpl) ListVersions(ctx context.Context) ([]DataVersionRef, error) {
+	query := &storage.Query{Prefix: g.objectPath, Versions: true}
+	it := g.client.Bucket(g.bucket).Objects(ctx, query)
+
+	var refs []DataVersionRef
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, NewLoadError(g.String(), fmt.Errorf("failed to list object versions: %w", err))
+		}
+		// Prefix matching can return sibling objects; keep only the exact object.
+		if attrs.Name != g.objectPath {
+			continue
+		}
+		created := attrs.Created
+		if created.IsZero() && attrs.Generation != 0 {
+			created = time.UnixMicro(attrs.Generation)
+		}
+		refs = append(refs, DataVersionRef{
+			ID:      strconv.FormatInt(attrs.Generation, 10),
+			Created: created,
+		})
+	}
+	return refs, nil
+}
+
+// LoadVersion returns a reader for a specific generation of the object.
+func (g *GCSDataSourceImpl) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
+	gen, err := strconv.ParseInt(ref.ID, 10, 64)
+	if err != nil {
+		return nil, NewLoadError(g.String(), fmt.Errorf("invalid version id %q: %w", ref.ID, err))
+	}
+	object := g.client.Bucket(g.bucket).Object(g.objectPath).Generation(gen)
+	reader, err := object.NewReader(ctx)
+	if err != nil {
+		return nil, NewLoadError(g.String(), fmt.Errorf("failed to read generation %d: %w", gen, err))
+	}
+	return reader, nil
 }
 
 func (g *GCSDataSourceImpl) String() string {

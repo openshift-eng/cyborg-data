@@ -12,6 +12,16 @@ var (
 	ErrInvalidConfig         = errors.New("orgdatacore: invalid configuration")
 	ErrWatcherAlreadyRunning = errors.New("orgdatacore: watcher already running")
 	ErrInvalidData           = errors.New("orgdatacore: invalid data structure")
+
+	// ErrTimeTravelNotSupported is returned by AsOf/ListVersions when the data
+	// source does not expose historical versions (does not implement
+	// HistoricalDataSource).
+	ErrTimeTravelNotSupported = errors.New("orgdatacore: data source does not support time travel")
+
+	// ErrVersionNotAvailable is returned by AsOf when no retained version exists
+	// at or before the requested time (e.g. the time predates the oldest version
+	// still retained by the bucket).
+	ErrVersionNotAvailable = errors.New("orgdatacore: no data version available at or before the requested time")
 )
 
 // NotFoundError wraps ErrNotFound with details about what wasn't found.

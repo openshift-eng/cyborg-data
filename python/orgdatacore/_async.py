@@ -19,18 +19,26 @@ Example:
 import asyncio
 import inspect
 import json
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, TypeVar
 
-from ._exceptions import ConfigurationError, DataLoadError, GCSError
+from ._exceptions import (
+    ConfigurationError,
+    DataLoadError,
+    GCSError,
+    TimeTravelNotSupportedError,
+)
 from ._log import get_logger
 from ._service import (
+    DEFAULT_HISTORY_CACHE_SIZE,
     _ancestor_org_info_type,
     _EntityRef,
     _NameTypeKey,
     _normalize_slack_channel,
+    _resolve_version,
     _to_entity_type,
     parse_data,
 )
@@ -41,12 +49,14 @@ from ._types import (
     ContextItemInfo,
     Data,
     DataVersion,
+    DataVersionRef,
     Employee,
     EntityType,
     EscalationContactInfo,
     GCSConfig,
     HierarchyNode,
     HierarchyPathEntry,
+    HistoricalDataSource,
     JiraOwnerInfo,
     MembershipInfo,
     MembershipType,
@@ -65,6 +75,8 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY = 1.0
 DEFAULT_RETRY_BACKOFF = 2.0
 
+_T = TypeVar("_T")
+
 
 class AsyncService:
     """Async implementation of the organizational data service.
@@ -78,11 +90,18 @@ class AsyncService:
         employee = await service.get_employee_by_uid("jdoe")
     """
 
-    def __init__(self, *, data_source: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        data_source: Any | None = None,
+        history_cache_size: int = DEFAULT_HISTORY_CACHE_SIZE,
+    ) -> None:
         """Initialize a new async organizational data service.
 
         Args:
             data_source: Optional async data source to load from immediately.
+            history_cache_size: Number of historical snapshots as_of keeps cached
+                in memory (LRU). A size <= 0 disables caching.
         """
         self._lock = asyncio.Lock()
         self._data: Data | None = None
@@ -92,6 +111,10 @@ class AsyncService:
         self._watcher_task: asyncio.Task[None] | None = None
         self._watcher_source: Any | None = None
         self._slack_channel_index: dict[str, list[str]] = {}
+
+        # Historical snapshot cache for as_of, keyed by version id (LRU).
+        self._history_cache: OrderedDict[str, AsyncService] = OrderedDict()
+        self._history_cache_size = history_cache_size
 
         # Derived identity indexes, rebuilt on every load. Populated only when
         # the index carries stable IDs (_use_stable_ids); otherwise traversal
@@ -134,17 +157,30 @@ class AsyncService:
             )
             raise DataLoadError(f"failed to load from data source {source}: {e}") from e
 
+        await self._apply_reader(reader, str(source))
+
+    async def _apply_reader(self, reader: BinaryIO, source_desc: str) -> None:
+        """Decode, parse, and swap in index JSON read from ``reader``.
+
+        Shared core of ``load_from_data_source`` and ``as_of``. ``source_desc`` is
+        used only for error messages and logging. The reader is closed here.
+        """
+        logger = get_logger()
+
         try:
-            content = reader.read()
-            if isinstance(content, bytes):
-                content = content.decode("utf-8")
-            raw_data = json.loads(content)
+            raw_content = reader.read()
+            text = (
+                raw_content.decode("utf-8")
+                if isinstance(raw_content, bytes)
+                else raw_content
+            )
+            raw_data = json.loads(text)
         except json.JSONDecodeError as e:
             logger.error(
-                "Failed to parse JSON", extra={"source": str(source), "error": str(e)}
+                "Failed to parse JSON", extra={"source": source_desc, "error": str(e)}
             )
             raise DataLoadError(
-                f"failed to parse JSON from source {source}: {e}"
+                f"failed to parse JSON from source {source_desc}: {e}"
             ) from e
         finally:
             reader.close()
@@ -154,10 +190,10 @@ class AsyncService:
         except Exception as e:
             logger.error(
                 "Failed to parse data structure",
-                extra={"source": str(source), "error": str(e)},
+                extra={"source": source_desc, "error": str(e)},
             )
             raise DataLoadError(
-                f"failed to parse data structure from source {source}: {e}"
+                f"failed to parse data structure from source {source_desc}: {e}"
             ) from e
 
         async with self._lock:
@@ -182,11 +218,86 @@ class AsyncService:
         logger.info(
             "Data loaded successfully (async)",
             extra={
-                "source": str(source),
+                "source": source_desc,
                 "employee_count": self._version.employee_count,
                 "org_count": self._version.org_count,
             },
         )
+
+    async def list_versions(self, source: Any) -> list[DataVersionRef]:
+        """List all retained versions of the index, sorted oldest-first.
+
+        Raises:
+            TimeTravelNotSupportedError: If source does not retain history.
+            DataLoadError: If listing fails.
+        """
+        if not isinstance(source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {source}"
+            )
+        refs = await self._call_list_versions(source)
+        return sorted(refs, key=lambda r: r.created)
+
+    async def as_of(self, source: Any, t: datetime) -> "AsyncService":
+        """Return a read-only AsyncService bound to the version live at time ``t``.
+
+        See Service.as_of for resolution semantics. Supports both sync and async
+        historical sources.
+
+        Raises:
+            TimeTravelNotSupportedError: If source does not retain history.
+            VersionNotAvailableError: If ``t`` predates the oldest retained version.
+            DataLoadError: If loading the resolved version fails.
+        """
+        if not isinstance(source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {source}"
+            )
+
+        refs = await self._call_list_versions(source)
+        ref = _resolve_version(refs, t)
+
+        cached = self._get_cached_view(ref.id)
+        if cached is not None:
+            return cached
+
+        if inspect.iscoroutinefunction(source.load_version):
+            reader = await source.load_version(ref)
+        else:
+            reader = await asyncio.to_thread(source.load_version, ref)
+
+        view = AsyncService()
+        await view._apply_reader(reader, f"{source}@{ref.id}")
+        self._put_cached_view(ref.id, view)
+        return view
+
+    async def _call_list_versions(self, source: Any) -> list[DataVersionRef]:
+        try:
+            if inspect.iscoroutinefunction(source.list_versions):
+                refs: list[DataVersionRef] = await source.list_versions()
+            else:
+                refs = await asyncio.to_thread(source.list_versions)
+        except TimeTravelNotSupportedError:
+            raise
+        except Exception as e:
+            raise DataLoadError(f"failed to list versions from {source}: {e}") from e
+        return refs
+
+    def _get_cached_view(self, version_id: str) -> "AsyncService | None":
+        if self._history_cache_size <= 0:
+            return None
+        view = self._history_cache.get(version_id)
+        if view is not None:
+            self._history_cache.move_to_end(version_id)
+        return view
+
+    def _put_cached_view(self, version_id: str, view: "AsyncService") -> None:
+        if self._history_cache_size <= 0:
+            return
+        self._history_cache[version_id] = view
+        self._history_cache.move_to_end(version_id)
+        while len(self._history_cache) > self._history_cache_size:
+            self._history_cache.popitem(last=False)
 
     async def start_data_source_watcher(self, source: Any) -> None:
         """Start watching an async data source for changes.
@@ -1114,6 +1225,24 @@ class AsyncService:
         """Get the current data version (sync - no lock needed for read)."""
         return self._version
 
+    def get_data_version(self) -> str:
+        """Get the producer-side version string of the loaded index.
+
+        Returns ``metadata.data_version``, or "" if no data is loaded.
+        """
+        if self._data is None:
+            return ""
+        return self._data.metadata.data_version
+
+    def get_generated_at(self) -> str:
+        """Get the producer-side generation timestamp of the loaded index.
+
+        Returns ``metadata.generated_at``, or "" if no data is loaded.
+        """
+        if self._data is None:
+            return ""
+        return self._data.metadata.generated_at
+
     async def get_jira_projects(self) -> list[str]:
         """Get all Jira project keys."""
         async with self._lock:
@@ -1275,12 +1404,12 @@ class AsyncService:
 
 
 async def _async_retry_with_backoff(
-    operation: Callable[[], Awaitable[BinaryIO]],
+    operation: Callable[[], Awaitable[_T]],
     max_retries: int = DEFAULT_MAX_RETRIES,
     initial_delay: float = DEFAULT_RETRY_DELAY,
     backoff: float = DEFAULT_RETRY_BACKOFF,
     operation_name: str = "operation",
-) -> BinaryIO:
+) -> _T:
     """Execute an async operation with exponential backoff retry."""
     logger = get_logger()
     delay = initial_delay
@@ -1424,6 +1553,74 @@ class AsyncGCSDataSource:
             initial_delay=self.retry_delay,
             backoff=self.retry_backoff,
             operation_name=f"GCS download gs://{self.config.bucket}/{self.config.object_path}",
+        )
+
+    async def list_versions(self) -> list[DataVersionRef]:
+        """List every retained generation of the configured object.
+
+        See GCSDataSource.list_versions. The generation number is the object's
+        creation time in microseconds since the Unix epoch.
+
+        Raises:
+            GCSError: If listing fails after all retries.
+        """
+
+        async def _list() -> list[DataVersionRef]:
+            def _sync_list() -> list[DataVersionRef]:
+                client = self._get_client()
+                blobs = client.list_blobs(
+                    self.config.bucket,
+                    prefix=self.config.object_path,
+                    versions=True,
+                )
+                refs: list[DataVersionRef] = []
+                for blob in blobs:
+                    if blob.name != self.config.object_path:
+                        continue
+                    created = datetime.fromtimestamp(
+                        blob.generation / 1_000_000, tz=UTC
+                    )
+                    refs.append(
+                        DataVersionRef(id=str(blob.generation), created=created)
+                    )
+                return refs
+
+            return await asyncio.to_thread(_sync_list)
+
+        return await _async_retry_with_backoff(
+            _list,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS list versions gs://{self.config.bucket}/{self.config.object_path}",
+        )
+
+    async def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a specific generation of the object.
+
+        Raises:
+            GCSError: If the id is invalid or loading fails after all retries.
+        """
+        try:
+            generation = int(ref.id)
+        except ValueError as e:
+            raise GCSError(f"invalid version id {ref.id!r}: {e}") from e
+
+        async def _download() -> BinaryIO:
+            def _sync_download() -> BinaryIO:
+                client = self._get_client()
+                bucket = client.bucket(self.config.bucket)
+                blob = bucket.blob(self.config.object_path, generation=generation)
+                return BytesIO(blob.download_as_bytes())
+
+            return await asyncio.to_thread(_sync_download)
+
+        return await _async_retry_with_backoff(
+            _download,
+            max_retries=self.max_retries,
+            initial_delay=self.retry_delay,
+            backoff=self.retry_backoff,
+            operation_name=f"GCS download generation {generation} gs://{self.config.bucket}/{self.config.object_path}",
         )
 
     async def watch(

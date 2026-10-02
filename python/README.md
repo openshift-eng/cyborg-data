@@ -138,8 +138,47 @@ The main class providing access to organizational data.
 #### Data Management
 
 - `get_version() -> DataVersion`
+- `get_data_version() -> str` (producer-side `metadata.data_version`)
+- `get_generated_at() -> str` (producer-side `metadata.generated_at`)
 - `load_from_data_source(source: DataSource) -> None`
 - `start_data_source_watcher(source: DataSource) -> None`
+
+#### Time Travel (historical queries)
+
+- `as_of(source: DataSource, t: datetime) -> Service`
+- `list_versions(source: DataSource) -> list[DataVersionRef]`
+
+`as_of` returns a read-only `Service` bound to the index version live at `t`,
+exposing the full query API:
+
+```python
+from datetime import datetime, timedelta
+
+service = Service()
+
+# A day ago:
+past = service.as_of(source, datetime.now() - timedelta(days=1))
+emp = past.get_employee_by_uid("jdoe")   # state as it was 24h ago
+print(past.get_data_version())           # which version was resolved
+
+versions = service.list_versions(source)  # sorted oldest-first
+```
+
+Raises `TimeTravelNotSupportedError` if the source has no history, or
+`VersionNotAvailableError` if `t` predates the oldest retained version.
+Resolution picks the newest version at or before `t`; snapshots are cached
+per-service (LRU, see the `history_cache_size` constructor argument).
+
+**Requirements and limits:**
+
+- The source must implement `HistoricalDataSource` (`list_versions` +
+  `load_version`). `GCSDataSource` does; the redacting/anonymizing wrappers
+  forward history and apply their transform to historical data.
+- History comes from **GCS object retention** — the library reads prior object
+  generations; it does not create them. The reachable range and granularity are
+  whatever the bucket retains (not controlled by this library). A GCS generation
+  number is the object's creation time in microseconds, used as the version
+  timestamp. `AsyncService` exposes the same `as_of` / `list_versions` (async).
 
 #### Hierarchy Queries
 

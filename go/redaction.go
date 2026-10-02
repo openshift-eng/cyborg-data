@@ -41,7 +41,13 @@ func (r *RedactingDataSource) Load(ctx context.Context) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	return r.transform(reader)
+}
 
+// transform applies PII redaction to a reader from the inner source. When
+// piiMode is PIIModeFull the reader is returned unchanged. It takes ownership of
+// reader and closes it when it redacts.
+func (r *RedactingDataSource) transform(reader io.ReadCloser) (io.ReadCloser, error) {
 	if r.piiMode == PIIModeFull {
 		return reader, nil
 	}
@@ -60,6 +66,29 @@ func (r *RedactingDataSource) Load(ctx context.Context) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("redacting data source: encode: %w", err)
 	}
 	return io.NopCloser(bytes.NewReader(out)), nil
+}
+
+// ListVersions forwards to the inner source if it supports history, so time
+// travel works through redaction. Returns ErrTimeTravelNotSupported otherwise.
+func (r *RedactingDataSource) ListVersions(ctx context.Context) ([]DataVersionRef, error) {
+	hist, ok := r.source.(HistoricalDataSource)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, r.source.String())
+	}
+	return hist.ListVersions(ctx)
+}
+
+// LoadVersion loads a historical version from the inner source and redacts it.
+func (r *RedactingDataSource) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
+	hist, ok := r.source.(HistoricalDataSource)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, r.source.String())
+	}
+	reader, err := hist.LoadVersion(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return r.transform(reader)
 }
 
 func (r *RedactingDataSource) Watch(ctx context.Context, callback func() error) error {
