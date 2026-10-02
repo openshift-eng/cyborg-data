@@ -259,9 +259,14 @@ class GCSDataSource:
                 # Prefix matching can return siblings; keep only the exact object.
                 if blob.name != self.config.object_path:
                     continue
-                created = datetime.fromtimestamp(
-                    blob.generation / 1_000_000, tz=UTC
-                )
+                # Prefer the explicit creation timestamp; fall back to the
+                # generation number, which GCS defines as the creation time in
+                # microseconds since the epoch. (Matches the Go implementation.)
+                created = blob.time_created
+                if created is None:
+                    created = datetime.fromtimestamp(
+                        blob.generation / 1_000_000, tz=UTC
+                    )
                 refs.append(DataVersionRef(id=str(blob.generation), created=created))
             return refs
 
