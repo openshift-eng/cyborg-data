@@ -169,6 +169,11 @@ Raises `TimeTravelNotSupportedError` if the source has no history, or
 Resolution picks the newest version at or before `t`; snapshots are cached
 per-service (LRU, see the `history_cache_size` constructor argument).
 
+**Semantics:** `as_of(t)` uses **transaction/system time** — "the data as the
+system published it at `t`", not *valid time*. A correction or backfill published
+later will not appear at the real-world moment it became true. Use it for audit,
+debugging, and point-in-time reconstruction, not as a source of valid-time facts.
+
 **Requirements and limits:**
 
 - The source must implement `HistoricalDataSource` (`list_versions` +

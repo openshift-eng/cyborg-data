@@ -385,6 +385,11 @@ Resolution picks the newest version whose creation time is at or before the
 requested time. Resolved snapshots are cached per `Service` (LRU; configure with
 `WithHistoryCacheSize`).
 
+**Semantics:** `AsOf(t)` uses **transaction/system time** — "the data as the
+system published it at `t`", not *valid time*. A correction or backfill published
+later will not appear at the real-world moment it became true. Use it for audit,
+debugging, and point-in-time reconstruction, not as a source of valid-time facts.
+
 **Requirements and limits:**
 
 - The source must implement `HistoricalDataSource` (`ListVersions` + `LoadVersion`).

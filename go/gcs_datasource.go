@@ -156,6 +156,13 @@ func (g *GCSDataSourceImpl) LoadVersion(ctx context.Context, ref DataVersionRef)
 	object := g.client.Bucket(g.bucket).Object(g.objectPath).Generation(gen)
 	reader, err := object.NewReader(ctx)
 	if err != nil {
+		// The generation was resolved from a (possibly cached) listing but is no
+		// longer present -- e.g. pruned by a lifecycle/retention rule between the
+		// list and the read. Surface it as out-of-retention, not a generic load
+		// failure.
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return nil, fmt.Errorf("%w: generation %d is no longer retained in %s", ErrVersionNotAvailable, gen, g.String())
+		}
 		return nil, NewLoadError(g.String(), fmt.Errorf("failed to read generation %d: %w", gen, err))
 	}
 	return reader, nil

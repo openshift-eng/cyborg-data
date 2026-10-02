@@ -216,6 +216,26 @@ func TestAsOfThroughRedactingSource(t *testing.T) {
 	}
 }
 
+// prunedHistorical simulates a version that was listed but pruned before read.
+type prunedHistorical struct {
+	historicalFake
+}
+
+func (p prunedHistorical) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("%w: generation %s pruned", ErrVersionNotAvailable, ref.ID)
+}
+
+func TestAsOfPropagatesPrunedVersion(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	src := prunedHistorical{newHistoryFixture(t0)}
+	svc := NewService()
+
+	_, err := svc.AsOf(context.Background(), src, t0.Add(12*time.Hour))
+	if !errors.Is(err, ErrVersionNotAvailable) {
+		t.Fatalf("expected ErrVersionNotAvailable for a pruned generation, got %v", err)
+	}
+}
+
 func TestAsOfCacheKeyIsolatesWrappedSources(t *testing.T) {
 	// A snapshot resolved through a raw source must never be served to a
 	// redacting wrapper over the same source (shared generation ID) -- that

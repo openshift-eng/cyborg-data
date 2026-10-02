@@ -31,6 +31,7 @@ from ._exceptions import (
     DataLoadError,
     GCSError,
     TimeTravelNotSupportedError,
+    VersionNotAvailableError,
 )
 from ._log import get_logger
 from ._service import (
@@ -1445,6 +1446,9 @@ async def _async_retry_with_backoff(
     for attempt in range(max_retries + 1):
         try:
             return await operation()
+        except VersionNotAvailableError:
+            # A permanently-gone version is not a transient failure; don't retry.
+            raise
         except Exception as e:
             last_error = e
             if attempt < max_retries:
@@ -1471,6 +1475,7 @@ async def _async_retry_with_backoff(
 
 
 try:
+    from google.api_core.exceptions import NotFound
     from google.cloud import storage
 
     _HAS_GCS = True
@@ -1638,7 +1643,13 @@ class AsyncGCSDataSource:
                 client = self._get_client()
                 bucket = client.bucket(self.config.bucket)
                 blob = bucket.blob(self.config.object_path, generation=generation)
-                return BytesIO(blob.download_as_bytes())
+                try:
+                    return BytesIO(blob.download_as_bytes())
+                except NotFound as e:
+                    raise VersionNotAvailableError(
+                        f"generation {generation} is no longer retained in "
+                        f"gs://{self.config.bucket}/{self.config.object_path}"
+                    ) from e
 
             return await asyncio.to_thread(_sync_download)
 

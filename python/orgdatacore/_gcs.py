@@ -42,7 +42,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any, BinaryIO, TypeVar
 
-from ._exceptions import ConfigurationError, GCSError
+from ._exceptions import ConfigurationError, GCSError, VersionNotAvailableError
 from ._log import get_logger
 from ._types import DataVersionRef, GCSConfig
 
@@ -55,6 +55,7 @@ DEFAULT_RETRY_BACKOFF = 2.0  # multiplier
 
 
 try:
+    from google.api_core.exceptions import NotFound
     from google.cloud import storage
 
     _HAS_GCS = True
@@ -91,6 +92,9 @@ def _retry_with_backoff(
     for attempt in range(max_retries + 1):
         try:
             return operation()
+        except VersionNotAvailableError:
+            # A permanently-gone version is not a transient failure; don't retry.
+            raise
         except Exception as e:
             last_error = e
             if attempt < max_retries:
@@ -290,7 +294,15 @@ class GCSDataSource:
             client = self._get_client()
             bucket = client.bucket(self.config.bucket)
             blob = bucket.blob(self.config.object_path, generation=generation)
-            content = blob.download_as_bytes()
+            try:
+                content = blob.download_as_bytes()
+            except NotFound as e:
+                # Resolved from a (possibly cached) listing but pruned since, e.g.
+                # by a lifecycle/retention rule. Surface as out-of-retention.
+                raise VersionNotAvailableError(
+                    f"generation {generation} is no longer retained in "
+                    f"gs://{self.config.bucket}/{self.config.object_path}"
+                ) from e
             return BytesIO(content)
 
         return _retry_with_backoff(

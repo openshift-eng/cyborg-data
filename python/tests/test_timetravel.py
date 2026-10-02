@@ -173,6 +173,33 @@ class TestReviewFixes:
         svc.as_of(anon, t0)  # historical load through the same wrapper
         assert anon.uid_to_nonce_map == before
 
+    def test_as_of_propagates_pruned_version(self, t0: datetime) -> None:
+        # A version resolved from the listing but pruned before read surfaces as
+        # VersionNotAvailableError, not a generic DataLoadError.
+        from io import BytesIO
+
+        from orgdatacore._types import DataVersionRef
+
+        class PrunedSource:
+            def load(self):  # type: ignore[no-untyped-def]
+                return BytesIO(_version_json("v1", "emp1").encode())
+
+            def watch(self, callback):  # type: ignore[no-untyped-def]
+                return None
+
+            def __str__(self) -> str:
+                return "pruned"
+
+            def list_versions(self) -> list[DataVersionRef]:
+                return [DataVersionRef(id="1", created=t0)]
+
+            def load_version(self, ref: DataVersionRef) -> BytesIO:
+                raise VersionNotAvailableError("generation 1 no longer retained")
+
+        svc = Service()
+        with pytest.raises(VersionNotAvailableError):
+            svc.as_of(PrunedSource(), t0)
+
 
 class TestListVersions:
     """Tests for Service.list_versions."""

@@ -67,6 +67,11 @@ func (s *Service) listVersionsCached(ctx context.Context, hist HistoricalDataSou
 // source does not implement HistoricalDataSource, ErrTimeTravelNotSupported is
 // returned.
 //
+// Semantics: t is transaction/system time -- "the data as the system published
+// it at t", NOT valid time. A correction or backfill published later does not
+// appear at the real-world moment it became true. Use AsOf for audit, debugging,
+// and point-in-time reconstruction, not as a source of valid-time business facts.
+//
 // Resolved snapshots are cached per Service (LRU, see WithHistoryCacheSize), so
 // repeated AsOf calls that land on the same version avoid re-downloading.
 func (s *Service) AsOf(ctx context.Context, source DataSource, t time.Time) (ServiceInterface, error) {

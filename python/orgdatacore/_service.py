@@ -672,6 +672,12 @@ class Service:
         ``history_cache_size``), so repeated calls that land on the same version
         avoid re-downloading.
 
+        Semantics: ``t`` is transaction/system time -- "the data as the system
+        published it at ``t``", NOT valid time. A correction or backfill published
+        later does not appear at the real-world moment it became true. Use as_of
+        for audit, debugging, and point-in-time reconstruction, not as a source of
+        valid-time business facts.
+
         Args:
             source: Data source to query. Must implement HistoricalDataSource.
             t: Point in time to travel to.
@@ -702,6 +708,9 @@ class Service:
 
         try:
             reader = source.load_version(ref)
+        except VersionNotAvailableError:
+            # The resolved version was pruned between listing and read.
+            raise
         except Exception as e:
             raise DataLoadError(
                 f"failed to load version {ref.id} from {source}: {e}"
