@@ -2,10 +2,16 @@
 
 import json
 import threading
-from datetime import datetime, timedelta
-from typing import Any, NamedTuple, cast
+import time
+from collections import OrderedDict
+from datetime import UTC, datetime, timedelta
+from typing import Any, BinaryIO, NamedTuple, cast
 
-from ._exceptions import DataLoadError
+from ._exceptions import (
+    DataLoadError,
+    TimeTravelNotSupportedError,
+    VersionNotAvailableError,
+)
 from ._log import get_logger
 from ._types import (
     Component,
@@ -16,12 +22,14 @@ from ._types import (
     Data,
     DataSource,
     DataVersion,
+    DataVersionRef,
     Employee,
     EntityType,
     EscalationContactInfo,
     GitHubIDMappings,
     HierarchyNode,
     HierarchyPathEntry,
+    HistoricalDataSource,
     Indexes,
     JiraIndex,
     JiraOwnerInfo,
@@ -195,8 +203,51 @@ def parse_data(raw_data: dict[str, Any]) -> Data:
     )
 
 
-def _validate_data(data: Data, source: DataSource) -> None:
-    """Validate that required data structures are present."""
+def _as_utc(d: datetime) -> datetime:
+    """Normalize a datetime to UTC, treating naive datetimes as UTC.
+
+    GCS version timestamps are timezone-aware (UTC) while callers often pass a
+    naive ``datetime.now()``; comparing the two directly raises TypeError.
+    """
+    return d.replace(tzinfo=UTC) if d.tzinfo is None else d.astimezone(UTC)
+
+
+def _resolve_version(refs: list[DataVersionRef], t: datetime) -> DataVersionRef:
+    """Return the newest ref whose created time is at or before ``t``.
+
+    Requested and version times are normalized to UTC before comparison, so naive
+    and timezone-aware datetimes can be mixed. Raises VersionNotAvailableError if
+    refs is empty or ``t`` predates every ref.
+    """
+    t = _as_utc(t)
+    best: DataVersionRef | None = None
+    best_created: datetime | None = None
+    earliest: datetime | None = None
+    for r in refs:
+        created = _as_utc(r.created)
+        if earliest is None or created < earliest:
+            earliest = created
+        if created > t:
+            continue
+        if best_created is None or created > best_created:
+            best = r
+            best_created = created
+    if best is None:
+        if earliest is None:
+            raise VersionNotAvailableError("no versions retained")
+        raise VersionNotAvailableError(
+            f"requested {t.isoformat()} predates earliest retained version "
+            f"{earliest.isoformat()}"
+        )
+    return best
+
+
+def _validate_data(data: Data, source: object) -> None:
+    """Validate that required data structures are present.
+
+    ``source`` is used only for error messages, so a DataSource or a plain
+    description string are both accepted.
+    """
     if data.metadata.pii_free:
         if data.lookups.employees:
             raise DataLoadError(
@@ -213,6 +264,16 @@ def _validate_data(data: Data, source: DataSource) -> None:
         raise DataLoadError(
             f"invalid data from {source}: missing indexes.membership.membership_index"
         )
+
+
+# Number of historical snapshots as_of keeps cached in memory per Service. Each
+# snapshot is a full org dataset, so this is deliberately small.
+DEFAULT_HISTORY_CACHE_SIZE = 4
+
+# Seconds that as_of/list_versions reuse a cached version listing before
+# re-querying the source. Keeps repeated historical queries from re-listing the
+# source on every call.
+DEFAULT_VERSIONS_CACHE_TTL = 60.0
 
 
 class Service:
@@ -232,7 +293,13 @@ class Service:
     or lazy loading if you need to defer data loading.
     """
 
-    def __init__(self, *, data_source: DataSource | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        data_source: DataSource | None = None,
+        history_cache_size: int = DEFAULT_HISTORY_CACHE_SIZE,
+        versions_cache_ttl: float = DEFAULT_VERSIONS_CACHE_TTL,
+    ) -> None:
         """
         Create a new organizational data service.
 
@@ -240,6 +307,11 @@ class Service:
             data_source: Optional data source to load immediately.
                         If provided, data is loaded during construction.
                         Must be passed as keyword argument.
+            history_cache_size: Number of historical snapshots as_of keeps cached
+                        in memory (LRU). A size <= 0 disables caching (every
+                        as_of re-downloads). Must be passed as keyword argument.
+            versions_cache_ttl: Seconds as_of/list_versions reuse a cached version
+                        listing before re-querying the source. <= 0 disables it.
         """
         self._lock = threading.RLock()
         self._data: Data | None = None
@@ -247,6 +319,18 @@ class Service:
         self._watcher_running = False
         self._stop_event = threading.Event()
         self._slack_channel_index: dict[str, list[str]] = {}
+
+        # Historical snapshot cache for as_of, keyed by "source@version_id" (LRU).
+        # The source is part of the key so snapshots from a raw source and from a
+        # wrapper (e.g. redacting) over it never collide.
+        self._history_lock = threading.Lock()
+        self._history_cache: OrderedDict[str, Service] = OrderedDict()
+        self._history_cache_size = history_cache_size
+
+        # Short-TTL cache of version listings, keyed by source string.
+        self._versions_lock = threading.Lock()
+        self._versions_cache: dict[str, tuple[float, list[DataVersionRef]]] = {}
+        self._versions_ttl = versions_cache_ttl
 
         # Derived identity indexes, rebuilt on every load. Populated only when
         # the index carries stable IDs (_use_stable_ids); otherwise traversal
@@ -280,14 +364,24 @@ class Service:
             )
             raise DataLoadError(f"failed to load from data source {source}: {e}") from e
 
+        self._load_reader(reader, str(source))
+
+    def _load_reader(self, reader: BinaryIO, source_desc: str) -> None:
+        """Decode, validate, and swap in index JSON read from ``reader``.
+
+        Shared core of ``load_from_data_source`` and ``as_of``. ``source_desc`` is
+        used only for error messages and logging. The reader is closed here.
+        """
+        logger = get_logger()
+
         try:
             raw_data = json.load(reader)
         except json.JSONDecodeError as e:
             logger.error(
-                "Failed to parse JSON", extra={"source": str(source), "error": str(e)}
+                "Failed to parse JSON", extra={"source": source_desc, "error": str(e)}
             )
             raise DataLoadError(
-                f"failed to parse JSON from source {source}: {e}"
+                f"failed to parse JSON from source {source_desc}: {e}"
             ) from e
         finally:
             reader.close()
@@ -297,13 +391,13 @@ class Service:
         except Exception as e:
             logger.error(
                 "Failed to parse data structure",
-                extra={"source": str(source), "error": str(e)},
+                extra={"source": source_desc, "error": str(e)},
             )
             raise DataLoadError(
-                f"failed to parse data structure from source {source}: {e}"
+                f"failed to parse data structure from source {source_desc}: {e}"
             ) from e
 
-        _validate_data(org_data, source)
+        _validate_data(org_data, source_desc)
 
         with self._lock:
             self._data = org_data
@@ -327,7 +421,7 @@ class Service:
         logger.info(
             "Data loaded successfully",
             extra={
-                "source": str(source),
+                "source": source_desc,
                 "employee_count": self._version.employee_count,
                 "org_count": self._version.org_count,
             },
@@ -503,6 +597,147 @@ class Service:
         """Get the current data version."""
         with self._lock:
             return self._version
+
+    def get_data_version(self) -> str:
+        """Get the producer-side version string of the loaded index.
+
+        Returns ``metadata.data_version``, or "" if no data is loaded. This
+        identifies which upstream-generated version is in memory, including after
+        ``as_of``.
+        """
+        with self._lock:
+            if self._data is None:
+                return ""
+            return self._data.metadata.data_version
+
+    def get_generated_at(self) -> str:
+        """Get the producer-side generation timestamp of the loaded index.
+
+        Returns ``metadata.generated_at``, or "" if no data is loaded.
+        """
+        with self._lock:
+            if self._data is None:
+                return ""
+            return self._data.metadata.generated_at
+
+    def list_versions(self, source: DataSource) -> list[DataVersionRef]:
+        """List all retained versions of the index, sorted oldest-first.
+
+        Args:
+            source: Data source to query. Must implement HistoricalDataSource.
+
+        Returns:
+            Version refs sorted by creation time, oldest first.
+
+        Raises:
+            TimeTravelNotSupportedError: If source does not retain history.
+            DataLoadError: If listing fails.
+        """
+        if not isinstance(source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {source}"
+            )
+        # Return a copy so callers can't mutate the cached listing.
+        return list(self._list_versions_cached(source))
+
+    def _list_versions_cached(self, source: DataSource) -> list[DataVersionRef]:
+        """Return the sorted version listing for source, reusing a cached listing
+        within versions_cache_ttl. The returned list is the cached one; callers
+        must treat it as read-only.
+        """
+        key = str(source)
+        if self._versions_ttl > 0:
+            with self._versions_lock:
+                entry = self._versions_cache.get(key)
+                if entry is not None and (time.monotonic() - entry[0]) < self._versions_ttl:
+                    return entry[1]
+        try:
+            refs = source.list_versions()  # type: ignore[attr-defined]
+        except TimeTravelNotSupportedError:
+            raise
+        except Exception as e:
+            raise DataLoadError(f"failed to list versions from {source}: {e}") from e
+        refs = sorted(refs, key=lambda r: r.created)
+        if self._versions_ttl > 0:
+            with self._versions_lock:
+                self._versions_cache[key] = (time.monotonic(), refs)
+        return refs
+
+    def as_of(self, source: DataSource, t: datetime) -> "Service":
+        """Return a read-only Service bound to the index version live at time ``t``.
+
+        Resolution picks the newest version whose creation time is at or before
+        ``t``. The returned Service exposes the full query API but its data never
+        changes. Resolved snapshots are cached per Service (LRU, see
+        ``history_cache_size``), so repeated calls that land on the same version
+        avoid re-downloading.
+
+        Semantics: ``t`` is transaction/system time -- "the data as the system
+        published it at ``t``", NOT valid time. A correction or backfill published
+        later does not appear at the real-world moment it became true. Use as_of
+        for audit, debugging, and point-in-time reconstruction, not as a source of
+        valid-time business facts.
+
+        Args:
+            source: Data source to query. Must implement HistoricalDataSource.
+            t: Point in time to travel to.
+
+        Returns:
+            A Service bound to the resolved historical snapshot.
+
+        Raises:
+            TimeTravelNotSupportedError: If source does not retain history.
+            VersionNotAvailableError: If ``t`` predates the oldest retained version.
+            DataLoadError: If loading the resolved version fails.
+        """
+        if not isinstance(source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {source}"
+            )
+
+        refs = self._list_versions_cached(source)
+        ref = _resolve_version(refs, t)
+
+        # Key the snapshot cache by source *and* version so a snapshot resolved
+        # through, e.g., a redacting wrapper is never served to a raw source (or
+        # vice versa) just because they share a version id.
+        cache_key = f"{source}@{ref.id}"
+        cached = self._get_cached_view(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            reader = source.load_version(ref)
+        except VersionNotAvailableError:
+            # The resolved version was pruned between listing and read.
+            raise
+        except Exception as e:
+            raise DataLoadError(
+                f"failed to load version {ref.id} from {source}: {e}"
+            ) from e
+
+        view = Service()
+        view._load_reader(reader, cache_key)
+        self._put_cached_view(cache_key, view)
+        return view
+
+    def _get_cached_view(self, key: str) -> "Service | None":
+        if self._history_cache_size <= 0:
+            return None
+        with self._history_lock:
+            view = self._history_cache.get(key)
+            if view is not None:
+                self._history_cache.move_to_end(key)
+            return view
+
+    def _put_cached_view(self, key: str, view: "Service") -> None:
+        if self._history_cache_size <= 0:
+            return
+        with self._history_lock:
+            self._history_cache[key] = view
+            self._history_cache.move_to_end(key)
+            while len(self._history_cache) > self._history_cache_size:
+                self._history_cache.popitem(last=False)
 
     def get_data_age(self) -> timedelta:
         """Get the duration since data was last loaded.

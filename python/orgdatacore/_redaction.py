@@ -4,13 +4,16 @@ import json
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from ._exceptions import TimeTravelNotSupportedError
 from ._serialization import data_to_json_bytes
 from ._service import parse_data
 from ._types import (
     Data,
     DataSource,
+    DataVersionRef,
     GitHubIDMappings,
     Group,
+    HistoricalDataSource,
     PIIMode,
     SlackIDMappings,
 )
@@ -64,8 +67,14 @@ class RedactingDataSource:
         Returns:
             Binary stream containing the (possibly redacted) JSON data.
         """
-        reader = self._source.load()
+        return self._transform(self._source.load())
 
+    def _transform(self, reader: BinaryIO) -> BinaryIO:
+        """Apply redaction to a reader from the inner source.
+
+        When pii_mode is FULL the reader is returned unchanged; otherwise it is
+        consumed and closed and a redacted stream is returned.
+        """
         if self._pii_mode == PIIMode.FULL:
             return reader  # Pass through unchanged
 
@@ -91,6 +100,30 @@ class RedactingDataSource:
             Exception if watch setup failed, None otherwise.
         """
         return self._source.watch(callback)
+
+    def list_versions(self) -> list[DataVersionRef]:
+        """Forward to the inner source so time travel works through redaction.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._source.list_versions()
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a historical version from the inner source and redact it.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._transform(self._source.load_version(ref))
 
     def __str__(self) -> str:
         """Return a description of this data source."""

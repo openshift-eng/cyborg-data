@@ -63,7 +63,15 @@ func (a *AnonymizingDataSource) Load(ctx context.Context) (io.ReadCloser, error)
 	if err != nil {
 		return nil, err
 	}
+	return a.transform(reader)
+}
 
+// transform applies anonymization to a reader from the inner source. When
+// piiMode is not PIIModeAnonymized the reader is returned unchanged. It takes
+// ownership of reader and closes it when it anonymizes. Note the nonce tables
+// are rebuilt from whichever data is passed, so time-traveled snapshots are
+// anonymized consistently within that snapshot.
+func (a *AnonymizingDataSource) transform(reader io.ReadCloser) (io.ReadCloser, error) {
 	if a.piiMode != PIIModeAnonymized {
 		return reader, nil
 	}
@@ -84,6 +92,34 @@ func (a *AnonymizingDataSource) Load(ctx context.Context) (io.ReadCloser, error)
 		return nil, fmt.Errorf("anonymizing data source: encode: %w", err)
 	}
 	return io.NopCloser(bytes.NewReader(out)), nil
+}
+
+// ListVersions forwards to the inner source if it supports history, so time
+// travel works through anonymization. Returns ErrTimeTravelNotSupported otherwise.
+func (a *AnonymizingDataSource) ListVersions(ctx context.Context) ([]DataVersionRef, error) {
+	hist, ok := a.source.(HistoricalDataSource)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, a.source.String())
+	}
+	return hist.ListVersions(ctx)
+}
+
+// LoadVersion loads a historical version from the inner source and anonymizes it
+// using a *separate* nonce state, so time-traveling does not disturb the live
+// nonce tables that Resolve/AnonymizeUID and the live data depend on. (Each
+// historical snapshot is therefore anonymized independently.)
+func (a *AnonymizingDataSource) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
+	hist, ok := a.source.(HistoricalDataSource)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrTimeTravelNotSupported, a.source.String())
+	}
+	reader, err := hist.LoadVersion(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	// A throwaway anonymizer carries its own nonce tables; the live receiver's
+	// state is left untouched.
+	return NewAnonymizingDataSource(a.source, a.piiMode).transform(reader)
 }
 
 func (a *AnonymizingDataSource) Watch(ctx context.Context, callback func() error) error {

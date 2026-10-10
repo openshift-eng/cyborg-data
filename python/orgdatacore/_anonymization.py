@@ -11,13 +11,16 @@ import secrets
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from ._exceptions import TimeTravelNotSupportedError
 from ._serialization import data_to_json_bytes
 from ._service import parse_data
 from ._types import (
     Data,
+    DataVersionRef,
     Employee,
     GitHubIDMappings,
     Group,
+    HistoricalDataSource,
     MembershipIndex,
     PIIMode,
     SlackIDMappings,
@@ -324,23 +327,64 @@ class AnonymizingDataSource:
 
     def load(self) -> BinaryIO:
         """Load data, optionally anonymizing PII fields."""
-        reader: BinaryIO = self._source.load()
+        return self._transform(self._source.load())
 
+    def _transform(
+        self, reader: BinaryIO, engine: "_AnonymizationEngine | None" = None
+    ) -> BinaryIO:
+        """Apply anonymization to a reader from the inner source.
+
+        When pii_mode is not ANONYMIZED the reader is returned unchanged;
+        otherwise it is consumed and closed and an anonymized stream is returned.
+        ``engine`` defaults to the live engine; pass a dedicated engine (e.g. for
+        historical loads) to avoid disturbing the live nonce tables.
+        """
         if self._pii_mode != PIIMode.ANONYMIZED:
             return reader
 
+        eng = engine if engine is not None else self._engine
         try:
             raw = json.load(reader)
         finally:
             reader.close()
         data = parse_data(raw)
-        anonymized = self._engine.anonymize(data)
+        anonymized = eng.anonymize(data)
         return BytesIO(data_to_json_bytes(anonymized))
 
     def watch(self, callback: "Callable[[], Exception | None]") -> Exception | None:
         """Delegate to the underlying data source."""
         result: Exception | None = self._source.watch(callback)
         return result
+
+    def list_versions(self) -> list[DataVersionRef]:
+        """Forward to the inner source so time travel works through anonymization.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._source.list_versions()
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a historical version from the inner source and anonymize it.
+
+        Uses a dedicated engine so historical loads don't disturb the live nonce
+        tables that resolve()/anonymize_uid() and the live data depend on. (Each
+        historical snapshot is therefore anonymized independently.)
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._transform(
+            self._source.load_version(ref), engine=_AnonymizationEngine()
+        )
 
     def __str__(self) -> str:
         mode_suffix = (

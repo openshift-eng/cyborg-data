@@ -80,3 +80,23 @@ class ConfigurationError(OrgDataError):
     """
 
     pass
+
+
+class TimeTravelNotSupportedError(OrgDataError):
+    """The data source does not support time travel.
+
+    Raised by Service.as_of / Service.list_versions when the source does not
+    implement the HistoricalDataSource protocol (list_versions / load_version).
+    """
+
+    pass
+
+
+class VersionNotAvailableError(OrgDataError):
+    """No retained data version exists at or before the requested time.
+
+    Raised by Service.as_of when the requested time predates the oldest version
+    still retained by the source.
+    """
+
+    pass

@@ -11,6 +11,8 @@ from datetime import datetime
 from io import BytesIO
 from typing import BinaryIO
 
+from ..._types import DataVersionRef
+
 
 class FakeBucket:
     """Fake implementation of google.cloud.storage.Bucket."""
@@ -19,6 +21,9 @@ class FakeBucket:
         self.name = name
         self.client = client
         self.blobs: dict[str, dict] = {}
+        # name -> list of all retained generations, oldest first (emulates
+        # object versioning).
+        self.history: dict[str, list[dict]] = {}
 
     def blob(self, name: str) -> FakeBlob:
         """Get a blob reference."""
@@ -31,26 +36,50 @@ class FakeBucket:
     def set_blob_data(self, name: str, data: dict) -> None:
         """Set blob data in internal storage."""
         self.blobs[name] = data
+        self.history.setdefault(name, []).append(data)
 
-    def add_blob(self, name: str, content: bytes, generation: int = 1) -> None:
+    def add_blob(
+        self,
+        name: str,
+        content: bytes,
+        generation: int = 1,
+        updated: datetime | None = None,
+    ) -> None:
         """Add a blob with content for testing."""
-        self.blobs[name] = {
+        data = {
             "content": content,
             "generation": generation,
-            "updated": datetime.now(),
+            "updated": updated or datetime.now(),
         }
+        self.blobs[name] = data
+        self.history[name] = [data]
 
-    def update_blob(self, name: str, content: bytes) -> None:
-        """Update a blob's content and increment generation."""
+    def update_blob(
+        self, name: str, content: bytes, updated: datetime | None = None
+    ) -> None:
+        """Write a new generation of a blob, retaining prior ones."""
         if name not in self.blobs:
-            self.add_blob(name, content)
+            self.add_blob(name, content, updated=updated)
             return
         current = self.blobs[name]
-        self.blobs[name] = {
+        data = {
             "content": content,
             "generation": current["generation"] + 1,
-            "updated": datetime.now(),
+            "updated": updated or datetime.now(),
         }
+        self.blobs[name] = data
+        self.history.setdefault(name, []).append(data)
+
+    def versions(self, name: str) -> list[dict]:
+        """Return all retained generations of a blob, oldest first."""
+        return list(self.history.get(name, []))
+
+    def get_generation_data(self, name: str, generation: int) -> dict | None:
+        """Return a specific retained generation of a blob."""
+        for data in self.history.get(name, []):
+            if data["generation"] == generation:
+                return data
+        return None
 
 
 class FakeBlob:
@@ -139,6 +168,7 @@ class FakeGCSDataSource:
         bucket: str,
         object_path: str,
         content: bytes | str = b"{}",
+        created: datetime | None = None,
     ) -> None:
         self.bucket_name = bucket
         self.object_path = object_path
@@ -147,7 +177,7 @@ class FakeGCSDataSource:
 
         if isinstance(content, str):
             content = content.encode("utf-8")
-        self._bucket.add_blob(object_path, content)
+        self._bucket.add_blob(object_path, content, updated=created)
 
         self._generation = 1
         self._stop_watching = False
@@ -168,6 +198,30 @@ class FakeGCSDataSource:
             content = content.encode("utf-8")
         self._bucket.update_blob(self.object_path, content)
         self._generation += 1
+
+    def add_version_at(self, content: bytes | str, created: datetime) -> None:
+        """Append a new generation with an explicit creation time.
+
+        Builds deterministic version histories for time-travel tests.
+        """
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        self._bucket.update_blob(self.object_path, content, updated=created)
+        self._generation += 1
+
+    def list_versions(self) -> list[DataVersionRef]:
+        """Return all retained generations as version refs (HistoricalDataSource)."""
+        return [
+            DataVersionRef(id=str(data["generation"]), created=data["updated"])
+            for data in self._bucket.versions(self.object_path)
+        ]
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Return a reader for a specific generation (HistoricalDataSource)."""
+        data = self._bucket.get_generation_data(self.object_path, int(ref.id))
+        if data is None:
+            raise Exception(f"generation {ref.id} not found for {self.object_path}")
+        return BytesIO(data["content"])
 
     def __str__(self) -> str:
         return f"gs://{self.bucket_name}/{self.object_path} (fake)"
