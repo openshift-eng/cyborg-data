@@ -80,3 +80,35 @@ class ConfigurationError(OrgDataError):
     """
 
     pass
+
+
+class TimeTravelNotSupportedError(OrgDataError):
+    """The data source does not support time travel.
+
+    Raised by Service.as_of / Service.list_versions when the source does not
+    implement the HistoricalDataSource protocol (list_versions / load_version).
+    """
+
+    pass
+
+
+class VersionNotAvailableError(OrgDataError):
+    """No retained data version exists at or before the requested time.
+
+    Raised by Service.as_of when the requested time predates the oldest version
+    still retained by the source.
+    """
+
+    pass
+
+
+class ReadOnlyViewError(OrgDataError):
+    """A mutating method was called on a read-only historical view.
+
+    Raised by load_from_data_source / start_data_source_watcher on a Service (or
+    AsyncService) returned by as_of. Such a view is shared across callers and
+    bound to an immutable snapshot, so reloading or watching it is refused
+    rather than silently corrupting the cached snapshot.
+    """
+
+    pass

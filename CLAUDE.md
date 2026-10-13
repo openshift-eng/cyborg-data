@@ -85,6 +85,9 @@ EXCLUDED_METHODS = {
     "get_version",
     "get_data_age",
     "is_data_stale",
+    # Time travel (require a historical data source, not output-comparable)
+    "as_of",
+    "list_versions",
     # Python-only (intentional, not a parity issue)
     "is_healthy",
     "is_ready",

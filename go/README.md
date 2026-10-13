@@ -358,6 +358,50 @@ type DataSource interface {
 }
 ```
 
+## Time Travel (historical queries)
+
+`Service.AsOf` returns a read-only `Service` bound to the index version that was
+live at a given time. It exposes the full query API, so any method can be run
+"as of" a point in the past:
+
+```go
+svc := orgdatacore.NewService()
+
+// A day ago:
+past, err := svc.AsOf(ctx, source, time.Now().Add(-24*time.Hour))
+if err != nil {
+    // errors.Is(err, orgdatacore.ErrVersionNotAvailable) if the time predates
+    // the oldest retained version.
+    // errors.Is(err, orgdatacore.ErrTimeTravelNotSupported) if the source has no history.
+}
+emp := past.GetEmployeeByUID("jdoe")          // state as it was 24h ago
+fmt.Println(past.GetDataVersion())            // which version was resolved
+
+// Discover available versions:
+versions, _ := svc.ListVersions(ctx, source)  // sorted oldest-first
+```
+
+Resolution picks the newest version whose creation time is at or before the
+requested time. Resolved snapshots are cached per `Service` (LRU; configure with
+`WithHistoryCacheSize`).
+
+**Semantics:** `AsOf(t)` uses **transaction/system time** — "the data as the
+system published it at `t`", not *valid time*. A correction or backfill published
+later will not appear at the real-world moment it became true. Use it for audit,
+debugging, and point-in-time reconstruction, not as a source of valid-time facts.
+
+**Requirements and limits:**
+
+- The source must implement `HistoricalDataSource` (`ListVersions` + `LoadVersion`).
+  The GCS source does; file sources do not. The redacting/anonymizing wrappers
+  forward history (and apply their transform to historical data).
+- History comes from **GCS object retention** — the library reads prior object
+  generations; it does not create them. The reachable time range and granularity
+  are whatever the bucket retains (not controlled by this library), so `AsOf` far
+  enough back returns `ErrVersionNotAvailable`.
+- A GCS generation number is the object's creation time in microseconds, which is
+  used as the version timestamp.
+
 ## Logging
 
 The package uses structured logging via the `logr` interface, making it compatible with OpenShift and Kubernetes logging standards.

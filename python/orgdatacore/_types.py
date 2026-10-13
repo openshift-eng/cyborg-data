@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any, BinaryIO, Protocol
+from typing import Any, BinaryIO, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -70,6 +70,39 @@ class DataSource(Protocol):
 
     def __str__(self) -> str:
         """Returns a description of this data source."""
+        ...
+
+
+class DataVersionRef(BaseModel):
+    """Identifies a single historical version of the index.
+
+    ``id`` is an opaque, source-specific version identifier (for GCS this is the
+    object generation). ``created`` is the time the version was produced.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = ""
+    created: datetime = Field(default_factory=lambda: datetime.min)
+
+
+@runtime_checkable
+class HistoricalDataSource(Protocol):
+    """Optional capability for data sources that retain previous index versions.
+
+    Sources that implement it (e.g. a GCS bucket with object versioning) enable
+    ``Service.as_of`` and ``Service.list_versions``. Sources that do not cause
+    those methods to raise ``TimeTravelNotSupportedError``. This is a
+    ``runtime_checkable`` Protocol, so ``isinstance(source, HistoricalDataSource)``
+    checks for the two methods below.
+    """
+
+    def list_versions(self) -> list["DataVersionRef"]:
+        """Return all retained versions of the index, in no guaranteed order."""
+        ...
+
+    def load_version(self, ref: "DataVersionRef") -> BinaryIO:
+        """Return a file-like object for the index JSON of a specific version."""
         ...
 
 

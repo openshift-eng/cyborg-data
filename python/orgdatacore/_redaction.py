@@ -1,16 +1,21 @@
 """Data source wrappers for PII redaction."""
 
+import asyncio
+import inspect
 import json
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, BinaryIO
 
+from ._exceptions import TimeTravelNotSupportedError
 from ._serialization import data_to_json_bytes
 from ._service import parse_data
 from ._types import (
     Data,
     DataSource,
+    DataVersionRef,
     GitHubIDMappings,
     Group,
+    HistoricalDataSource,
     PIIMode,
     SlackIDMappings,
 )
@@ -64,8 +69,14 @@ class RedactingDataSource:
         Returns:
             Binary stream containing the (possibly redacted) JSON data.
         """
-        reader = self._source.load()
+        return self._transform(self._source.load())
 
+    def _transform(self, reader: BinaryIO) -> BinaryIO:
+        """Apply redaction to a reader from the inner source.
+
+        When pii_mode is FULL the reader is returned unchanged; otherwise it is
+        consumed and closed and a redacted stream is returned.
+        """
         if self._pii_mode == PIIMode.FULL:
             return reader  # Pass through unchanged
 
@@ -92,6 +103,30 @@ class RedactingDataSource:
         """
         return self._source.watch(callback)
 
+    def list_versions(self) -> list[DataVersionRef]:
+        """Forward to the inner source so time travel works through redaction.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._source.list_versions()
+
+    def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a historical version from the inner source and redact it.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        return self._transform(self._source.load_version(ref))
+
     def __str__(self) -> str:
         """Return a description of this data source."""
         mode_suffix = " [PII redacted]" if self._pii_mode == PIIMode.REDACTED else ""
@@ -117,10 +152,8 @@ class AsyncRedactingDataSource:
         self._source = source
         self._pii_mode = pii_mode
 
-    async def load(self) -> BinaryIO:
-        """Load data asynchronously, optionally redacting PII fields."""
-        reader: BinaryIO = await self._source.load()
-
+    def _transform(self, reader: BinaryIO) -> BinaryIO:
+        """Redact a reader from the inner source (takes ownership, closes it)."""
         if self._pii_mode == PIIMode.FULL:
             return reader
 
@@ -134,9 +167,44 @@ class AsyncRedactingDataSource:
         redacted = _redact(data)
         return BytesIO(data_to_json_bytes(redacted))
 
+    async def load(self) -> BinaryIO:
+        """Load data asynchronously, optionally redacting PII fields."""
+        reader: BinaryIO = await self._source.load()
+        return self._transform(reader)
+
     async def watch(self, callback: Any) -> Any:
         """Delegate to the underlying data source."""
         return await self._source.watch(callback)
+
+    async def list_versions(self) -> list[DataVersionRef]:
+        """Forward to the inner source so time travel works through redaction.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        if inspect.iscoroutinefunction(self._source.list_versions):
+            return await self._source.list_versions()
+        return await asyncio.to_thread(self._source.list_versions)
+
+    async def load_version(self, ref: DataVersionRef) -> BinaryIO:
+        """Load a historical version from the inner source and redact it.
+
+        Raises:
+            TimeTravelNotSupportedError: If the inner source retains no history.
+        """
+        if not isinstance(self._source, HistoricalDataSource):
+            raise TimeTravelNotSupportedError(
+                f"data source does not support time travel: {self._source}"
+            )
+        if inspect.iscoroutinefunction(self._source.load_version):
+            reader = await self._source.load_version(ref)
+        else:
+            reader = await asyncio.to_thread(self._source.load_version, ref)
+        return self._transform(reader)
 
     def __str__(self) -> str:
         mode_suffix = " [PII redacted]" if self._pii_mode == PIIMode.REDACTED else ""

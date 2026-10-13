@@ -24,6 +24,31 @@ type DataSource interface {
 	io.Closer
 }
 
+// DataVersionRef identifies a single historical version of the index.
+// ID is an opaque, source-specific version identifier (for GCS this is the
+// object generation). Created is the time the version was produced.
+type DataVersionRef struct {
+	ID      string    `json:"id"`
+	Created time.Time `json:"created"`
+}
+
+// HistoricalDataSource is an optional capability interface for data sources that
+// retain previous versions of the index (e.g. a GCS bucket with object
+// versioning). Sources that implement it enable Service.AsOf and
+// Service.ListVersions. Sources that do not (file sources, in-memory fakes
+// without history) cause those methods to return ErrTimeTravelNotSupported.
+type HistoricalDataSource interface {
+	DataSource
+
+	// ListVersions returns all retained versions of the index, in no guaranteed
+	// order. Callers that need ordering should sort by Created.
+	ListVersions(ctx context.Context) ([]DataVersionRef, error)
+
+	// LoadVersion returns a reader with the index JSON for a specific version.
+	// The caller must close the returned ReadCloser when done.
+	LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error)
+}
+
 type ServiceInterface interface {
 	GetEmployeeByUID(uid string) *Employee
 	GetEmployeeBySlackID(slackID string) *Employee
@@ -52,11 +77,18 @@ type ServiceInterface interface {
 	GetTeamEscalation(teamName string) []EscalationContactInfo
 
 	GetVersion() DataVersion
+	GetDataVersion() string
+	GetGeneratedAt() string
 	GetDataAge() time.Duration
 	IsDataStale(maxAge time.Duration) bool
 	LoadFromDataSource(ctx context.Context, source DataSource) error
 	StartDataSourceWatcher(ctx context.Context, source DataSource) error
 	StopWatcher()
+
+	// Time travel. ListVersions and AsOf require source to implement
+	// HistoricalDataSource; otherwise they return ErrTimeTravelNotSupported.
+	ListVersions(ctx context.Context, source DataSource) ([]DataVersionRef, error)
+	AsOf(ctx context.Context, source DataSource, t time.Time) (ServiceInterface, error)
 
 	GetAllEmployeeUIDs() []string
 	GetAllEmployees() []Employee

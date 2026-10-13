@@ -11,6 +11,9 @@ type GCSDataSource struct {
 	Config GCSConfig
 }
 
+// Compile-time assertion that the GCS source satisfies HistoricalDataSource.
+var _ HistoricalDataSource = (*GCSDataSource)(nil)
+
 func NewGCSDataSource(config GCSConfig) *GCSDataSource {
 	return &GCSDataSource{Config: config}
 }
@@ -21,6 +24,14 @@ func (g *GCSDataSource) Load(ctx context.Context) (io.ReadCloser, error) {
 
 func (g *GCSDataSource) Watch(ctx context.Context, callback func() error) error {
 	return fmt.Errorf("%w: build with '-tags gcs' and use NewGCSDataSourceWithSDK()", ErrGCSNotEnabled)
+}
+
+func (g *GCSDataSource) ListVersions(ctx context.Context) ([]DataVersionRef, error) {
+	return nil, fmt.Errorf("%w: build with '-tags gcs' and use NewGCSDataSourceWithSDK()", ErrGCSNotEnabled)
+}
+
+func (g *GCSDataSource) LoadVersion(ctx context.Context, ref DataVersionRef) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("%w: build with '-tags gcs' and use NewGCSDataSourceWithSDK()", ErrGCSNotEnabled)
 }
 
 func (g *GCSDataSource) String() string {

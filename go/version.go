@@ -9,7 +9,7 @@ import (
 // The default version follows semantic versioning (semver).
 // Version 0.x.y indicates the library is not yet stable and breaking changes may occur.
 var (
-	Version      = "0.1.0"
+	Version      = "0.2.0"
 	GitCommit    = "unknown"
 	GitTreeState = "unknown"
 	BuildDate    = "unknown"

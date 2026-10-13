@@ -12,6 +12,23 @@ var (
 	ErrInvalidConfig         = errors.New("orgdatacore: invalid configuration")
 	ErrWatcherAlreadyRunning = errors.New("orgdatacore: watcher already running")
 	ErrInvalidData           = errors.New("orgdatacore: invalid data structure")
+
+	// ErrTimeTravelNotSupported is returned by AsOf/ListVersions when the data
+	// source does not expose historical versions (does not implement
+	// HistoricalDataSource).
+	ErrTimeTravelNotSupported = errors.New("orgdatacore: data source does not support time travel")
+
+	// ErrVersionNotAvailable is returned by AsOf when no retained version exists
+	// at or before the requested time (e.g. the time predates the oldest version
+	// still retained by the bucket).
+	ErrVersionNotAvailable = errors.New("orgdatacore: no data version available at or before the requested time")
+
+	// ErrReadOnlyView is returned by the mutating methods (LoadFromDataSource,
+	// StartDataSourceWatcher) of a historical Service obtained from AsOf. Such a
+	// view is bound to an immutable snapshot that is shared across callers, so
+	// reloading or watching it is refused rather than silently corrupting the
+	// cached snapshot.
+	ErrReadOnlyView = errors.New("orgdatacore: service is a read-only historical view")
 )
 
 // NotFoundError wraps ErrNotFound with details about what wasn't found.
