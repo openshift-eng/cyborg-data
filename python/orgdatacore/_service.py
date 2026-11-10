@@ -8,6 +8,7 @@ from typing import Any, NamedTuple
 from ._exceptions import DataLoadError
 from ._log import get_logger
 from ._types import (
+    Cohort,
     Component,
     ComponentOwnerInfo,
     ComponentOwnership,
@@ -638,6 +639,13 @@ class Service:
                 return None
             return self._data.lookups.team_groups.get(team_group_name)
 
+    def get_cohort_by_name(self, cohort_name: str) -> Cohort | None:
+        """Get a cohort by name."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.cohorts:
+                return None
+            return self._data.lookups.cohorts.get(cohort_name)
+
     def get_component_by_name(self, component_name: str) -> Component | None:
         """Get a component by name."""
         with self._lock:
@@ -1004,6 +1012,13 @@ class Service:
                 return []
             return list(self._data.lookups.team_groups.values())
 
+    def get_all_cohorts(self) -> list[Cohort]:
+        """Get all cohorts in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.cohorts:
+                return []
+            return list(self._data.lookups.cohorts.values())
+
     def get_org_members(self, org_name: str) -> list[Employee]:
         """Get all members of an organization.
 
@@ -1059,6 +1074,13 @@ class Service:
             if self._data is None or not self._data.lookups.team_groups:
                 return []
             return list(self._data.lookups.team_groups.keys())
+
+    def get_all_cohort_names(self) -> list[str]:
+        """Get all cohort names in the system."""
+        with self._lock:
+            if self._data is None or not self._data.lookups.cohorts:
+                return []
+            return list(self._data.lookups.cohorts.keys())
 
     def _get_entity_by_type(
         self, entity_name: str, entity_type: str

@@ -35,6 +35,7 @@ type ServiceInterface interface {
 	GetOrgByName(orgName string) *Org
 	GetPillarByName(pillarName string) *Pillar
 	GetTeamGroupByName(teamGroupName string) *TeamGroup
+	GetCohortByName(cohortName string) *Cohort
 
 	GetUserMemberships(uid string) []MembershipInfo
 	GetUserTeams(uid string) []string
@@ -68,6 +69,8 @@ type ServiceInterface interface {
 	GetAllPillars() []Pillar
 	GetAllTeamGroupNames() []string
 	GetAllTeamGroups() []TeamGroup
+	GetAllCohortNames() []string
+	GetAllCohorts() []Cohort
 
 	// Hierarchy queries
 	GetHierarchyPath(entityName string, entityType string) []HierarchyPathEntry

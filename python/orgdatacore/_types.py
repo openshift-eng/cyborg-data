@@ -53,6 +53,9 @@ from orgindex_schema import (
     GroupTypeInfo as GroupType,
 )
 from orgindex_schema import (
+    HierarchyEntity as Cohort,
+)
+from orgindex_schema import (
     HierarchyEntity as Org,
 )
 from orgindex_schema import (
@@ -213,7 +216,7 @@ class GCSConfig(BaseModel):
 
 __all__ = [
     # Canonical on-disk index models, re-exported from orgindex-schema under the
-    # historical orgdatacore names. Team/Org/Pillar/TeamGroup all
+    # historical orgdatacore names. Team/Org/Pillar/TeamGroup/Cohort all
     # alias the single canonical HierarchyEntity.
     "Data",
     "Lookups",
@@ -224,6 +227,7 @@ __all__ = [
     "Org",
     "Pillar",
     "TeamGroup",
+    "Cohort",
     "HierarchyEntity",
     "Component",
     "Group",
