@@ -11,25 +11,34 @@ the legacy `v0.1.0` tag.
 
 ## Versioning
 
-The package version comes from the git tag (`hatch-vcs`): tag `python-v2.0.0`
-publishes `orgdatacore` `2.0.0`. There is **no version string to edit** in
+The package version comes from the git tag (`hatch-vcs`): tag `python-v0.1.0`
+publishes `orgdatacore` `0.1.0`. There is **no version string to edit** in
 `pyproject.toml` — the tag is the single source of truth, and
 `orgdatacore.__version__` reads it back from the installed package metadata.
 
-`orgdatacore` follows SemVer over its public API. It consumes the
+`orgdatacore` follows SemVer over its public API. **The package is currently on
+the `0.x` line: the API is not yet stable, so breaking changes bump the _minor_
+version (`0.1.0 → 0.2.0`) until it is frozen at `1.0.0`.** It also consumes the
 `orgindex-schema` contract; the pin in `pyproject.toml`
-(`orgindex-schema>=0.1.0,<0.2.0`) is what guards compatibility with that contract.
+(`orgindex-schema>=0.1.0,<0.2.0`) guards compatibility with that contract.
 
 ## Cutting a release
 
 1. Ensure `main` is green (Prow CI on the commit you intend to release).
-2. Update `python/CHANGELOG.md`: move `Unreleased` items under the new version and
-   set its date.
-3. Tag and push a **signed** tag on that commit (push access to `upstream`
-   required):
+2. Update `python/CHANGELOG.md`: rename the `[Unreleased]` section to the new
+   version and set its date.
+3. Cut and push the tag. **Recommended:** use the helper, which runs the safety
+   checks (clean tree, commit is on `upstream/main`, tag unused, CHANGELOG entry
+   present, signs the tag) and pushes to `upstream`:
    ```bash
-   git tag -s python-v2.0.0 -m python-v2.0.0
-   git push upstream python-v2.0.0
+   make release-python VERSION=0.2.0                      # from the repo root
+   make release-python VERSION=0.2.0 RELEASE_ARGS=--dry-run   # preview, tag nothing
+   ./scripts/release.sh --help                            # all options
+   ```
+   Or by hand (push access to `upstream` required):
+   ```bash
+   git tag -s python-v0.2.0 -m python-v0.2.0
+   git push upstream python-v0.2.0
    ```
    (Unsigned `git tag -a` also works — the workflow does not verify signatures.)
 4. The `Release` workflow builds, runs the gate (`ruff` + `mypy` + `pytest`), then
@@ -37,7 +46,11 @@ publishes `orgdatacore` `2.0.0`. There is **no version string to edit** in
 5. **Approve the deployment:** Actions → the release run → **Review deployments** →
    approve `pypi` (a reviewer who is not the tag author). It then publishes to
    PyPI (Trusted Publishing + attestations) and creates the GitHub Release.
-   Nothing publishes until this approval.
+   Nothing publishes until this approval. The Release notes are generated
+   automatically from the PRs merged since the previous tag, grouped by label
+   (see `.github/release.yml`) — label PRs (`kind/feature`, `kind/bug`,
+   `breaking-change`, `documentation`, `dependencies`, …) so they land in the
+   right section.
 
 ## Pre-release dry run
 
@@ -45,8 +58,11 @@ Tag a pre-release to publish to **TestPyPI** only — no approval gate, no GitHu
 Release:
 
 ```bash
-git tag -s python-v2.0.0rc1 -m python-v2.0.0rc1
-git push upstream python-v2.0.0rc1
+make release-python VERSION=0.2.0rc1
+# or: ./scripts/release.sh 0.2.0rc1
+# or by hand:
+git tag -s python-v0.2.0rc1 -m python-v0.2.0rc1
+git push upstream python-v0.2.0rc1
 ```
 
 Then smoke-test the install from TestPyPI before the final tag (it pulls
@@ -54,7 +70,7 @@ Then smoke-test the install from TestPyPI before the final tag (it pulls
 
 ```bash
 pip install --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ "orgdatacore==2.0.0rc1"
+  --extra-index-url https://pypi.org/simple/ "orgdatacore==0.2.0rc1"
 ```
 
 ## One-time setup (maintainers)

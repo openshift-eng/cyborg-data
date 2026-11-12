@@ -1,0 +1,47 @@
+# Configuration for GitHub's auto-generated release notes, consumed by the
+# `gh release create --generate-notes` step in .github/workflows/release.yml.
+#
+# Notes are built from the PRs merged since the previous release tag. Each PR
+# lands in the FIRST category whose labels it matches; the "*" catch-all keeps
+# unlabeled PRs from being dropped. Label PRs so they sort into the right section.
+#
+# Docs: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+# (This is .github/release.yml — the notes config — not the release *workflow*
+# at .github/workflows/release.yml.)
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: ⚠️ Breaking changes
+      labels:
+        - breaking-change
+        - breaking
+        - kind/breaking
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+        - kind/feature
+    - title: 🐛 Fixes
+      labels:
+        - bug
+        - fix
+        - kind/bug
+    - title: 📝 Documentation
+      labels:
+        - documentation
+        - docs
+        - kind/documentation
+    - title: ⬆️ Dependencies
+      labels:
+        - dependencies
+    - title: 🧹 Maintenance
+      labels:
+        - chore
+        - cleanup
+        - kind/cleanup
+        - maintenance
+    - title: Other changes
+      labels:
+        - "*"
