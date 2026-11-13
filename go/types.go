@@ -132,6 +132,8 @@ type Team struct {
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
+	GitURL      string      `json:"git_url,omitempty"`
+	FilePath    string      `json:"file_path,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
 	ParentID    string      `json:"parent_id,omitempty"`
@@ -157,7 +159,9 @@ type Group struct {
 
 // GroupType contains group type information
 type GroupType struct {
-	Name string `json:"name"`
+	Name           string   `json:"name"`
+	Visualize      bool     `json:"visualize,omitempty"`
+	VisualizeGroup []string `json:"visualize_group,omitempty"`
 }
 
 // Data represents the comprehensive organizational data structure
@@ -185,6 +189,7 @@ type Lookups struct {
 	Orgs       map[string]Org       `json:"orgs"`
 	Pillars    map[string]Pillar    `json:"pillars,omitempty"`
 	TeamGroups map[string]TeamGroup `json:"team_groups,omitempty"`
+	Cohorts    map[string]Cohort    `json:"cohorts,omitempty"`
 	Components map[string]Component `json:"components,omitempty"`
 }
 
@@ -195,6 +200,8 @@ type Org struct {
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
+	GitURL      string      `json:"git_url,omitempty"`
+	FilePath    string      `json:"file_path,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
 	ParentID    string      `json:"parent_id,omitempty"`
@@ -208,6 +215,8 @@ type Pillar struct {
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
+	GitURL      string      `json:"git_url,omitempty"`
+	FilePath    string      `json:"file_path,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
 	ParentID    string      `json:"parent_id,omitempty"`
@@ -221,6 +230,23 @@ type TeamGroup struct {
 	Name        string      `json:"name"`
 	TabName     string      `json:"tab_name,omitempty"`
 	Description string      `json:"description,omitempty"`
+	GitURL      string      `json:"git_url,omitempty"`
+	FilePath    string      `json:"file_path,omitempty"`
+	Type        string      `json:"type"`
+	Parent      *ParentInfo `json:"parent,omitempty"`
+	ParentID    string      `json:"parent_id,omitempty"`
+	Group       Group       `json:"group"`
+}
+
+// Cohort represents a cohort in the organizational hierarchy
+type Cohort struct {
+	UID         string      `json:"uid"`
+	StableID    string      `json:"stable_id,omitempty"`
+	Name        string      `json:"name"`
+	TabName     string      `json:"tab_name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	GitURL      string      `json:"git_url,omitempty"`
+	FilePath    string      `json:"file_path,omitempty"`
 	Type        string      `json:"type"`
 	Parent      *ParentInfo `json:"parent,omitempty"`
 	ParentID    string      `json:"parent_id,omitempty"`
@@ -231,11 +257,16 @@ type TeamGroup struct {
 type Component struct {
 	Name            string            `json:"name"`
 	Type            string            `json:"type"`
+	Visualize       bool              `json:"visualize,omitempty"`
+	VisualizeGroup  []string          `json:"visualize_group,omitempty"`
 	Description     string            `json:"description,omitempty"`
+	GitURL          string            `json:"git_url,omitempty"`
+	FilePath        string            `json:"file_path,omitempty"`
 	Parent          *ParentInfo       `json:"parent,omitempty"`
 	ParentPath      string            `json:"parent_path,omitempty"`
 	Repos           []RepoInfo        `json:"repos,omitempty"`
 	Jiras           []JiraInfo        `json:"jiras,omitempty"`
+	Resources       []ResourceInfo    `json:"resources,omitempty"`
 	ReposList       []string          `json:"repos_list,omitempty"`
 	Context         []ContextItemInfo `json:"context,omitempty"`
 	ResolvedContext []ContextItemInfo `json:"resolved_context,omitempty"`
@@ -263,6 +294,7 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 			Type            json.RawMessage   `json:"type,omitempty"`
 			Repos           []RepoInfo        `json:"repos,omitempty"`
 			Jiras           []JiraInfo        `json:"jiras,omitempty"`
+			Resources       []ResourceInfo    `json:"resources,omitempty"`
 			ReposList       []string          `json:"repos_list,omitempty"`
 			Context         []ContextItemInfo `json:"context,omitempty"`
 			ResolvedContext []ContextItemInfo `json:"resolved_context,omitempty"`
@@ -274,10 +306,14 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 		if len(nested.Type) > 0 && c.Type == "" {
 			// Try object form: {"name": "team", ...}
 			var typeName struct {
-				Name string `json:"name"`
+				Name           string   `json:"name"`
+				Visualize      bool     `json:"visualize"`
+				VisualizeGroup []string `json:"visualize_group"`
 			}
 			if err := json.Unmarshal(nested.Type, &typeName); err == nil && typeName.Name != "" {
 				c.Type = typeName.Name
+				c.Visualize = typeName.Visualize
+				c.VisualizeGroup = typeName.VisualizeGroup
 			} else {
 				// Try string form: "team"
 				var typeStr string
@@ -291,6 +327,9 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 		}
 		if len(nested.Jiras) > 0 && len(c.Jiras) == 0 {
 			c.Jiras = nested.Jiras
+		}
+		if len(nested.Resources) > 0 && len(c.Resources) == 0 {
+			c.Resources = nested.Resources
 		}
 		if len(nested.ReposList) > 0 && len(c.ReposList) == 0 {
 			c.ReposList = nested.ReposList
