@@ -131,10 +131,12 @@ if git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null 2>&1
   die "tag ${TAG} already exists on ${REMOTE}"
 fi
 
-# Changelog sanity for final releases: expect a '## [X.Y.Z]' heading.
+# Changelog sanity for final releases: expect a '## [X.Y.Z]' heading in the
+# commit being tagged — not the working tree, which may differ from $COMMIT.
 CHANGELOG="python/CHANGELOG.md"
-if [ "$PRERELEASE" -eq 0 ] && [ -f "$CHANGELOG" ] \
-   && ! grep -Eq "^##[[:space:]]+\[${VERSION}\]" "$CHANGELOG"; then
+if [ "$PRERELEASE" -eq 0 ] \
+   && ! git show "${COMMIT}:${CHANGELOG}" 2>/dev/null \
+        | grep -Eq "^##[[:space:]]+\[${VERSION}\]"; then
   note "⚠ $CHANGELOG has no '## [${VERSION}]' section — rename [Unreleased] to"
   note "  [${VERSION}] with today's date first (see RELEASING.md). Continuing."
 fi
@@ -172,7 +174,13 @@ if [ "$YES" -eq 0 ]; then
   esac
 fi
 
-git tag "$TAG_FLAG" "$TAG" "$COMMIT" -m "$TAG"
+if [ "$SIGN" -eq 0 ]; then
+  # --no-sign overrides a configured tag.gpgSign=true, which would otherwise
+  # sign an annotated (-a) tag and fail when no key is available.
+  git tag --no-sign "$TAG_FLAG" "$TAG" "$COMMIT" -m "$TAG"
+else
+  git tag "$TAG_FLAG" "$TAG" "$COMMIT" -m "$TAG"
+fi
 step "Created ${TAG} at ${COMMIT:0:12}"
 git push "$REMOTE" "refs/tags/${TAG}"
 step "Pushed ${TAG} to ${REMOTE}"

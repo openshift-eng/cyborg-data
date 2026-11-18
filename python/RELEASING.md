@@ -24,9 +24,13 @@ version (`0.1.0 → 0.2.0`) until it is frozen at `1.0.0`.** It also consumes th
 
 ## Cutting a release
 
-1. Ensure `main` is green (Prow CI on the commit you intend to release).
-2. Update `python/CHANGELOG.md`: rename the `[Unreleased]` section to the new
-   version and set its date.
+1. Update `python/CHANGELOG.md`: rename the `[Unreleased]` section to the new
+   version and set its date. **Commit this and merge it to `main`** — the helper
+   tags the tip of `upstream/main` (not your local `HEAD`) and refuses a dirty
+   working tree, so an uncommitted or unmerged changelog edit is either rejected
+   or silently omitted from the tagged commit.
+2. Wait for `main` to be green (Prow CI on the commit you intend to release,
+   which must include the changelog update above).
 3. Cut and push the tag. **Recommended:** use the helper, which runs the safety
    checks (clean tree, commit is on `upstream/main`, tag unused, CHANGELOG entry
    present, signs the tag) and pushes to `upstream`:
