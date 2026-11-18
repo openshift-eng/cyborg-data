@@ -31,6 +31,9 @@ Options:
   --ref <commit>     Commit to tag (default: tip of <remote>/main). Must be on
                      <remote>/main unless --allow-unmerged.
   --allow-unmerged   Skip the "commit is on <remote>/main" guard.
+  --allow-no-changelog
+                     Skip the "CHANGELOG has a section for this version" guard
+                     (final releases only; warns instead of failing).
   --no-sign          Create an annotated (-a) tag instead of a signed (-s) one.
   --dry-run          Do everything except create and push the tag.
   -y, --yes          Do not prompt for confirmation.
@@ -51,6 +54,7 @@ note() { printf '    %s\n' "$*" >&2; }
 
 REF=""
 ALLOW_UNMERGED=0
+ALLOW_NO_CHANGELOG=0
 SIGN=1
 DRY_RUN=0
 YES=0
@@ -60,6 +64,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --ref)            REF="${2:-}"; [ -n "$REF" ] || die "--ref needs a value" 2; shift 2 ;;
     --allow-unmerged) ALLOW_UNMERGED=1; shift ;;
+    --allow-no-changelog) ALLOW_NO_CHANGELOG=1; shift ;;
     --no-sign)        SIGN=0; shift ;;
     --dry-run)        DRY_RUN=1; shift ;;
     -y|--yes)         YES=1; shift ;;
@@ -131,8 +136,9 @@ if git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null 2>&1
   die "tag ${TAG} already exists on ${REMOTE}"
 fi
 
-# Changelog sanity for final releases: expect a '## [X.Y.Z]' heading in the
-# commit being tagged — not the working tree, which may differ from $COMMIT.
+# A final release must carry a '## [X.Y.Z]' changelog heading in the commit being
+# tagged — not the working tree, which may differ from $COMMIT. This gates the
+# release (overridable with --allow-no-changelog).
 CHANGELOG="python/CHANGELOG.md"
 VERSION_RE="${VERSION//./\\.}"   # escape dots so they match literally, not any-char
 # grep without -q (output discarded) drains all of git show's output, so a match
@@ -140,8 +146,13 @@ VERSION_RE="${VERSION//./\\.}"   # escape dots so they match literally, not any-
 if [ "$PRERELEASE" -eq 0 ] \
    && ! git show "${COMMIT}:${CHANGELOG}" 2>/dev/null \
         | grep -E "^##[[:space:]]+\[${VERSION_RE}\]" >/dev/null; then
-  note "⚠ $CHANGELOG has no '## [${VERSION}]' section — rename [Unreleased] to"
-  note "  [${VERSION}] with today's date first (see RELEASING.md). Continuing."
+  if [ "$ALLOW_NO_CHANGELOG" -eq 1 ]; then
+    note "⚠ $CHANGELOG has no '## [${VERSION}]' section — continuing (--allow-no-changelog)"
+  else
+    die "$CHANGELOG has no '## [${VERSION}]' section in ${COMMIT:0:12}
+    rename [Unreleased] to [${VERSION}] with today's date and merge it first
+    (see python/RELEASING.md), or pass --allow-no-changelog to override"
+  fi
 fi
 
 # Prefer a signed tag when signing is configured; else annotated.
