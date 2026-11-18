@@ -128,10 +128,16 @@ if [ "$ALLOW_UNMERGED" -eq 0 ] && ! git merge-base --is-ancestor "$COMMIT" "${RE
     (releases must come from a green main; see python/RELEASING.md)"
 fi
 
-# The tag must not already be published on the remote.
-if git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null 2>&1; then
-  die "tag ${TAG} already exists on ${REMOTE} — it looks already released"
-fi
+# The tag must not already be published on the remote. --exit-code returns 0 when
+# the tag exists, 2 when it does not, and anything else on a lookup failure — only
+# 2 is safe to continue on (don't mistake a network error for "tag absent").
+remote_rc=0
+git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null || remote_rc=$?
+case "$remote_rc" in
+  0) die "tag ${TAG} already exists on ${REMOTE} — it looks already released" ;;
+  2) ;;  # no matching remote tag: continue
+  *) die "cannot query ${REMOTE} for tag ${TAG} (git ls-remote exit ${remote_rc})" ;;
+esac
 
 # A local tag can linger from an earlier run whose push failed. Reuse it (re-push
 # only) when it points at the commit we're about to tag, so the release is
