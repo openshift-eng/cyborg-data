@@ -6,7 +6,7 @@
 #   make python-test  - Run Python unit tests (Prow job: unit-python)
 #   make test         - Run all tests
 
-.PHONY: all test lint clean help go-test python-test go-lint python-lint go-build python-build python-typing
+.PHONY: all test lint clean help go-test python-test go-lint python-lint go-build python-build python-typing release-python
 
 # Default target
 all: test
@@ -39,6 +39,10 @@ help:
 	@echo "  make python-typing - Run Python type checker (mypy strict)"
 	@echo "  make python-format - Format Python code with ruff"
 	@echo "  make python-build  - Build Python package"
+	@echo ""
+	@echo "Release targets:"
+	@echo "  make release-python VERSION=X.Y.Z - Cut & push a python-vX.Y.Z release tag"
+	@echo "                                      (rcN -> TestPyPI, final -> PyPI). See python/RELEASING.md"
 	@echo ""
 	@echo "Validation targets:"
 	@echo "  make validate-parity - Validate API parity between Go and Python"
@@ -114,3 +118,13 @@ validate-parity:
 docs: #todo
 	@echo "Building documentation..."
 	@echo "Documentation build not yet configured"
+
+# Cut a tag-driven release of the Python package (see python/RELEASING.md).
+# Routes rcN -> TestPyPI and final -> PyPI (reviewer-gated). Pass extra flags via
+# RELEASE_ARGS, e.g. `make release-python VERSION=0.2.0 RELEASE_ARGS=--dry-run`.
+release-python:
+	@test -n "$(VERSION)" || { \
+		echo "Usage: make release-python VERSION=<X.Y.Z[rcN]>   (e.g. 0.1.0, 0.2.0rc1)"; \
+		echo "       Options / preview: ./scripts/release.sh --help"; \
+		exit 2; }
+	@./scripts/release.sh $(RELEASE_ARGS) $(VERSION)
