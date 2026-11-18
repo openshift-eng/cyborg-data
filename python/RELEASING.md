@@ -40,11 +40,17 @@ version (`0.1.0 → 0.2.0`) until it is frozen at `1.0.0`.** It also consumes th
    ```bash
    # from the repo root; pin to the commit that passed CI in step 2:
    make release-python VERSION=0.2.0 RELEASE_ARGS="--ref <commit-that-passed-CI>"
-   make release-python VERSION=0.2.0 RELEASE_ARGS=--dry-run   # preview, tag nothing
+   make release-python VERSION=0.2.0 RELEASE_ARGS=--dry-run   # preview (runs the
+                                                              # full preflight, tags nothing)
+   # to preview before renaming [Unreleased] -> [0.2.0], skip the changelog gate:
+   make release-python VERSION=0.2.0 RELEASE_ARGS="--dry-run --allow-no-changelog"
    make release-python VERSION=0.2.0                          # shortcut: tags the
                                                               # current upstream/main tip
    ./scripts/release.sh --help                                # all options
    ```
+   `--dry-run` runs every preflight check and prints the release plan only once
+   they pass, so a plain dry run of a final version fails until its changelog
+   section exists (add `--allow-no-changelog` to preview before the rename).
    Confirm the commit the helper prints in its release plan before approving the tag.
    Or by hand (push access to `upstream` required), tagging that same commit:
    ```bash
