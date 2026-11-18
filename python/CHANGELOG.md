@@ -9,6 +9,11 @@ version (`0.1.0` → `0.2.0` → …) until the API is frozen at `1.0.0`.
 
 ## [Unreleased]
 
-Initial development on the `0.x` line.
+## [0.1.0] - 2026-11-18
 
-[Unreleased]: https://github.com/openshift-eng/cyborg-data/commits/main/python
+Initial release of the `orgdatacore` Python package on the `0.x` line — O(1)
+organizational data lookups (employees, teams, orgs, pillars, team groups) over
+pre-computed indexes, with sync and async services and an optional GCS data source.
+
+[Unreleased]: https://github.com/openshift-eng/cyborg-data/compare/python-v0.1.0...main
+[0.1.0]: https://github.com/openshift-eng/cyborg-data/releases/tag/python-v0.1.0
