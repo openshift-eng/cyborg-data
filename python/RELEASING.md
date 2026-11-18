@@ -31,14 +31,19 @@ version (`0.1.0 → 0.2.0`) until it is frozen at `1.0.0`.** It also consumes th
    or silently omitted from the tagged commit.
 2. Wait for `main` to be green (Prow CI on the commit you intend to release,
    which must include the changelog update above).
-3. Cut and push the tag. **Recommended:** use the helper, which runs the safety
-   checks (clean tree, commit is on `upstream/main`, tag unused, CHANGELOG entry
-   present, signs the tag) and pushes to `upstream`:
+3. Cut and push the tag, pinning it to the commit that passed CI in step 2 so a
+   later merge to `main` can't be tagged without a green CI result.
+   **Recommended:** use the helper, which runs the safety checks (clean tree,
+   commit is on `upstream/main`, tag unused, CHANGELOG entry present, signs the
+   tag) and pushes to `upstream`:
    ```bash
-   make release-python VERSION=0.2.0                      # from the repo root
+   make release-python VERSION=0.2.0                          # tags upstream/main tip
    make release-python VERSION=0.2.0 RELEASE_ARGS=--dry-run   # preview, tag nothing
-   ./scripts/release.sh --help                            # all options
+   # pin to a specific CI-green commit instead of the current upstream/main tip:
+   ./scripts/release.sh --ref <commit-that-passed-CI> 0.2.0
+   ./scripts/release.sh --help                                # all options
    ```
+   Confirm the commit the helper prints in its release plan before approving the tag.
    Or by hand (push access to `upstream` required):
    ```bash
    git tag -s python-v0.2.0 -m python-v0.2.0

@@ -134,9 +134,12 @@ fi
 # Changelog sanity for final releases: expect a '## [X.Y.Z]' heading in the
 # commit being tagged — not the working tree, which may differ from $COMMIT.
 CHANGELOG="python/CHANGELOG.md"
+VERSION_RE="${VERSION//./\\.}"   # escape dots so they match literally, not any-char
+# grep without -q (output discarded) drains all of git show's output, so a match
+# near the top of a large changelog can't SIGPIPE git show and trip pipefail.
 if [ "$PRERELEASE" -eq 0 ] \
    && ! git show "${COMMIT}:${CHANGELOG}" 2>/dev/null \
-        | grep -Eq "^##[[:space:]]+\[${VERSION}\]"; then
+        | grep -E "^##[[:space:]]+\[${VERSION_RE}\]" >/dev/null; then
   note "⚠ $CHANGELOG has no '## [${VERSION}]' section — rename [Unreleased] to"
   note "  [${VERSION}] with today's date first (see RELEASING.md). Continuing."
 fi
