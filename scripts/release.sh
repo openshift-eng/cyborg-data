@@ -128,12 +128,29 @@ if [ "$ALLOW_UNMERGED" -eq 0 ] && ! git merge-base --is-ancestor "$COMMIT" "${RE
     (releases must come from a green main; see python/RELEASING.md)"
 fi
 
-# The tag must be new (locally and on the remote).
+# The tag must not already be published on the remote. --exit-code returns 0 when
+# the tag exists, 2 when it does not, and anything else on a lookup failure — only
+# 2 is safe to continue on (don't mistake a network error for "tag absent").
+remote_rc=0
+git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null || remote_rc=$?
+case "$remote_rc" in
+  0) die "tag ${TAG} already exists on ${REMOTE} — it looks already released" ;;
+  2) ;;  # no matching remote tag: continue
+  *) die "cannot query ${REMOTE} for tag ${TAG} (git ls-remote exit ${remote_rc})" ;;
+esac
+
+# A local tag can linger from an earlier run whose push failed. Reuse it (re-push
+# only) when it points at the commit we're about to tag, so the release is
+# resumable; otherwise it's a real conflict for the user to resolve.
+RESUME_TAG=0
 if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
-  die "tag ${TAG} already exists locally"
-fi
-if git ls-remote --tags --exit-code "$REMOTE" "refs/tags/${TAG}" >/dev/null 2>&1; then
-  die "tag ${TAG} already exists on ${REMOTE}"
+  existing_commit="$(git rev-parse --verify "refs/tags/${TAG}^{commit}")"
+  if [ "$existing_commit" = "$COMMIT" ]; then
+    RESUME_TAG=1
+  else
+    die "tag ${TAG} already exists locally at ${existing_commit:0:12}, not ${COMMIT:0:12}
+    delete it (git tag -d ${TAG}) or choose another version"
+  fi
 fi
 
 # A final release must carry a '## [X.Y.Z]' changelog heading in the commit being
@@ -155,9 +172,10 @@ if [ "$PRERELEASE" -eq 0 ] \
   fi
 fi
 
-# Prefer a signed tag when signing is configured; else annotated.
+# Prefer a signed tag when signing is configured; else annotated. Skipped when
+# resuming, since the tag already exists and is only re-pushed.
 TAG_FLAG="-a"
-if [ "$SIGN" -eq 1 ]; then
+if [ "$RESUME_TAG" -eq 0 ] && [ "$SIGN" -eq 1 ]; then
   if git config --get user.signingkey >/dev/null 2>&1 \
      || [ "$(git config --get tag.gpgSign 2>/dev/null || true)" = "true" ]; then
     TAG_FLAG="-s"
@@ -172,7 +190,11 @@ note "tag:       ${TAG}"
 note "commit:    $(git show -s --format='%h %s' "$COMMIT")"
 note "remote:    ${REMOTE} ($(git remote get-url "$REMOTE"))"
 note "publishes: ${TARGET}"
-note "tag type:  $([ "$TAG_FLAG" = "-s" ] && echo signed || echo 'annotated (unsigned)')"
+if [ "$RESUME_TAG" -eq 1 ]; then
+  note "tag type:  existing local tag at ${COMMIT:0:12} (re-push only)"
+else
+  note "tag type:  $([ "$TAG_FLAG" = "-s" ] && echo signed || echo 'annotated (unsigned)')"
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   step "Dry run — nothing created or pushed."
@@ -180,7 +202,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 if [ "$YES" -eq 0 ]; then
-  printf 'Create and push %s to %s? [y/N] ' "$TAG" "$REMOTE" >&2
+  if [ "$RESUME_TAG" -eq 1 ]; then
+    printf 'Re-push existing tag %s to %s? [y/N] ' "$TAG" "$REMOTE" >&2
+  else
+    printf 'Create and push %s to %s? [y/N] ' "$TAG" "$REMOTE" >&2
+  fi
   read -r ans || ans=""
   case "$ans" in
     y|Y|yes|YES) ;;
@@ -188,14 +214,17 @@ if [ "$YES" -eq 0 ]; then
   esac
 fi
 
-if [ "$SIGN" -eq 0 ]; then
+if [ "$RESUME_TAG" -eq 1 ]; then
+  step "Reusing existing local tag ${TAG} at ${COMMIT:0:12}"
+elif [ "$SIGN" -eq 0 ]; then
   # --no-sign overrides a configured tag.gpgSign=true, which would otherwise
   # sign an annotated (-a) tag and fail when no key is available.
   git tag --no-sign "$TAG_FLAG" "$TAG" "$COMMIT" -m "$TAG"
+  step "Created ${TAG} at ${COMMIT:0:12}"
 else
   git tag "$TAG_FLAG" "$TAG" "$COMMIT" -m "$TAG"
+  step "Created ${TAG} at ${COMMIT:0:12}"
 fi
-step "Created ${TAG} at ${COMMIT:0:12}"
 git push "$REMOTE" "refs/tags/${TAG}"
 step "Pushed ${TAG} to ${REMOTE}"
 
