@@ -424,6 +424,50 @@ func (s *Service) GetTeamGroupByName(teamGroupName string) *TeamGroup {
 	return nil
 }
 
+// GetCohortByName returns a cohort by name.
+func (s *Service) GetCohortByName(cohortName string) *Cohort {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Cohorts == nil {
+		return nil
+	}
+	if cohort, exists := s.data.Lookups.Cohorts[cohortName]; exists {
+		return &cohort
+	}
+	return nil
+}
+
+// GetAllCohorts returns all cohorts.
+func (s *Service) GetAllCohorts() []Cohort {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Cohorts == nil {
+		return []Cohort{}
+	}
+	cohorts := make([]Cohort, 0, len(s.data.Lookups.Cohorts))
+	for _, cohort := range s.data.Lookups.Cohorts {
+		cohorts = append(cohorts, cohort)
+	}
+	return cohorts
+}
+
+// GetAllCohortNames returns all cohort names.
+func (s *Service) GetAllCohortNames() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data == nil || s.data.Lookups.Cohorts == nil {
+		return []string{}
+	}
+	names := make([]string, 0, len(s.data.Lookups.Cohorts))
+	for name := range s.data.Lookups.Cohorts {
+		names = append(names, name)
+	}
+	return names
+}
+
 func (s *Service) GetTeamsForUID(uid string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

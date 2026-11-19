@@ -44,6 +44,7 @@ from ._service import Service
 from ._types import (
     AliasInfo,
     ChannelInfo,
+    Cohort,
     Component,
     ComponentOwnerInfo,
     ComponentOwnership,
@@ -118,6 +119,7 @@ __all__ = [
     "EmailInfo",
     "EscalationContactInfo",
     "ResourceInfo",
+    "Cohort",
     "Component",
     "ComponentOwnerInfo",
     "ComponentOwnership",
